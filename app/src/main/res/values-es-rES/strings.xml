@@ -1,13 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <!--App-->
+    
     <string name="app_name">Legado</string>
     <string name="app_name_a">Legado·A</string>
     <string name="receiving_shared_label">Legado·buscador</string>
     <string name="receiving_shared_import_label">Legado·importar</string>
     <string name="tip_perm_request_storage">Legado necesita de acceso de almacenamineto para buscar y leer libros. Por favor, diríjase a los "Ajustes de la aplicación" para conceder el "Permiso de almacenamineto".</string>
 
-    <!--Other-->
+    
     <string name="menu_backup">Inicio</string>
     <string name="menu_restore">Restaurar</string>
     <string name="menu_import_old">Importar datos de Legado</string>
@@ -91,9 +91,6 @@
     <string name="import_books_count">%s archivos(s) de texto en total</string>
     <string name="is_loading">Cargando…</string>
     <string name="retry">Reintentar</string>
-    <string name="web_service">Servicio Web</string>
-    <string name="web_service_desc">Fuente de edición web y lectura de libros</string>
-    <string name="web_edit_source">Editar fuentes de libros en la web</string>
     <string name="offline_cache">Caché sin conexión</string>
     <string name="offline_cache_t">Caché sin conexión</string>
     <string name="offline_cache_s">precarga el o los capítulos(s) seleccionado(s) en Almacenamiento en caché</string>
@@ -402,7 +399,7 @@
     <string name="no_prev_page">Sin página anterior</string>
     <string name="no_next_page">Sin página siguiente</string>
 
-    <!-- source start-->
+    
     <string name="source_name">源名称(sourceName)</string>
     <string name="source_url">源URL(sourceUrl)</string>
     <string name="source_group">源分组(sourceGroup)</string>
@@ -461,9 +458,9 @@
     <string name="check_key_word">校验关键字(checkKeyWord)</string>
     <string name="rule_actions">操作(actions)</string>
     <string name="rule_is_pay">购买标识(isPay)</string>
-    <!-- source end-->
+    
 
-    <!--error string start-->
+    
     <string name="error_no_source">Sin fuentes</string>
     <string name="error_get_book_info">Error al obtener la información del libro</string>
     <string name="error_get_content">Error al obtener el contenido</string>
@@ -476,7 +473,7 @@
     <string name="net_error_10001">Sin conexión</string>
     <string name="net_error_10002">Tiempo de espera de conexión en línea</string>
     <string name="net_error_10003">Error en el procesamiento de datos</string>
-    <!--error string end-->
+    
 
     <string name="source_http_header">Encabezado HTTP</string>
     <string name="debug_source">Fuente de depuración</string>
@@ -555,9 +552,6 @@
 
     <string name="e_ink_mode">Modo E-Ink</string>
     <string name="e_ink_mode_detail">Elimina animaciones y optimiza la experiencia para libros en papel electrónico</string>
-    <string name="web_menu">Servicio web</string>
-    <string name="web_port_title">Puerto web</string>
-    <string name="web_port_summary">Puerto actual %s</string>
     <string name="qr_share">Compartir código QR</string>
     <string name="str_share">Compartir cadenas</string>
     <string name="wifi_share">Compartir Wifi</string>
@@ -722,7 +716,7 @@
     <string name="full_screen_gestures_support">Full screen gestures support</string>
     <string name="disable_return_key">Disable return key</string>
 
-    <!--color-->
+    
     <string name="primary">Primario</string>
     <string name="accent">Resalte</string>
     <string name="background_color">Color de fondo</string>
@@ -821,7 +815,7 @@
     <string name="non_action">Sin acciones</string>
     <string name="body_title">Título</string>
     <string name="show_hide">Mostrar/ocultar</string>
-    <string name="header_footer">pie de página <![CDATA[&]]> encabezado</string>
+    <string name="header_footer">pie de página &amp; encabezado</string>
     <string name="rule_subscription">Suscripción de reglsa</string>
     <string name="rule_sub_empty_msg">添加大佬们提供的规则导入地址\n添加后点击可导入规则</string>
     <string name="get_book_progress">Obtener progreso en la nube</string>
@@ -953,7 +947,7 @@
     <string name="user_agent">用户代理</string>
     <string name="bg_alpha">背景透明度</string>
 
-    <!-- check source config string -->
+    
     <string name="check_source_config">校验设置</string>
     <string name="check_source_item">校验项目</string>
     <string name="check_source_timeout">单个书源校验超时(秒)</string>
@@ -1024,7 +1018,7 @@
     <string name="image_retain_number_summary">Keep the number of chapters read %s</string>
     <string name="image_retain_number">Number of manga reservations</string>
     <string name="export_pics_file">Export Picture Files</string>
-    <!-- string end -->
+    
     <string name="error_decode_bitmap">Fail to decode bitmap</string>
     <string name="error_image_url_empty">Image url is empty, check replacement rules</string>
     <string name="variable_comment">变量说明(variableComment)</string>
@@ -1076,8 +1070,6 @@
     <string name="sure_clear_search_history">是否确认清除所有搜索历史记录</string>
     <string name="no_anim_scroll_page">禁用滚动点击动画</string>
     <string name="webdav_device_name">设备名称</string>
-    <string name="web_service_wake_lock">WebService唤醒锁</string>
-    <string name="web_service_wake_lock_summary">开启web服务的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="read_aloud_wake_lock">朗读服务唤醒锁</string>
     <string name="read_aloud_wake_lock_summary">开启朗读的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="audio_play_wake_lock">音频服务唤醒锁</string>
@@ -1208,7 +1200,7 @@
     <string name="enable_auto_scroll">开启滚动</string>
     <string name="manga_footer_config">页脚配置</string>
     <string name="setting_manga_auto_page_speed">设置自动翻页速度</string>
-    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -> %5$s%%</string>
+    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -&gt; %5$s%%</string>
     <string name="menu_download_after">Descargar el siguiente capítulo</string>
     <string name="menu_download_all">Descargar todos los capítulos</string>
     <string name="manga_header_chapter">《章节和文案》隐藏</string>

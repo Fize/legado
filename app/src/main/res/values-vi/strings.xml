@@ -1,13 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <!--App-->
+    
     <string name="app_name">Legado</string>
     <string name="app_name_a">Legado·A</string>
     <string name="receiving_shared_label">Legado·Tìm kiếm</string>
     <string name="receiving_shared_import_label">Legado·Nhập</string>
     <string name="tip_perm_request_storage">Legado cần quyền truy cập bộ nhớ để tìm và đọc sách. Vui lòng vào "Cài đặt ứng dụng" để cấp "Quyền truy cập bộ nhớ".</string>
 
-    <!--Other-->
+    
     <string name="menu_backup">Sao lưu</string>
     <string name="menu_restore">Khôi phục</string>
     <string name="menu_import_old">Nhập dữ liệu Legado cũ</string>
@@ -90,9 +90,6 @@
     <string name="import_books_count">Tổng cộng %s tệp văn bản</string>
     <string name="is_loading">Đang tải…</string>
     <string name="retry">Thử lại</string>
-    <string name="web_service">Dịch vụ web</string>
-    <string name="web_service_desc">Chỉnh sửa nguồn và đọc sách qua web</string>
-    <string name="web_edit_source">Chỉnh sửa nguồn sách trên web</string>
     <string name="offline_cache">Bộ đệm ngoại tuyến</string>
     <string name="offline_cache_t">Bộ đệm ngoại tuyến</string>
     <string name="offline_cache_s">Lưu trữ các chương đã chọn vào bộ nhớ đệm</string>
@@ -401,7 +398,7 @@
     <string name="no_prev_page">Không có trang trước</string>
     <string name="no_next_page">Không có trang sau</string>
 
-    <!-- source start-->
+    
     <string name="source_name">Tên nguồn(sourceName)</string>
     <string name="source_url">URL nguồn(sourceUrl)</string>
     <string name="source_group">Nhóm nguồn(sourceGroup)</string>
@@ -459,9 +456,9 @@
     <string name="check_key_word">Kiểm tra từ khóa(checkKeyWord)</string>
     <string name="rule_actions">Hành động(actions)</string>
     <string name="rule_is_pay">Là trả phí(isPay)</string>
-    <!-- source end-->
+    
 
-    <!--error string start-->
+    
     <string name="error_no_source">Không có nguồn</string>
     <string name="error_get_book_info">Không lấy được thông tin sách</string>
     <string name="error_get_content">Không lấy được nội dung</string>
@@ -474,7 +471,7 @@
     <string name="net_error_10001">Không có mạng</string>
     <string name="net_error_10002">Hết thời gian chờ kết nối mạng</string>
     <string name="net_error_10003">Phân tích dữ liệu thất bại</string>
-    <!--error string end-->
+    
 
     <string name="source_http_header">Tiêu đề HTTP</string>
     <string name="debug_source">Nguồn gỡ lỗi</string>
@@ -553,9 +550,6 @@
 
     <string name="e_ink_mode">Chế độ E-Ink</string>
     <string name="e_ink_mode_detail">Xóa hoạt ảnh và tối ưu hóa trải nghiệm sử dụng sách E-paper</string>
-    <string name="web_menu">Dịch vụ web</string>
-    <string name="web_port_title">Cổng web</string>
-    <string name="web_port_summary">Cổng hiện tại %s</string>
     <string name="qr_share">Chia sẻ mã QR</string>
     <string name="str_share">Chia sẻ chuỗi</string>
     <string name="wifi_share">Chia sẻ Wifi</string>
@@ -720,7 +714,7 @@
     <string name="full_screen_gestures_support">Hỗ trợ cử chỉ toàn màn hình</string>
     <string name="disable_return_key">Vô hiệu hóa phím quay lại</string>
 
-    <!--color-->
+    
     <string name="primary">Chính</string>
     <string name="accent">Nhấn</string>
     <string name="background_color">Màu nền</string>
@@ -1072,8 +1066,6 @@
     <string name="sure_clear_search_history">Bạn có chắc chắn muốn xóa tất cả lịch sử tìm kiếm không</string>
     <string name="no_anim_scroll_page">Vô hiệu hóa hoạt ảnh nhấp chuột cuộn</string>
     <string name="webdav_device_name">Tên thiết bị</string>
-    <string name="web_service_wake_lock">Khóa đánh thức dịch vụ web</string>
-    <string name="web_service_wake_lock_summary">Khóa đánh thức được bật khi dịch vụ web được bật và một số điện thoại sẽ bị tắt khi khóa đánh thức được bật.</string>
     <string name="read_aloud_wake_lock">Khóa đánh thức dịch vụ đọc thành tiếng</string>
     <string name="read_aloud_wake_lock_summary">Khóa đánh thức được bật khi đọc thành tiếng được bật và khóa đánh thức trên một số điện thoại di động sẽ bị tắt ở chế độ nền.</string>
     <string name="audio_play_wake_lock">Khóa đánh thức dịch vụ âm thanh</string>
@@ -1201,7 +1193,7 @@
     <string name="enable_auto_scroll">Bật cuộn</string>
     <string name="manga_footer_config">Cấu hình chân trang</string>
     <string name="setting_manga_auto_page_speed">Đặt tốc độ lật trang tự động</string>
-    <string name="book_reader_info_bar">Trang. %1$d/%2$d  Chương. %3$d/%4$d -> %5$s%%</string>
+    <string name="book_reader_info_bar">Trang. %1$d/%2$d  Chương. %3$d/%4$d -&gt; %5$s%%</string>
     <string name="menu_download_after">Tải xuống chương tiếp theo</string>
     <string name="menu_download_all">Tải xuống tất cả các chương</string>
     <string name="manga_header_chapter">"Chương và văn bản" ẩn</string>

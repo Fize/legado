@@ -111,7 +111,6 @@ object BackupConfig {
         PreferKey.jsSourceApiToken,
         PreferKey.launcherIcon,
         PreferKey.bitmapCacheSize,
-        PreferKey.webServiceWakeLock,
         PreferKey.readAloudWakeLock,
         PreferKey.audioPlayWakeLock
     )

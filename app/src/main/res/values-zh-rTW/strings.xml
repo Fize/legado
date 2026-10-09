@@ -1,12 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <!--App-->
+    
     <string name="app_name">閱讀</string>
     <string name="app_name_a">閱讀·A</string>
     <string name="receiving_shared_label">閱讀·搜尋</string>
     <string name="receiving_shared_import_label">閱讀·匯入</string>
     <string name="tip_perm_request_storage">閱讀需要存取記憶卡權限，請前往「設定」—「應用程式權限」—打開所需權限</string>
 
-    <!--Other-->
+    
     <string name="menu_backup">備份</string>
     <string name="menu_restore">復原</string>
     <string name="menu_import_old">匯入閱讀資料</string>
@@ -85,14 +86,9 @@
     <string name="import_books_count">共%s個Text文件</string>
     <string name="is_loading">載入中…</string>
     <string name="retry">重試</string>
-    <string name="web_service">Web 服務</string>
-    <string name="web_service_desc">瀏覽器寫源、看書</string>
-    <string name="mcp_service">MCP 服務</string>
-    <string name="mcp_service_desc">書源開發工具</string>
     <string name="mcp_service_token_required">請先設定 Web 與 MCP 存取權杖</string>
     <string name="mcp_service_token_invalid">MCP 存取權杖未設定或不正確</string>
     <string name="mcp_service_start_failed">MCP 服務啟動失敗</string>
-    <string name="web_edit_source">web編輯書源</string>
     <string name="offline_cache">離線快取</string>
     <string name="offline_cache_t">離線快取</string>
     <string name="offline_cache_s">快取選擇的章節到本機</string>
@@ -420,7 +416,7 @@
     <string name="no_prev_page">沒有上一頁</string>
     <string name="no_next_page">沒有下一頁</string>
 
-    <!-- source start-->
+    
     <string name="source_name">源名稱(sourceName)</string>
     <string name="source_url">源URL(sourceUrl)</string>
     <string name="source_group">源分組(sourceGroup)</string>
@@ -479,9 +475,9 @@
     <string name="check_key_word">校驗關鍵字(checkKeyWord)</string>
     <string name="rule_actions">操作(actions)</string>
     <string name="rule_is_pay">購買標誌(isPay)</string>
-    <!-- source end-->
+    
 
-    <!--error string start-->
+    
     <string name="error_no_source">沒有源</string>
     <string name="error_get_book_info">書籍訊息獲取失敗</string>
     <string name="error_get_content">內容獲取失敗</string>
@@ -494,7 +490,7 @@
     <string name="net_error_10001">沒有網路</string>
     <string name="net_error_10002">網路連接超時</string>
     <string name="net_error_10003">資料解析失敗</string>
-    <!--error string end-->
+    
 
     <string name="source_http_header">請求頭(header)</string>
     <string name="debug_source">除錯源</string>
@@ -575,11 +571,6 @@
 
     <string name="e_ink_mode">E-Ink 模式</string>
     <string name="e_ink_mode_detail">去除動畫，最佳化電紙書使用體驗</string>
-    <string name="web_menu">Web服務</string>
-    <string name="web_port_title">web埠</string>
-    <string name="web_port_summary">目前埠 %s</string>
-    <string name="mcp_port_title">MCP 埠</string>
-    <string name="mcp_port_summary">目前埠 %s</string>
     <string name="js_source_api_token_required_title">存取權杖保護</string>
     <string name="js_source_api_token_required_summary">開啟時 Web 書源與 MCP 介面必須提供權杖；僅在可信網路中關閉</string>
     <string name="js_source_api_token_title">Web 與 MCP 存取權杖</string>
@@ -755,7 +746,7 @@
     <string name="full_screen_gestures_support">全面屏手勢最佳化</string>
     <string name="disable_return_key">禁用返回鍵</string>
 
-    <!--color-->
+    
     <string name="primary">主色調</string>
     <string name="accent">強調色</string>
     <string name="background_color">背景色</string>
@@ -885,7 +876,7 @@
     <string name="non_action">無操作</string>
     <string name="body_title">正文標題</string>
     <string name="show_hide">顯示/隱藏</string>
-    <string name="header_footer">頁首<![CDATA[&]]>頁尾</string>
+    <string name="header_footer">頁首&amp;頁尾</string>
     <string name="rule_subscription">規則訂閱</string>
     <string name="rule_sub_empty_msg">新增大佬們提供的規則匯入地址\n新增後點擊可匯入規則</string>
     <string name="get_book_progress">拉取雲端進度</string>
@@ -1026,7 +1017,7 @@
     <string name="user_agent">使用者代理</string>
     <string name="bg_alpha">背景透明度</string>
 
-    <!-- check source config string -->
+    
     <string name="check_source_config">校驗設定</string>
     <string name="check_source_item">校驗項目</string>
     <string name="check_source_timeout">單個書源校驗超時(秒)</string>
@@ -1097,7 +1088,7 @@
     <string name="image_retain_number_summary">保留已讀章節數量 %s</string>
     <string name="image_retain_number">漫畫保留數量</string>
     <string name="export_pics_file">TXT匯出圖片</string>
-    <!-- string end -->
+    
     <string name="error_decode_bitmap">圖片解碼失敗</string>
     <string name="error_image_url_empty">圖片連結為空，檢查取代淨化規則</string>
     <string name="variable_comment">變數說明(variableComment)</string>
@@ -1152,8 +1143,6 @@
     <string name="sure_clear_search_history">是否確認清除所有搜尋歷史記錄</string>
     <string name="no_anim_scroll_page">禁用滾動點擊動畫</string>
     <string name="webdav_device_name">裝置名稱</string>
-    <string name="web_service_wake_lock">WebService喚醒鎖</string>
-    <string name="web_service_wake_lock_summary">開啟web服務的時候啟用喚醒鎖，有些手機開啟喚醒鎖會被殺後台</string>
     <string name="read_aloud_wake_lock">朗讀服務喚醒鎖</string>
     <string name="read_aloud_wake_lock_summary">開啟朗讀的時候啟用喚醒鎖，有些手機開啟喚醒鎖會被殺後台</string>
     <string name="audio_play_wake_lock">音訊服務喚醒鎖</string>
@@ -1285,7 +1274,7 @@
     <string name="enable_auto_scroll">开启滚动</string>
     <string name="manga_footer_config">页脚配置</string>
     <string name="setting_manga_auto_page_speed">设置自动翻页速度</string>
-    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -> %5$s%%</string>
+    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -&gt; %5$s%%</string>
     <string name="menu_download_after">下載之後章節</string>
     <string name="menu_download_all">下載全部章節</string>
     <string name="manga_header_chapter">《章节和文案》隐藏</string>

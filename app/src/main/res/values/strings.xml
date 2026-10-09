@@ -1,6 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <!--App-->
+    
     <string name="app_name">Legado</string>
     <string name="app_name_a">Legado·A</string>
     <string name="app_name_s" translatable="false">LegadoPlus</string>
@@ -8,7 +8,7 @@
     <string name="receiving_shared_import_label">Legado·import</string>
     <string name="tip_perm_request_storage">Legado needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
 
-    <!--Other-->
+    
     <string name="menu_backup">Home</string>
     <string name="menu_restore">Restore</string>
     <string name="menu_import_old">Import Legado data</string>
@@ -96,14 +96,9 @@
     <string name="import_books_count">%s text file(s) in total</string>
     <string name="is_loading">Loading…</string>
     <string name="retry">Retry</string>
-    <string name="web_service">Web service</string>
-    <string name="web_service_desc">Web edit source and read book</string>
-    <string name="mcp_service">MCP service</string>
-    <string name="mcp_service_desc">Source development tools</string>
     <string name="mcp_service_token_required">Configure the Web and MCP access token before starting MCP</string>
     <string name="mcp_service_token_invalid">MCP access token is missing or incorrect</string>
     <string name="mcp_service_start_failed">MCP service failed to start</string>
-    <string name="web_edit_source">Edit book sources on the web</string>
     <string name="offline_cache">Offline cache</string>
     <string name="offline_cache_t">Offline cache</string>
     <string name="offline_cache_s">cache the selected chapter(s) to Storage</string>
@@ -300,8 +295,6 @@
     <string name="download_live_update_completed">Install</string>
     <string name="download_live_canceled">Canceled</string>
     <string name="download_live_failed">Download failed</string>
-    <string name="web_service_live_started">Web service started</string>
-    <string name="web_service_live_stopped">Web service stopped</string>
     <string name="mcp_service_live_started">MCP service started</string>
     <string name="mcp_service_live_stopped">MCP service stopped</string>
     <string name="no_download">No download</string>
@@ -563,7 +556,7 @@
     <string name="no_prev_page">No prior page</string>
     <string name="no_next_page">No next page</string>
 
-    <!-- source start-->
+    
     <string name="source_name">Source Name(sourceName)</string>
     <string name="source_url">Source url(sourceUrl)</string>
     <string name="source_group">Source group(sourceGroup)</string>
@@ -623,9 +616,9 @@
     <string name="check_key_word">Check key word(checkKeyWord)</string>
     <string name="rule_actions">Actions(actions)</string>
     <string name="rule_is_pay">Is pay(isPay)</string>
-    <!-- source end-->
+    
 
-    <!--error string start-->
+    
     <string name="error_no_source">No source</string>
     <string name="error_get_book_info">Failed to obtain book information</string>
     <string name="error_get_content">Failed to obtain content</string>
@@ -638,7 +631,7 @@
     <string name="net_error_10001">No network</string>
     <string name="net_error_10002">Network connection timeout</string>
     <string name="net_error_10003">Data parsing failed</string>
-    <!--error string end-->
+    
 
     <string name="source_http_header">HTTP Header</string>
     <string name="debug_source">Debug source</string>
@@ -721,11 +714,6 @@
 
     <string name="e_ink_mode">E-Ink mode</string>
     <string name="e_ink_mode_detail">Remove animations and optimize the experience of using E-paper books</string>
-    <string name="web_menu">Web service</string>
-    <string name="web_port_title">Web port</string>
-    <string name="web_port_summary">Current port %s</string>
-    <string name="mcp_port_title">MCP port</string>
-    <string name="mcp_port_summary">Current port %s</string>
     <string name="js_source_api_token_required_title">Require access token</string>
     <string name="js_source_api_token_required_summary">When enabled, Web source and MCP APIs require the token. Only disable this on a trusted network.</string>
     <string name="js_source_api_token_title">Web and MCP access token</string>
@@ -917,7 +905,7 @@
     <string name="full_screen_gestures_support">Full screen gestures support</string>
     <string name="disable_return_key">Disable return key</string>
 
-    <!--color-->
+    
     <string name="primary">Primary</string>
     <string name="accent">Accent</string>
     <string name="background_color">Background color</string>
@@ -1054,7 +1042,7 @@
     <string name="non_action">None</string>
     <string name="body_title">Title</string>
     <string name="show_hide">Show/Hide</string>
-    <string name="header_footer">Footer <![CDATA[&]]> Header</string>
+    <string name="header_footer">Footer &amp; Header</string>
     <string name="rule_subscription">Rule Subscription</string>
     <string name="rule_sub_empty_msg">Add the rule import address provided by the bosses\nClick to import rules after adding</string>
     <string name="get_book_progress">Pull the cloud  progress</string>
@@ -1214,7 +1202,7 @@
     <string name="user_agent">User agent</string>
     <string name="bg_alpha">Background alpha</string>
 
-    <!-- check source config string -->
+    
     <string name="check_source_config">Check setting</string>
     <string name="check_source_item">Check item</string>
     <string name="check_source_timeout">Single book source check timeout (seconds)</string>
@@ -1303,7 +1291,7 @@
     <string name="image_retain_number_summary">Keep the number of chapters read %s</string>
     <string name="image_retain_number">Number of manga reservations</string>
     <string name="export_pics_file">Export Picture Files</string>
-    <!-- string end -->
+    
     <string name="error_decode_bitmap">Fail to decode bitmap</string>
     <string name="error_image_url_empty">Image url is empty, check replacement rules</string>
     <string name="variable_comment">变量说明(variableComment)</string>
@@ -1378,8 +1366,6 @@
     <string name="webdav_device_name">Device name</string>
     <string name="webdav_book_auto_restore_t">Restore missing local books</string>
     <string name="webdav_book_auto_restore_s">Restore an exact-name match from the WebDAV books directory when a local book file is missing</string>
-    <string name="web_service_wake_lock">WebService Wake up Lock</string>
-    <string name="web_service_wake_lock_summary">The wake-up lock is enabled when the web service is enabled, and some phones will be killed when the wake-up lock is enabled.</string>
     <string name="read_aloud_wake_lock">Read aloud service wake-up lock</string>
     <string name="read_aloud_wake_lock_summary">The wake-up lock is enabled when reading aloud is enabled, and the wake-up lock on some mobile phones will be killed in the background.</string>
     <string name="audio_play_wake_lock">Audio service wake-up lock</string>
@@ -1532,7 +1518,7 @@
     <string name="enable_auto_scroll">开启滚动</string>
     <string name="manga_footer_config">页脚配置</string>
     <string name="setting_manga_auto_page_speed">设置自动翻页速度</string>
-    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -> %5$s%%</string>
+    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -&gt; %5$s%%</string>
     <string name="menu_download_after">Download the chapter after</string>
     <string name="menu_download_all">Download all chapter</string>
     <string name="manga_header_chapter">《章节和文案》隐藏</string>

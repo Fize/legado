@@ -1,12 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <!--App-->
+    
     <string name="app_name">阅读</string>
     <string name="app_name_a">阅读·A</string>
     <string name="receiving_shared_label">阅读·搜索</string>
     <string name="receiving_shared_import_label">阅读·导入</string>
     <string name="tip_perm_request_storage">阅读需要访问存储卡权限，请前往“设置”—“应用权限”，打开所需权限</string>
 
-    <!--Other-->
+    
     <string name="menu_backup">Home</string>
     <string name="menu_restore">恢复</string>
     <string name="menu_import_old">导入阅读数据</string>
@@ -94,14 +95,9 @@
     <string name="import_books_count">共 %s 个文本文件</string>
     <string name="is_loading">加载中…</string>
     <string name="retry">重试</string>
-    <string name="web_service">Web 服务</string>
-    <string name="web_service_desc">用浏览器写源或看书</string>
-    <string name="mcp_service">MCP 服务</string>
-    <string name="mcp_service_desc">书源开发工具</string>
     <string name="mcp_service_token_required">请先配置 Web 与 MCP 访问令牌</string>
     <string name="mcp_service_token_invalid">MCP 访问令牌未配置或不正确</string>
     <string name="mcp_service_start_failed">MCP 服务启动失败</string>
-    <string name="web_edit_source">Web 编辑书源</string>
     <string name="offline_cache">离线缓存</string>
     <string name="offline_cache_t">离线缓存</string>
     <string name="offline_cache_s">缓存选择的章节到本地</string>
@@ -297,8 +293,6 @@
     <string name="download_live_update_completed">待安装</string>
     <string name="download_live_canceled">已取消</string>
     <string name="download_live_failed">下载失败</string>
-    <string name="web_service_live_started">Web已开启</string>
-    <string name="web_service_live_stopped">Web已关闭</string>
     <string name="mcp_service_live_started">MCP已开启</string>
     <string name="mcp_service_live_stopped">MCP已关闭</string>
     <string name="no_download">暂无任务</string>
@@ -561,7 +555,7 @@
     <string name="no_prev_page">没有上一页</string>
     <string name="no_next_page">没有下一页</string>
 
-    <!-- source start-->
+    
     <string name="source_name">源名称（sourceName）</string>
     <string name="source_url">源 URL（sourceUrl）</string>
     <string name="source_group">源分组（sourceGroup）</string>
@@ -621,9 +615,9 @@
     <string name="check_key_word">校验关键字（checkKeyWord）</string>
     <string name="rule_actions">操作（actions）</string>
     <string name="rule_is_pay">购买标识（isPay）</string>
-    <!-- source end-->
+    
 
-    <!--error string start-->
+    
     <string name="error_no_source">没有源</string>
     <string name="error_get_book_info">书籍信息获取失败</string>
     <string name="error_get_content">内容获取失败</string>
@@ -636,7 +630,7 @@
     <string name="net_error_10001">没有网络</string>
     <string name="net_error_10002">网络连接超时</string>
     <string name="net_error_10003">数据解析失败</string>
-    <!--error string end-->
+    
 
     <string name="source_http_header">请求头（header）</string>
     <string name="debug_source">调试源</string>
@@ -719,11 +713,6 @@
 
     <string name="e_ink_mode">E-Ink 模式</string>
     <string name="e_ink_mode_detail">去除动画，优化电纸书使用体验</string>
-    <string name="web_menu">Web 服务</string>
-    <string name="web_port_title">Web 端口</string>
-    <string name="web_port_summary">当前端口 %s</string>
-    <string name="mcp_port_title">MCP 端口</string>
-    <string name="mcp_port_summary">当前端口 %s</string>
     <string name="js_source_api_token_required_title">访问令牌保护</string>
     <string name="js_source_api_token_required_summary">开启时 Web 书源与 MCP 接口必须提供令牌；仅在可信网络中关闭</string>
     <string name="js_source_api_token_title">Web 与 MCP 访问令牌</string>
@@ -913,7 +902,7 @@
     <string name="full_screen_gestures_support">全面屏手势优化</string>
     <string name="disable_return_key">禁用返回键</string>
 
-    <!--color-->
+    
     <string name="primary">主色调</string>
     <string name="accent">强调色</string>
     <string name="background_color">背景色</string>
@@ -1053,7 +1042,7 @@
     <string name="non_action">无操作</string>
     <string name="body_title">正文标题</string>
     <string name="show_hide">显示/隐藏</string>
-    <string name="header_footer">页眉<![CDATA[&]]>页脚</string>
+    <string name="header_footer">页眉&amp;页脚</string>
     <string name="rule_subscription">规则订阅</string>
     <string name="rule_sub_empty_msg">添加大佬们提供的规则导入地址\n添加后点击可导入规则</string>
     <string name="get_book_progress">拉取云端进度</string>
@@ -1209,7 +1198,7 @@
     <string name="user_agent">用户代理</string>
     <string name="bg_alpha">背景透明度</string>
 
-    <!-- check source config string -->
+    
     <string name="check_source_config">校验设置</string>
     <string name="check_source_item">校验项目</string>
     <string name="check_source_timeout">单个书源校验超时（秒）</string>
@@ -1300,7 +1289,7 @@
     <string name="image_retain_number_summary">保留已读章节数量 %s</string>
     <string name="image_retain_number">漫画保留数量</string>
     <string name="export_pics_file">TXT 导出图片</string>
-    <!-- string end -->
+    
     <string name="error_decode_bitmap">图片解码失败</string>
     <string name="error_image_url_empty">图片链接为空，检查替换净化规则</string>
     <string name="variable_comment">变量说明(variableComment)</string>
@@ -1373,8 +1362,6 @@
     <string name="webdav_device_name">设备名称</string>
     <string name="webdav_book_auto_restore_t">恢复缺失的本地书</string>
     <string name="webdav_book_auto_restore_s">本地书文件缺失时，从 WebDAV 的 books 目录恢复同名文件</string>
-    <string name="web_service_wake_lock">WebService唤醒锁</string>
-    <string name="web_service_wake_lock_summary">开启web服务的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="read_aloud_wake_lock">朗读服务唤醒锁</string>
     <string name="read_aloud_wake_lock_summary">开启朗读的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="audio_play_wake_lock">音频服务唤醒锁</string>
@@ -1525,7 +1512,7 @@
     <string name="enable_auto_scroll">开启滚动</string>
     <string name="manga_footer_config">页脚配置</string>
     <string name="setting_manga_auto_page_speed">设置自动翻页速度</string>
-    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -> %5$s%%</string>
+    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -&gt; %5$s%%</string>
     <string name="menu_download_after">下载之后章节</string>
     <string name="menu_download_all">下载全部章节</string>
     <string name="manga_header_chapter">《章节和文案》隐藏</string>
