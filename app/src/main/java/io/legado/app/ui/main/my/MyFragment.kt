@@ -20,9 +20,7 @@ import io.legado.app.lib.prefs.NameListPreference
 import io.legado.app.lib.prefs.SwitchPreference
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.service.McpService
 import io.legado.app.service.AutoTaskScheduler
-import io.legado.app.service.WebService
 import io.legado.app.ui.about.checkAppUpdate
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.about.ReadRecordActivity
@@ -111,8 +109,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
         }
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            putPrefBoolean(PreferKey.webService, WebService.isRun)
-            putPrefBoolean(PreferKey.mcpService, McpService.isRun)
             addPreferencesFromResource(R.xml.pref_main)
             if (isMore) activity?.setTitle(R.string.reader_menu_more)
             val available = mutableListOf<Preference>()
@@ -135,51 +131,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
             }
             preferenceScreen.addPreference(customization)
             applyVisibility()
-            findPreference<SwitchPreference>("webService")?.onLongClick {
-                if (!WebService.isRun) {
-                    return@onLongClick false
-                }
-                context?.selector(arrayListOf("复制地址", "浏览器打开")) { _, i ->
-                    when (i) {
-                        0 -> context?.sendToClip(it.summary.toString())
-                        1 -> context?.openUrl(it.summary.toString())
-                    }
-                }
-                true
-            }
-            observeEventSticky<String>(EventBus.WEB_SERVICE) {
-                findPreference<SwitchPreference>(PreferKey.webService)?.let {
-                    it.isChecked = WebService.isRun
-                    it.summary = if (WebService.isRun) {
-                        WebService.hostAddress
-                    } else {
-                        getString(R.string.web_service_desc)
-                    }
-                }
-            }
-            findPreference<SwitchPreference>(PreferKey.mcpService)?.let {
-                it.isChecked = McpService.isRun
-                it.summary = if (McpService.isRun) {
-                    McpService.hostAddress
-                } else {
-                    getString(R.string.mcp_service_desc)
-                }
-                it.onLongClick {
-                    if (!McpService.isRun) return@onLongClick false
-                    context?.sendToClip(it.summary.toString())
-                    true
-                }
-            }
-            observeEventSticky<String>(EventBus.MCP_SERVICE) {
-                findPreference<SwitchPreference>(PreferKey.mcpService)?.let {
-                    it.isChecked = McpService.isRun
-                    it.summary = if (McpService.isRun) {
-                        McpService.hostAddress
-                    } else {
-                        getString(R.string.mcp_service_desc)
-                    }
-                }
-            }
             findPreference<NameListPreference>(PreferKey.themeMode)?.let {
                 it.setOnPreferenceChangeListener { _, _ ->
                     view?.post { ThemeConfig.applyDayNight(requireContext()) }
@@ -216,22 +167,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                         setOf("check_update", "check_beta_update")).orEmpty()
                     applyVisibility()
                 }
-                PreferKey.webService -> {
-                    if (requireContext().getPrefBoolean("webService")) {
-                        WebService.start(requireContext())
-                    } else {
-                        WebService.stop(requireContext())
-                    }
-                }
-
-                PreferKey.mcpService -> {
-                    if (requireContext().getPrefBoolean(PreferKey.mcpService)) {
-                        McpService.start(requireContext())
-                    } else {
-                        McpService.stop(requireContext())
-                    }
-                }
-
                 PreferKey.autoTaskService -> {
                     val appContext = requireContext().applicationContext
                     if (appContext.getPrefBoolean(PreferKey.autoTaskService)) {

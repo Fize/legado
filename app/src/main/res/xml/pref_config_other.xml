@@ -204,15 +204,6 @@
             android:summary="@string/video_setting_summary"
             android:title="@string/video_setting" />
 
-        <io.legado.app.lib.prefs.Preference
-            android:key="webPort"
-            android:title="@string/web_port_title"
-            app:iconSpaceReserved="false" />
-
-        <io.legado.app.lib.prefs.Preference
-            android:key="mcpPort"
-            android:title="@string/mcp_port_title"
-            app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="true"

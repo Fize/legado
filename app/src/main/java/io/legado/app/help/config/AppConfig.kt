@@ -538,12 +538,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.webPort, value)
         }
 
-    var mcpPort: Int
-        get() = appCtx.getPrefInt(PreferKey.mcpPort, 1236)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.mcpPort, value)
-        }
-
     val jsSourceApiTokenRequired: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.jsSourceApiTokenRequired, true)
 
