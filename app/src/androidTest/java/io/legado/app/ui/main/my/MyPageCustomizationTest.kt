@@ -102,7 +102,6 @@ class MyPageCustomizationTest {
             instrumentation.runOnMainSync {
                 val fragment = moreActivity!!.supportFragmentManager.findFragmentByTag(ConfigTag.MY_MORE) as MyPreferenceFragment
                 assertEquals(context.getString(R.string.reader_menu_more), moreActivity!!.title)
-                assertEquals(prefs.getBoolean( false),
                 moreActivity!!.finish()
             }
             moreActivity = null

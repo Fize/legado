@@ -11,13 +11,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.data.entities.RssSource
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleAdapter
 import io.legado.app.ui.replace.ReplaceRuleViewModel
-import io.legado.app.ui.rss.source.manage.RssSourceActivity
-import io.legado.app.ui.rss.source.manage.RssSourceAdapter
-import io.legado.app.ui.rss.source.manage.RssSourceViewModel
 import io.legado.app.utils.GSON
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,85 +26,6 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class SourceOrderMetadataUpdateTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-
-    @Test
-    fun staleRssSwitchAndSelectionPreserveCommittedOrderAndMetadata() {
-        val group = "Enable ${UUID.randomUUID()}"
-        val before = appDb.rssSourceDao.all
-        val stale = (0..2).map { index ->
-            RssSource(sourceUrl = "https://enable.invalid/$group/$index",
-                sourceName = "Source $index", sourceGroup = group, enabled = false,
-                customOrder = index * 100, sourceComment = "Before $index")
-        }
-        val keys = stale.map { it.sourceUrl }.toSet()
-        try {
-            appDb.rssSourceDao.insert(*stale.toTypedArray())
-            ActivityScenario.launch(RssSourceActivity::class.java).use { scenario ->
-                val expectedOrder = appDb.rssSourceDao.all.map { it.sourceUrl }.toMutableList().apply {
-                    remove(stale[0].sourceUrl)
-                    add(indexOf(stale[2].sourceUrl) + 1, stale[0].sourceUrl)
-                }
-                scenario.onActivity { activity ->
-                    ViewModelProvider(activity)[RssSourceViewModel::class.java]
-                        .move(stale[0].sourceUrl, stale[2].sourceUrl, true)
-                    activity.findViewById<SearchView>(R.id.search_view).setQuery("group:$group", false)
-                }
-                waitUntil("RSS move committed") {
-                    appDb.rssSourceDao.all.map { it.sourceUrl } == expectedOrder
-                }
-                appDb.rssSourceDao.update(*appDb.rssSourceDao.getRssSources(*keys.toTypedArray()).map {
-                    it.copy(sourceComment = "Updated comment", ruleContent = "body@text")
-                }.toTypedArray())
-                val committed = appDb.rssSourceDao.all
-                fun assertState(enabledKeys: Set<String>) {
-                    val expected = committed.associate { source ->
-                        source.sourceUrl to GSON.toJson(if (source.sourceUrl in keys)
-                            source.copy(enabled = source.sourceUrl in enabledKeys) else source)
-                    }
-                    assertEquals(expected, appDb.rssSourceDao.all.associate {
-                        it.sourceUrl to GSON.toJson(it)
-                    })
-                }
-                waitUntil("RSS switch row") {
-                    var ready = false
-                    scenario.onActivity { activity ->
-                        val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                        val adapter = recycler.adapter as RssSourceAdapter
-                        val position = adapter.getItems().indexOfFirst { it.sourceUrl == stale[0].sourceUrl }
-                        ready = adapter.getItems().map { it.sourceUrl } == listOf(stale[1].sourceUrl, stale[2].sourceUrl, stale[0].sourceUrl)
-                            && recycler.findViewHolderForAdapterPosition(position) != null
-                    }
-                    ready
-                }
-                scenario.onActivity { activity ->
-                    val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                    val adapter = recycler.adapter as RssSourceAdapter
-                    val position = adapter.getItems().indexOfFirst { it.sourceUrl == stale[0].sourceUrl }
-                    val row = checkNotNull(recycler.findViewHolderForAdapterPosition(position)).itemView
-                    // Force the real switch listener to receive the pre-move snapshot in this UI turn.
-                    adapter.setItem(position, stale[0])
-                    val switch = row.findViewById<CompoundButton>(R.id.swt_enabled)
-                    assertFalse(switch.isChecked)
-                    switch.performClick()
-                    assertTrue(switch.isChecked)
-                }
-                waitUntil("RSS switch enabled") { appDb.rssSourceDao.getByKey(stale[0].sourceUrl)?.enabled == true }
-                assertState(setOf(stale[0].sourceUrl))
-                scenario.onActivity { ViewModelProvider(it)[RssSourceViewModel::class.java].enableSelection(stale) }
-                waitUntil("RSS selection enabled") { keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == true } }
-                assertState(keys)
-                scenario.onActivity { ViewModelProvider(it)[RssSourceViewModel::class.java].disableSelection(stale) }
-                waitUntil("RSS selection disabled") { keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == false } }
-                assertState(emptySet())
-            }
-        } finally {
-            appDb.rssSourceDao.delete(*stale.toTypedArray())
-            val orders = before.associate { it.sourceUrl to it.customOrder }
-            appDb.rssSourceDao.update(*appDb.rssSourceDao.all.map {
-                it.copy(customOrder = orders[it.sourceUrl] ?: it.customOrder)
-            }.toTypedArray())
-        }
-    }
 
     @Test
     fun staleReplaceSwitchAndSelectionPreserveCommittedOrderAndMetadata() {

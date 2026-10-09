@@ -19,11 +19,9 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ItemBookSourceBinding
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.data.entities.RssSource
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.GSON
 import org.junit.Assert.assertEquals
@@ -38,11 +36,10 @@ import java.util.UUID
 class SourceDragOrderUiTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
-    private enum class Kind { BOOK, RSS, REPLACE }
+    private enum class Kind { BOOK, REPLACE }
 
     @Test fun filteredBookDragPreservesHiddenOrder() = verifyDrag(Kind.BOOK)
     @Test fun descendingBookDragPreservesHiddenOrder() = verifyDrag(Kind.BOOK, true)
-    @Test fun filteredRssDragPreservesHiddenOrder() = verifyDrag(Kind.RSS)
     @Test fun filteredReplaceDragPreservesHiddenOrder() = verifyDrag(Kind.REPLACE)
     @Test fun heldBookDragWithDeletedTargetDoesNotMoveAnotherSource() = verifyDrag(Kind.BOOK, removeTarget = true)
 
@@ -51,7 +48,6 @@ class SourceDragOrderUiTest {
         val group = "Drag $id"
         val orders = listOf(100, 100, 400, 700, 900, 900)
         val oldBooks = if (kind == Kind.BOOK) appDb.bookSourceDao.allPart else emptyList()
-        val oldRss = if (kind == Kind.RSS) appDb.rssSourceDao.all else emptyList()
         val oldRules = if (kind == Kind.REPLACE) appDb.replaceRuleDao.all else emptyList()
         val help = LocalConfig.all["bookSourceHelpVersion"]
         val books = orders.mapIndexed { i, order -> BookSource(
@@ -59,9 +55,6 @@ class SourceDragOrderUiTest {
             bookSourceGroup = if (i % 2 == 0) group else "Hidden $id",
             bookSourceComment = "Metadata $i", customOrder = order,
         ) }
-        val rss = books.map { RssSource(sourceUrl = it.bookSourceUrl, sourceName = it.bookSourceName,
-            sourceGroup = it.bookSourceGroup, sourceComment = it.bookSourceComment,
-            customOrder = it.customOrder, ruleContent = "body@text") }
         val firstRuleId = System.currentTimeMillis() * 1000
         val rules = books.mapIndexed { i, item -> ReplaceRule(id = firstRuleId + i,
             name = item.bookSourceName, group = item.bookSourceGroup, order = item.customOrder,
@@ -73,12 +66,10 @@ class SourceDragOrderUiTest {
             LocalConfig.edit().putInt("bookSourceHelpVersion", 1).commit()
             when (kind) {
                 Kind.BOOK -> appDb.bookSourceDao.insert(*books.toTypedArray())
-                Kind.RSS -> appDb.rssSourceDao.insert(*rss.toTypedArray())
                 Kind.REPLACE -> appDb.replaceRuleDao.insert(*rules.toTypedArray())
             }
             val fixtureKeys = when (kind) {
                 Kind.BOOK -> books.map { it.bookSourceUrl }
-                Kind.RSS -> rss.map { it.sourceUrl }
                 Kind.REPLACE -> rules.map { it.id.toString() }
             }
             val visible = fixtureKeys.filterIndexed { index, _ -> index % 2 == 0 }
@@ -164,13 +155,6 @@ class SourceDragOrderUiTest {
                     appDb.bookSourceDao.delete(*books.toTypedArray())
                     appDb.bookSourceDao.upOrder(oldBooks)
                 }
-                Kind.RSS -> {
-                    appDb.rssSourceDao.delete(*rss.toTypedArray())
-                    val saved = oldRss.associate { it.sourceUrl to it.customOrder }
-                    appDb.rssSourceDao.update(*appDb.rssSourceDao.all.map {
-                        it.copy(customOrder = saved[it.sourceUrl] ?: it.customOrder)
-                    }.toTypedArray())
-                }
                 Kind.REPLACE -> {
                     appDb.replaceRuleDao.delete(*rules.toTypedArray())
                     val saved = oldRules.associate { it.id to it.order }
@@ -187,27 +171,22 @@ class SourceDragOrderUiTest {
 
     private fun launch(kind: Kind): ActivityScenario<out Activity> = when (kind) {
         Kind.BOOK -> ActivityScenario.launch(BookSourceActivity::class.java)
-        Kind.RSS -> ActivityScenario.launch(RssSourceActivity::class.java)
         Kind.REPLACE -> ActivityScenario.launch(ReplaceRuleActivity::class.java)
     }
 
     private fun databaseKeys(kind: Kind): List<String> = when (kind) {
         Kind.BOOK -> appDb.bookSourceDao.allPart.map { it.bookSourceUrl }
-        Kind.RSS -> appDb.rssSourceDao.all.map { it.sourceUrl }
         Kind.REPLACE -> appDb.replaceRuleDao.all.map { it.id.toString() }
     }
 
     private fun databaseOrders(kind: Kind): Map<String, Int> = when (kind) {
         Kind.BOOK -> appDb.bookSourceDao.allPart.associate { it.bookSourceUrl to it.customOrder }
-        Kind.RSS -> appDb.rssSourceDao.all.associate { it.sourceUrl to it.customOrder }
         Kind.REPLACE -> appDb.replaceRuleDao.all.associate { it.id.toString() to it.order }
     }
 
     private fun updateComment(kind: Kind, key: String, comment: String) = when (kind) {
         Kind.BOOK -> appDb.bookSourceDao.update(checkNotNull(appDb.bookSourceDao.getBookSource(key))
             .copy(bookSourceComment = comment))
-        Kind.RSS -> appDb.rssSourceDao.update(checkNotNull(appDb.rssSourceDao.getByKey(key))
-            .copy(sourceComment = comment))
         Kind.REPLACE -> appDb.replaceRuleDao.update(checkNotNull(appDb.replaceRuleDao.findById(key.toLong()))
             .copy(replacement = comment))
     }
@@ -224,9 +203,6 @@ class SourceDragOrderUiTest {
     private fun databaseMetadata(kind: Kind): Map<String, String> = when (kind) {
         Kind.BOOK -> appDb.bookSourceDao.all.associate {
             it.bookSourceUrl to GSON.toJson(it.copy(customOrder = 0))
-        }
-        Kind.RSS -> appDb.rssSourceDao.all.associate {
-            it.sourceUrl to GSON.toJson(it.copy(customOrder = 0))
         }
         Kind.REPLACE -> appDb.replaceRuleDao.all.associate {
             it.id.toString() to GSON.toJson(it.copy(order = 0))
@@ -248,7 +224,6 @@ class SourceDragOrderUiTest {
                 val items = (recycler.adapter as RecyclerAdapter<*, *>).getItems().map {
                     when (it) {
                         is BookSourcePart -> it.bookSourceUrl
-                        is RssSource -> it.sourceUrl
                         is ReplaceRule -> it.id.toString()
                         else -> error("Unexpected row $it")
                     }

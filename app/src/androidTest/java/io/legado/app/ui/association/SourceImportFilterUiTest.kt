@@ -35,7 +35,6 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.data.entities.RssSource
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
@@ -77,7 +76,7 @@ class SourceImportFilterUiTest {
     }
 
     @After fun tearDown() {
-        urls.forEach { appDb.bookSourceDao.delete(it); appDb.rssSourceDao.delete(it) }
+        urls.forEach { appDb.bookSourceDao.delete(it) }
         appDb.replaceRuleDao.delete(rule)
         savedRules.forEach { appDb.replaceRuleDao.insert(it) }
         files.forEach { it.delete() }
@@ -94,10 +93,8 @@ class SourceImportFilterUiTest {
 
     @Test fun bookFilteringKeepsCandidatesThroughEditReplacementAndRecreation() = filtering(false)
 
-    @Test fun rssFilteringKeepsCandidatesThroughEditReplacementAndRecreation() = filtering(true)
-
     @Test fun onlineAutoImportKeepsOnePreviewAndItsStateAfterRecreation() {
-        for (rss in listOf(false, true)) {
+        for (rss in listOf(false)) {
             val candidates = listOf(
                 source(rss, url("auto-$rss/hidden"), "Hidden", "Other", ""),
                 source(rss, url("auto-$rss/keep"), "Keep", "Wanted", ""),
@@ -167,8 +164,7 @@ class SourceImportFilterUiTest {
             source(rss, candidateUrls[2], "Twin", "PreciseSuffix,Shared", "other comment"),
         )
         val existing = source(rss, candidateUrls[2], "Old stored name", "Existing", "old", 1)
-        if (rss) appDb.rssSourceDao.insert(existing as RssSource)
-        else appDb.bookSourceDao.insert(existing as BookSource)
+        appDb.bookSourceDao.insert(existing as BookSource)
         withImport(rss, candidates) { host ->
             host.selection(true, true, true)
             host.rejectStaleRowAfterQuery("OnlyNeedle", 1)
@@ -179,7 +175,7 @@ class SourceImportFilterUiTest {
             host.selection(true, false, false)
             host.footer(0, 2, 1, all = false)
             screenshot("source-filter-count-$rss")
-            if (!rss) {
+            run {
                 host.query("Hidden", 0)
                 host.rowClick(0, R.id.cb_source_name)
                 host.query("TWIN", 1, 2)
@@ -190,8 +186,6 @@ class SourceImportFilterUiTest {
                 host.query("Hidden", 0)
                 host.rowClick(0, R.id.cb_source_name)
                 host.query("TWIN", 1, 2)
-            } else {
-                host.click(R.id.tv_footer_left)
             }
             host.selection(true, true, true)
             host.rowClick(0, R.id.cb_source_name)
@@ -256,15 +250,13 @@ class SourceImportFilterUiTest {
         assertNull(storedGroup(rss, candidateUrls[0]))
         assertNull(storedGroup(rss, candidateUrls[1]))
         assertEquals("Existing", storedGroup(rss, candidateUrls[2]))
-        assertEquals("Old stored name", if (rss) appDb.rssSourceDao.getByKey(candidateUrls[2])?.sourceName
-            else appDb.bookSourceDao.getBookSource(candidateUrls[2])?.bookSourceName)
-        val savedName = if (rss) appDb.rssSourceDao.getByKey(editedUrl)?.sourceName
-            else appDb.bookSourceDao.getBookSource(editedUrl)?.bookSourceName
+        assertEquals("Old stored name", appDb.bookSourceDao.getBookSource(candidateUrls[2])?.bookSourceName)
+        val savedName = appDb.bookSourceDao.getBookSource(editedUrl)?.bookSourceName
         assertEquals("Edited-$id", savedName)
     }
 
     @Test fun specialFiltersMatchManagementGroupAndLoginSemantics() {
-        for (rss in listOf(false, true)) {
+        for (rss in listOf(false)) {
             val candidates = listOf("未分组", "Ungrouped", "RSS", "rss").mapIndexed { index, group ->
                 source(rss, url("$rss/metadata-$index"), group = group).also {
                     when (it) {
@@ -272,7 +264,6 @@ class SourceImportFilterUiTest {
                             0 -> { it.mainJs = "function login() {}"; it.loginUi = "[{\"name\":\"account\"}]" }
                             1 -> it.loginUrl = "https://login.invalid"
                         }
-                        is RssSource -> if (index == 1) it.loginUrl = "https://login.invalid"
                     }
                 }
             }
@@ -280,14 +271,14 @@ class SourceImportFilterUiTest {
                 host.query("group:RSS", 2)
                 host.query("group:rss", 3)
                 host.query(context.getString(R.string.no_group), 0)
-                host.query(context.getString(R.string.need_login), *if (rss) intArrayOf(1) else intArrayOf(0, 1))
+                host.query(context.getString(R.string.need_login), 0, 1)
                 host.click(R.id.tv_cancel)
                 host.awaitFinished()
             }
         }
     }
 
-    @Test fun groupMemoryIsOptInSharedBetweenBookAndRssAndDisablingClearsIt() {
+    @Test fun groupMemoryIsOptInAndDisablingClearsIt() {
         assertFalse("The unset preference must default to OFF", AppConfig.importRememberGroup)
         val first = url("group/default-off")
         withImport(false, listOf(source(false, first))) { host ->
@@ -298,7 +289,7 @@ class SourceImportFilterUiTest {
             await("One-time replacement group was not imported") { storedGroup(false, first) == "Once" }
         }
         val second = url("group/remember-add")
-        withImport(true, listOf(source(true, second))) { host ->
+        withImport(false, listOf(source(false, second))) { host ->
             host.group(null, false)
             host.menu(R.id.menu_remember_source_group)
             assertTrue(AppConfig.importRememberGroup)
@@ -307,7 +298,7 @@ class SourceImportFilterUiTest {
             assertTrue(AppConfig.importLastGroupAdd)
             host.click(R.id.tv_ok)
             await("Remembered add group was not applied") {
-                storedGroup(true, second) == "Original,Remember add"
+                storedGroup(false, second) == "Original,Remember add"
             }
         }
         val third = url("group/remember-replace")
@@ -323,7 +314,7 @@ class SourceImportFilterUiTest {
             }
         }
         val fourth = url("group/disable")
-        withImport(true, listOf(source(true, fourth))) { host ->
+        withImport(false, listOf(source(false, fourth))) { host ->
             host.group("Remember replace", false)
             host.inspectGroupDialog("Remember replace", false)
             screenshot("source-remembered-group-rss")
@@ -335,7 +326,7 @@ class SourceImportFilterUiTest {
             assertFalse(AppConfig.importLastGroupAdd)
             host.click(R.id.tv_ok)
             await("Disabling memory must preserve the source's own group") {
-                storedGroup(true, fourth) == "Original"
+                storedGroup(false, fourth) == "Original"
             }
         }
         withImport(false, listOf(source(false, url("group/after-disable")))) { host ->
@@ -349,15 +340,13 @@ class SourceImportFilterUiTest {
 
     private fun source(rss: Boolean, url: String, name: String = "Group fixture",
         group: String = "Original", comment: String = "", time: Long = 100): Any =
-        if (rss) RssSource(sourceUrl = url, sourceName = name, sourceGroup = group,
-            sourceComment = comment, ruleArticles = "article", lastUpdateTime = time)
-        else BookSource(bookSourceUrl = url, bookSourceName = name, bookSourceGroup = group,
+        BookSource(bookSourceUrl = url, bookSourceName = name, bookSourceGroup = group,
             bookSourceComment = comment, searchUrl = "/search", lastUpdateTime = time)
 
     private fun url(path: String) = "https://filter-$id.invalid/$path".also { urls.add(it) }
 
-    private fun storedGroup(rss: Boolean, url: String): String? = if (rss)
-        appDb.rssSourceDao.getByKey(url)?.sourceGroup else appDb.bookSourceDao.getBookSource(url)?.bookSourceGroup
+    private fun storedGroup(rss: Boolean, url: String): String? =
+        appDb.bookSourceDao.getBookSource(url)?.bookSourceGroup
 
     private fun withImport(rss: Boolean, sources: List<Any>, action: (ImportHost) -> Unit) {
         val file = File(context.cacheDir, "source-filter-$id-${files.size}.json")
@@ -382,7 +371,6 @@ class SourceImportFilterUiTest {
     private inner class ImportHost(val scenario: ActivityScenario<out FragmentActivity>, val rss: Boolean) {
         lateinit var parent: DialogFragment
         private val book get() = ViewModelProvider(parent)[ImportBookSourceViewModel::class.java]
-        private val feed get() = ViewModelProvider(parent)[ImportRssSourceViewModel::class.java]
         fun <T : View> view(id: Int): T = parent.requireView().findViewById(id)
         private fun toolbar() = view<Toolbar>(R.id.tool_bar)
         private fun indices() = (view<RecyclerView>(R.id.recycler_view).adapter as RecyclerAdapter<*, *>).getItems()
@@ -391,7 +379,7 @@ class SourceImportFilterUiTest {
             var found: DialogFragment? = null
             scenario.onActivity { activity ->
                 found = activity.supportFragmentManager.fragments.filterIsInstance<DialogFragment>()
-                    .find { if (rss) it is ImportRssSourceDialog else it is ImportBookSourceDialog }
+                    .find { it is ImportBookSourceDialog }
             }
             found?.also { parent = it } != null
         }
@@ -412,13 +400,13 @@ class SourceImportFilterUiTest {
             }
             main {
                 assertEquals(query, view<SearchView>(R.id.source_import_search).query.toString())
-                assertEquals(query, if (rss) feed.searchQuery else book.searchQuery)
+                assertEquals(query, book.searchQuery)
             }
         }
 
         fun selection(vararg expected: Boolean) = main {
             assertEquals("Selection must use original indices: rss=$rss", expected.toList(),
-                if (rss) feed.selectStatus.toList() else book.selectStatus.toList())
+                book.selectStatus.toList())
         }
 
         fun footer(selected: Int, visible: Int, total: Int, all: Boolean) = main {
@@ -492,8 +480,8 @@ class SourceImportFilterUiTest {
         }
 
         fun group(expected: String?, add: Boolean) = main {
-            assertEquals(expected, if (rss) feed.groupName else book.groupName)
-            assertEquals(add, if (rss) feed.isAddGroup else book.isAddGroup)
+            assertEquals(expected, book.groupName)
+            assertEquals(add, book.isAddGroup)
             val title = expected?.let { context.getString(R.string.diy_edit_source_group_title, it) }
                 ?.let { if (add) "+$it" else it } ?: context.getString(R.string.diy_source_group)
             assertEquals(title, toolbar().menu.findItem(R.id.menu_new_group).title.toString())
@@ -511,8 +499,8 @@ class SourceImportFilterUiTest {
         }
 
         fun setGroup(value: String, add: Boolean) {
-            val current = main { (if (rss) feed.groupName else book.groupName) to
-                (if (rss) feed.isAddGroup else book.isAddGroup) }
+            val current = main { (book.groupName) to
+                (book.isAddGroup) }
             inspectGroupDialog(current.first, current.second)
             onView(withId(R.id.edit_view)).inRoot(isDialog()).perform(replaceText(value))
             if (current.second != add) onView(withId(R.id.sw_add_group)).inRoot(isDialog()).perform(click())

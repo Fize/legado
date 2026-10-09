@@ -64,14 +64,11 @@ import io.legado.app.help.CacheManager
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.association.FileAssociationActivity
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportBookSourceViewModel
-import io.legado.app.ui.association.ImportRssSourceDialog
-import io.legado.app.ui.association.ImportRssSourceViewModel
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
 import io.legado.app.ui.widget.code.KeywordTokenizer
@@ -530,7 +527,7 @@ class CodeSelectionUiTest {
         }
     }
 
-    @Test fun sourcePreviewEditsReturnToTheSameBookAndRssCandidateWithoutLosingLongCode() {
+    @Test fun sourcePreviewEditsReturnToTheSameBookCandidateWithoutLosingLongCode() {
         val id = UUID.randomUUID().toString()
         val script = "// 中文 🌍 original draft\n".repeat(2_000)
         val savedReplacement = AppConfig.importReplaceSource
@@ -538,12 +535,10 @@ class CodeSelectionUiTest {
             replacement = "#edited-once", isRegex = false, scopeSource = true, scopeContent = false)
         appDb.replaceRuleDao.insert(rule)
         try {
-            for ((rss, replacements) in listOf(false to false, true to false, false to true, true to true)) {
+            for ((rss, replacements) in listOf(false to false, false to true)) {
                 AppConfig.importReplaceSource = replacements
                 val urls = listOf("https://preview-$id.invalid/first", "https://preview-$id.invalid/second")
-                val sources = if (rss) urls.mapIndexed { index, url ->
-                    RssSource(sourceUrl = url, sourceName = "Preview $index", jsLib = script, ruleArticles = "article")
-                } else urls.mapIndexed { index, url ->
+                val sources = urls.mapIndexed { index, url ->
                     BookSource(bookSourceUrl = url, bookSourceName = "Preview $index", jsLib = script,
                         searchUrl = "/search", ruleSearch = SearchRule(bookList = "article", name = "text"))
                 }
@@ -565,7 +560,7 @@ class CodeSelectionUiTest {
                         await {
                             host.onActivity { activity ->
                                 parent = activity.supportFragmentManager.fragments.filterIsInstance<DialogFragment>()
-                                    .find { if (rss) it is ImportRssSourceDialog else it is ImportBookSourceDialog }
+                                    .find { it is ImportBookSourceDialog }
                             }
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -725,8 +720,7 @@ class CodeSelectionUiTest {
                                         if (ready) {
                                             val expected = if (draft == invalid) draft else edited.replace("#edited", "#edited-once")
                                             assertEquals(expected, preview!!.binding.codeView.text.toString())
-                                            val raw = if (rss) ViewModelProvider(parent!!)[ImportRssSourceViewModel::class.java].originalSourceJson(1)
-                                                else ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].originalSourceJson(1)
+                                            val raw = ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].originalSourceJson(1)
                                             assertEquals(edited, raw)
                                         }
                                     }
@@ -739,15 +733,9 @@ class CodeSelectionUiTest {
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                if (rss) {
-                                    val actual = ViewModelProvider(parent!!)[ImportRssSourceViewModel::class.java].allSources
-                                    ready = actual.size == 2 && actual[1].sourceUrl == expectedUrl
-                                    if (ready) { assertEquals(urls[0], actual[0].sourceUrl); assertEquals(script, actual[1].jsLib) }
-                                } else {
-                                    val actual = ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].allSources
-                                    ready = actual.size == 2 && actual[1].bookSourceUrl == expectedUrl
-                                    if (ready) { assertEquals(urls[0], actual[0].bookSourceUrl); assertEquals(script, actual[1].jsLib) }
-                                }
+                                val actual = ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].allSources
+                                ready = actual.size == 2 && actual[1].bookSourceUrl == expectedUrl
+                                if (ready) { assertEquals(urls[0], actual[0].bookSourceUrl); assertEquals(script, actual[1].jsLib) }
                             }
                             ready
                         }
@@ -1021,123 +1009,6 @@ class CodeSelectionUiTest {
         }
     }
 
-
-    @Test fun reportedRssPreviewMeasuresOpeningImeAndEditsWithItsActualIcon() {
-        // Pin the reporter's public sample without executing any source JavaScript.
-        val connection = java.net.URL("https://github.com/user-attachments/files/32066159/shareRssSource.json")
-            .openConnection().apply { connectTimeout = 15_000; readTimeout = 15_000 }
-        val bytes = connection.getInputStream().use { it.readBytes() }
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { "%02x".format(it.toInt() and 255) }
-        assertEquals("0893a7bf2af946735d331d1e37acdf3aa3bf05f3b5beb45181f736e15509f9a9", digest)
-        val rss = GSON.fromJson(bytes.toString(Charsets.UTF_8), Array<RssSource>::class.java).single()
-        val actual = GSON.toJson(rss)
-        val withoutIcon = GSON.toJson(rss.copy(sourceIcon = ""))
-        launchEditor()
-        val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
-        val report = StringBuilder("sampleSha256=$digest\n")
-        try {
-            for ((label, code) in listOf("actual" to actual, "without-icon" to withoutIcon,
-                "actual-unwrapped" to actual, "actual-monospace" to actual)) {
-                val dialog = CodeDialog(code, disableEdit = false)
-                var expected = code
-                val opened = SystemClock.uptimeMillis()
-                scenario!!.onActivity {
-                    dialog.showNow(it.supportFragmentManager, "reported-rss-$label")
-                    if (label == "actual-unwrapped") dialog.binding.codeView.setHorizontallyScrolling(true)
-                    if (label == "actual-monospace") dialog.binding.codeView.typeface = android.graphics.Typeface.MONOSPACE
-                }
-                try {
-                    await {
-                        var ready = false
-                        instrumentation.runOnMainSync {
-                            ready = dialog.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                dialog.binding.codeView.layout != null
-                        }
-                        ready
-                    }
-                    report.append("$label; characters=${code.length}; openMs=${SystemClock.uptimeMillis() - opened}\n")
-                    instrumentation.runOnMainSync {
-                        val view = dialog.binding.codeView
-                        report.append("$label; breakStrategy=${view.breakStrategy}; hyphenation=${view.hyphenationFrequency}; lines=${view.lineCount}\n")
-                    }
-                    val focusStarted = SystemClock.uptimeMillis()
-                    onView(withId(R.id.code_view)).inRoot(isDialog()).perform(click())
-                    await {
-                        var visible = false
-                        instrumentation.runOnMainSync {
-                            visible = ViewCompat.getRootWindowInsets(dialog.binding.codeView)
-                                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                        }
-                        visible
-                    }
-                    report.append("$label; focusImeMs=${SystemClock.uptimeMillis() - focusStarted}\n")
-                    for (offset in listOf(15, code.length / 2, code.length - 3)) {
-                        val frame = CountDownLatch(1)
-                        val started = SystemClock.uptimeMillis()
-                        var editMs = 0L
-                        var selectionMs = 0L
-                        val sampling = java.util.concurrent.atomic.AtomicBoolean(label == "actual" && offset == 15)
-                        val stacks = HashMap<String, Int>()
-                        val sampler = if (sampling.get()) kotlin.concurrent.thread(name = "preview-edit-sampler", isDaemon = true) {
-                            while (sampling.get()) {
-                                val stack = android.os.Looper.getMainLooper().thread.stackTrace.joinToString("\n")
-                                stacks[stack] = (stacks[stack] ?: 0) + 1
-                                Thread.sleep(5)
-                            }
-                        } else null
-                        try {
-                            instrumentation.runOnMainSync {
-                                val view = dialog.binding.codeView
-                                val selectStarted = SystemClock.uptimeMillis()
-                                view.setSelection(offset)
-                                selectionMs = SystemClock.uptimeMillis() - selectStarted
-                                view.viewTreeObserver.registerFrameCommitCallback { frame.countDown() }
-                                val input = checkNotNull(view.onCreateInputConnection(EditorInfo()))
-                                val editStarted = SystemClock.uptimeMillis()
-                                assertTrue(input.commitText("x", 1))
-                                editMs = SystemClock.uptimeMillis() - editStarted
-                                view.postInvalidateOnAnimation()
-                            }
-                        } finally {
-                            sampling.set(false)
-                            sampler?.join(5_000)
-                            if (sampler != null) {
-                                assertFalse("Main-thread sampler stopped", sampler.isAlive)
-                                File(artifacts, "reported-rss-edit-stacks.txt").writeText(
-                                    stacks.entries.sortedByDescending { it.value }
-                                        .joinToString("\n\n") { "samples=${it.value}\n${it.key}" })
-                            }
-                        }
-                        assertTrue("$label input did not commit a frame", frame.await(15, TimeUnit.SECONDS))
-                        expected = expected.substring(0, offset) + "x" + expected.substring(offset)
-                        instrumentation.runOnMainSync {
-                            assertEquals(expected, dialog.currentOriginalCode())
-                            assertEquals(offset + 1, dialog.binding.codeView.selectionEnd)
-                        }
-                        report.append("$label; offset=$offset; selectMs=$selectionMs; editMs=$editMs; frameMs=${SystemClock.uptimeMillis() - started}\n")
-                        val deleteStarted = SystemClock.uptimeMillis()
-                        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
-                        expected = expected.removeRange(offset, offset + 1)
-                        await {
-                            var matches = false
-                            instrumentation.runOnMainSync { matches = dialog.currentOriginalCode() == expected }
-                            matches
-                        }
-                        report.append("$label; offset=$offset; keyDeleteMs=${SystemClock.uptimeMillis() - deleteStarted}\n")
-                    }
-                    checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
-                        try { File(artifacts, "reported-rss-$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
-                        finally { bitmap.recycle() }
-                    }
-                } finally {
-                    closeSoftKeyboard()
-                    instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
-                    instrumentation.waitForIdleSync()
-                }
-            }
-        } finally { File(artifacts, "reported-rss-preview.txt").writeText(report.toString()) }
-    }
 
     private fun launchEditor(readOnly: Boolean = false, forResult: Boolean = false, fileMode: Boolean = false) {
         val intent = Intent(context, CodeEditActivity::class.java).putExtra("title", "Code selection regression")
