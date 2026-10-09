@@ -4,7 +4,6 @@ import io.legado.app.constant.AppConst
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RuleSub
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.ContentProcessor
@@ -12,7 +11,6 @@ import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
-import io.legado.app.help.source.requireSourceUrl
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
@@ -20,7 +18,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 object RuleUpdate {
     val cacheBookSourceMap = ConcurrentHashMap<String, List<BookSource>>()
-    val cacheRssSourceMap = ConcurrentHashMap<String, List<RssSource>>()
     val cacheReplaceRuleMap = ConcurrentHashMap<String, List<ReplaceRule>>()
 
     suspend fun cacheSource(ruleSub: RuleSub): Boolean {
@@ -62,24 +59,6 @@ object RuleUpdate {
                             }
                             else {
                                 cacheBookSourceMap[url] = lists
-                                return true
-                            }
-                        }
-                    }
-                }
-                1 -> GSON.fromJsonArray<RssSource>(it).getOrThrow().let { lists ->
-                    lists.forEach { source -> source.requireSourceUrl() }
-                    lists.forEach { list ->
-                        val localSource = appDb.rssSourceDao.getByKey(list.sourceUrl)
-                        if (localSource == null || localSource.lastUpdateTime < list.lastUpdateTime) {
-                            if (silentUpdate) {
-                                if (localSource != null) {
-                                    list.sourceGroup = localSource.sourceGroup
-                                }
-                                SourceHelp.insertRssSource(list)
-                            }
-                            else {
-                                cacheRssSourceMap[url] = lists
                                 return true
                             }
                         }

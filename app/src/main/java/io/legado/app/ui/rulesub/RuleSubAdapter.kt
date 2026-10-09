@@ -1,4 +1,4 @@
-package io.legado.app.ui.rss.subscription
+package io.legado.app.ui.rulesub
 
 import android.content.Context
 import android.view.View

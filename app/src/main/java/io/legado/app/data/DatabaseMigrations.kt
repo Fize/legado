@@ -24,7 +24,7 @@ object DatabaseMigrations {
             migration_35_36, migration_36_37, migration_37_38, migration_38_39,
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_100_101, migration_104_105, migration_105_106, migration_106_107,
-            migration_107_108, migration_108_109, migration_109_110,
+            migration_107_108, migration_108_109, migration_109_110, 
         )
     }
 
@@ -587,4 +587,12 @@ object DatabaseMigrations {
         }
     }
 
+    val migration_111_112 = object : Migration(111, 112) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS rssSources")
+            db.execSQL("DROP TABLE IF EXISTS rssArticles")
+            db.execSQL("DROP TABLE IF EXISTS rssReadRecords")
+            db.execSQL("DROP TABLE IF EXISTS rssStars")
+        }
+    }
 }

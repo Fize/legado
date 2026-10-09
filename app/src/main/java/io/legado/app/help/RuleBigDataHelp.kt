@@ -117,13 +117,6 @@ object RuleBigDataHelp {
                 existsNow = { appDb.bookDao.has(it) },
                 accessLock = accessLock,
             )
-            clearInvalidRuleData(
-                dataDir = rssData,
-                markerFileName = "origin.txt",
-                findExistingKeys = { appDb.rssSourceDao.findExistingSourceUrls(it) },
-                existsNow = { appDb.rssSourceDao.has(it) },
-                accessLock = accessLock,
-            )
         }
     }
 

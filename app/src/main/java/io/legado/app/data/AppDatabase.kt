@@ -26,10 +26,6 @@ import io.legado.app.data.dao.HighlightRuleDao
 import io.legado.app.data.dao.KeyboardAssistsDao
 import io.legado.app.data.dao.ReadRecordDao
 import io.legado.app.data.dao.ReplaceRuleDao
-import io.legado.app.data.dao.RssArticleDao
-import io.legado.app.data.dao.RssReadRecordDao
-import io.legado.app.data.dao.RssSourceDao
-import io.legado.app.data.dao.RssStarDao
 import io.legado.app.data.dao.RuleSubDao
 import io.legado.app.data.dao.SearchBookDao
 import io.legado.app.data.dao.SearchKeywordDao
@@ -53,10 +49,6 @@ import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.data.entities.RssArticle
-import io.legado.app.data.entities.RssReadRecord
-import io.legado.app.data.entities.RssSource
-import io.legado.app.data.entities.RssStar
 import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.SearchKeyword
@@ -77,79 +69,15 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 111,
-    exportSchema = true,
+    version = 112,
+    exportSchema = false,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
-        RssSource::class, Bookmark::class, RssArticle::class, RssReadRecord::class,
-        RssStar::class, TxtTocRule::class, ReadRecord::class, HttpTTS::class, Cache::class,
+        Bookmark::class, TxtTocRule::class, ReadRecord::class, HttpTTS::class, Cache::class,
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
         AutoTaskRule::class, BookHighlight::class, HighlightRule::class, BookSourceCheckState::class,
         BookMemo::class],
     views = [BookSourcePart::class],
-    autoMigrations = [
-        AutoMigration(from = 43, to = 44),
-        AutoMigration(from = 44, to = 45),
-        AutoMigration(from = 45, to = 46),
-        AutoMigration(from = 46, to = 47),
-        AutoMigration(from = 47, to = 48),
-        AutoMigration(from = 48, to = 49),
-        AutoMigration(from = 49, to = 50),
-        AutoMigration(from = 50, to = 51),
-        AutoMigration(from = 51, to = 52),
-        AutoMigration(from = 52, to = 53),
-        AutoMigration(from = 53, to = 54),
-        AutoMigration(from = 54, to = 55, spec = DatabaseMigrations.Migration_54_55::class),
-        AutoMigration(from = 55, to = 56),
-        AutoMigration(from = 56, to = 57),
-        AutoMigration(from = 57, to = 58),
-        AutoMigration(from = 58, to = 59),
-        AutoMigration(from = 59, to = 60),
-        AutoMigration(from = 60, to = 61),
-        AutoMigration(from = 61, to = 62),
-        AutoMigration(from = 62, to = 63),
-        AutoMigration(from = 63, to = 64),
-        AutoMigration(from = 64, to = 65, spec = DatabaseMigrations.Migration_64_65::class),
-        AutoMigration(from = 65, to = 66),
-        AutoMigration(from = 66, to = 67),
-        AutoMigration(from = 67, to = 68),
-        AutoMigration(from = 68, to = 69),
-        AutoMigration(from = 69, to = 70),
-        AutoMigration(from = 70, to = 71),
-        AutoMigration(from = 71, to = 72),
-        AutoMigration(from = 72, to = 73),
-        AutoMigration(from = 73, to = 74),
-        AutoMigration(from = 74, to = 75),
-        AutoMigration(from = 75, to = 76),
-        AutoMigration(from = 76, to = 77),
-        AutoMigration(from = 77, to = 78),
-        AutoMigration(from = 78, to = 79),
-        AutoMigration(from = 79, to = 80),
-        AutoMigration(from = 80, to = 81, spec = DatabaseMigrations.Migration_80_81::class),
-        AutoMigration(from = 81, to = 82),
-        AutoMigration(from = 82, to = 83),
-        AutoMigration(from = 83, to = 84, spec = DatabaseMigrations.Migration_83_84::class),
-        AutoMigration(from = 84, to = 85, spec = DatabaseMigrations.Migration_84_85::class),
-        AutoMigration(from = 85, to = 86),
-        AutoMigration(from = 86, to = 87),
-        AutoMigration(from = 87, to = 88),
-        AutoMigration(from = 88, to = 89),
-        AutoMigration(from = 89, to = 90),
-        AutoMigration(from = 90, to = 91),
-        AutoMigration(from = 91, to = 92),
-        AutoMigration(from = 92, to = 93),
-        AutoMigration(from = 93, to = 94),
-        AutoMigration(from = 94, to = 95),
-        AutoMigration(from = 95, to = 96),
-        AutoMigration(from = 96, to = 97, spec = DatabaseMigrations.Migration_96_97::class),
-        AutoMigration(from = 97, to = 98),
-        AutoMigration(from = 98, to = 99, spec = DatabaseMigrations.Migration_98_99::class),
-        AutoMigration(from = 99, to = 100),
-        AutoMigration(from = 101, to = 102, spec = DatabaseMigrations.Migration_101_102::class),
-        AutoMigration(from = 102, to = 103),
-        AutoMigration(from = 103, to = 104),
-        AutoMigration(from = 110, to = 111)
-    ]
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -164,11 +92,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val replaceRuleDao: ReplaceRuleDao
     abstract val searchBookDao: SearchBookDao
     abstract val searchKeywordDao: SearchKeywordDao
-    abstract val rssSourceDao: RssSourceDao
     abstract val bookmarkDao: BookmarkDao
-    abstract val rssArticleDao: RssArticleDao
-    abstract val rssStarDao: RssStarDao
-    abstract val rssReadRecordDao: RssReadRecordDao
     abstract val cookieDao: CookieDao
     abstract val txtTocRuleDao: TxtTocRuleDao
     abstract val readRecordDao: ReadRecordDao
@@ -260,10 +184,6 @@ abstract class AppDatabase : RoomDatabase() {
                 val upBookSourceLoginUiSql =
                     "update book_sources set loginUi = null where loginUi = 'null'"
                 db.execSQL(upBookSourceLoginUiSql)
-                @Language("sql")
-                val upRssSourceLoginUiSql =
-                    "update rssSources set loginUi = null where loginUi = 'null'"
-                db.execSQL(upRssSourceLoginUiSql)
                 @Language("sql")
                 val upHttpTtsLoginUiSql =
                     "update httpTTS set loginUi = null where loginUi = 'null'"

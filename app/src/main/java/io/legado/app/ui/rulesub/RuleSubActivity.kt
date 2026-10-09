@@ -1,4 +1,4 @@
-package io.legado.app.ui.rss.subscription
+package io.legado.app.ui.rulesub
 
 import android.annotation.SuppressLint
 import android.os.Bundle
@@ -19,7 +19,6 @@ import io.legado.app.databinding.DialogRuleSubEditBinding
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportReplaceRuleDialog
-import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.showDialogFragment
@@ -85,9 +84,7 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
             0 -> showDialogFragment(
                 ImportBookSourceDialog(ruleSub.url)
             )
-            1 -> showDialogFragment(
-                ImportRssSourceDialog(ruleSub.url)
-            )
+            1 -> toastOnUi("RSS 功能已被精简")
             2 -> showDialogFragment(
                 ImportReplaceRuleDialog(ruleSub.url)
             )

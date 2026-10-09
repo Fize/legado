@@ -9,7 +9,17 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.CacheManager
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
-import io.legado.app.ui.rss.read.RssJsExtensions
+import io.legado.app.help.JsExtensions
+import io.legado.app.constant.BookType
+import io.legado.app.data.appDb
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
+import io.legado.app.model.AudioPlay
+import io.legado.app.model.ReadBook
+import io.legado.app.model.VideoPlay
+import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
+import java.net.URL
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.lang.ref.WeakReference
@@ -19,13 +29,49 @@ import kotlin.coroutines.EmptyCoroutineContext
 
 @Suppress("unused")
 class WebJsExtensions(
-    source: BaseSource,
+    private val source: BaseSource,
     activity: AppCompatActivity?,
     webView: WebView,
-    bookType: Int = 0,
+    val bookType: Int = 0,
     callback: Callback? = null,
     private val navigationContext: CoroutineContext = EmptyCoroutineContext,
-): RssJsExtensions(activity, source, bookType) {
+): JsExtensions {
+    override fun getSource(): BaseSource? = source
+    override fun getTag(): String? = "WebJsExtensions"
+    val activityRef: WeakReference<AppCompatActivity> = WeakReference(activity)
+    
+    private val bookAndChapter by lazy {
+        var book: Book? = null
+        var chapter: BookChapter? = null
+        when (bookType) {
+            BookType.text -> {
+                book = ReadBook.book?.also {
+                    chapter = appDb.bookChapterDao.getChapter(
+                        it.bookUrl,
+                        ReadBook.durChapterIndex
+                    )
+                }
+            }
+
+            BookType.audio -> {
+                book = AudioPlay.book
+                chapter = AudioPlay.durChapter
+            }
+
+            BookType.video -> {
+                book = VideoPlay.book
+                chapter = VideoPlay.chapter
+            }
+        }
+        Pair(book, chapter)
+    }
+    private val book: Book? get() = bookAndChapter.first
+    private val chapter: BookChapter? get() = bookAndChapter.second
+
+    val analyzeRule by lazy {
+        AnalyzeRule(book, source = getSource()).setChapter(chapter)
+    }
+
     override fun getSourceNavigationContext(): CoroutineContext = navigationContext
     private val callbackRef: WeakReference<Callback> = WeakReference(callback)
     private val webViewRef: WeakReference<WebView?> = WeakReference(webView)
@@ -168,51 +214,51 @@ class WebJsExtensions(
     }
     @JavascriptInterface
     fun toast(msg: String?) {
-        super.toast(msg)
+        toast(msg)
     }
     @JavascriptInterface
     fun longToast(msg: String?) {
-        super.longToast(msg)
+        longToast(msg)
     }
     @JavascriptInterface
     fun log(msg: String?): String {
-        return super.log(msg).toString()
+        return log(msg).toString()
     }
     @JavascriptInterface
     @JvmOverloads
     fun ajax(url: String, callTimeout: Int = 9000): String? {
-        return super.ajax(url, callTimeout.toLong())
+        return ajax(url, callTimeout.toLong())
     }
     @JavascriptInterface
     @JvmOverloads
     fun connect(urlStr: String, header: String? = null, callTimeout: Int? = 9000): String {
-        return super.connect(urlStr, header, callTimeout?.toLong()).toString()
+        return connect(urlStr, header, callTimeout?.toLong()).toString()
     }
     @JavascriptInterface
     @JvmOverloads
     fun get(urlStr: String, header: String, timeout: Int? = 9000): String {
         val headers = GSON.fromJsonObject<Map<String, String>>(header).getOrNull() ?: emptyMap()
-        return super.get(urlStr, headers, timeout).body()
+        return get(urlStr, headers, timeout).body()
     }
     @JavascriptInterface
     @JvmOverloads
     fun post(urlStr: String, body: String, header: String, timeout: Int? = 9000): String {
         val headers = GSON.fromJsonObject<Map<String, String>>(header).getOrNull() ?: emptyMap()
-        return super.post(urlStr, body, headers, timeout).body()
+        return post(urlStr, body, headers, timeout).body()
     }
     @JavascriptInterface
     @JvmOverloads
     fun head(urlStr: String, header: String, timeout: Int? = 9000): String {
         val headers = GSON.fromJsonObject<Map<String, String>>(header).getOrNull() ?: emptyMap()
-        return GSON.toJson(super.head(urlStr, headers, timeout).headers())
+        return GSON.toJson(head(urlStr, headers, timeout).headers())
     }
     @JavascriptInterface
     fun getStringList(rule: String?, mContent: String? = null, isUrl: Boolean = false): List<String>? {
-        return super.getStringList(rule, mContent, isUrl)
+        return analyzeRule.getStringList(rule, mContent, isUrl)
     }
     @JavascriptInterface
     fun getString(ruleStr: String?, mContent: String? = null, isUrl: Boolean = false): String {
-        return super.getString(ruleStr, mContent, isUrl)
+        return analyzeRule.getString(ruleStr, mContent, isUrl)
     }
 
     companion object{

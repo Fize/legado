@@ -6,7 +6,6 @@ import io.legado.app.R
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.model.ReadAloud
-import io.legado.app.ui.rss.read.RssJsExtensions
 import io.legado.app.ui.widget.dialog.BottomWebViewDialog
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.sendToClip
@@ -21,14 +20,21 @@ import java.lang.ref.WeakReference
 class SourceLoginJsExtensions(
     activity: AppCompatActivity?,
     source: BaseSource?,
-    bookType: Int = 0,
+    private val bookType: Int = 0,
     callback: Callback? = null
-) : RssJsExtensions(activity, source, bookType) {
+) {
+    private val activityRef: WeakReference<AppCompatActivity> = WeakReference(activity)
+    private val sourceRef: WeakReference<BaseSource> = WeakReference(source)
+    
     internal var customButtonKey: String? = null
     private val callbackRef: WeakReference<Callback> = WeakReference(callback)
     interface Callback {
         fun upUiData(data: Map<String, Any?>?)
         fun reUiView(deltaUp: Boolean = false)
+    }
+
+    private fun getSource(): BaseSource? {
+        return sourceRef.get()
     }
 
     fun upLoginData(data: Map<String, Any?>?) {
@@ -61,7 +67,7 @@ class SourceLoginJsExtensions(
         }
     }
 
-    override fun showBrowser(
+    fun showBrowser(
         url: String,
         html: String?,
         preloadJs: String?,

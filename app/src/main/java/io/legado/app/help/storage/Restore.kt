@@ -28,8 +28,6 @@ import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.mergeRestoredReadRecord
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.data.entities.RssSource
-import io.legado.app.data.entities.RssStar
 import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
@@ -339,12 +337,6 @@ object Restore {
                 val json = bookSourceFile.readText()
                 ImportOldData.importOldSource(json)
             }
-        }
-        fileToListT<RssSource>(path, "rssSources.json")?.let {
-            appDb.rssSourceDao.insert(*it.toTypedArray())
-        }
-        fileToListT<RssStar>(path, "rssStar.json")?.let {
-            appDb.rssStarDao.insert(*it.toTypedArray())
         }
         fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
             val insertedIds = appDb.replaceRuleDao.insert(*it.toTypedArray())
