@@ -7,7 +7,7 @@ buildscript {
         kotlin_version = '1.9.10'
         ksp_version = "1.0.13"
         agp_version = '8.1.2'
-        media3_version = "1.1.1"
+        media3_version = "1.11.1"
         splitties_version = '3.0.0'
         room_version = '2.5.2'
     }
