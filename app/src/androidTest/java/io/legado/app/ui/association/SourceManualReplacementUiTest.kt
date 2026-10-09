@@ -114,23 +114,23 @@ class SourceManualReplacementUiTest {
         LocalConfig.lastBackup = savedLastBackup
     }
 
-    @Test fun bookManualAndEffectiveMenusUseRawCandidates() = manualFlow(false)
+    @Test fun bookManualAndEffectiveMenusUseRawCandidates() = manualFlow()
 
     @Test fun replacementMenusResumeAfterRecreationOrBackgroundWhileComparisonIsPending() {
         AppConfig.importReplaceSource = false
-        for (rss in listOf(false)) for (manual in listOf(false, true)) for (recreate in listOf(false, true)) {
-            withImport(rss) { host ->
+        for (manual in listOf(false, true)) for (recreate in listOf(false, true)) {
+            withImport { host ->
                 val code = host.open(0)
                 main {
                     code.binding.cbSourceReplacementPreview.isChecked = false
-                    code.binding.codeView.setText(GSON.toJson(source(rss, 0, "Edited Seed0")))
+                    code.binding.codeView.setText(GSON.toJson(source(0, "Edited Seed0")))
                 }
                 withBlockedSourceRules { entered, release ->
                     host.menu(if (manual) R.id.menu_manual_replace_rule else R.id.menu_effective_replaces,
                         code, waitForIdleAfterClick = false)
                     assertTrue("The real source-rule query must be held", entered.await(15, java.util.concurrent.TimeUnit.SECONDS))
                     val model = main { host.book }
-                    assertTrue("The query must still be held: rss=$rss manual=$manual recreate=$recreate",
+                    assertTrue("The query must still be held manual=$manual recreate=$recreate",
                         main { host.book.sourceUpdatePending.value == true })
                     val activity = main { host.parent.requireActivity() }
                     // ActivityScenario waits for an idle main thread before dispatching these
@@ -153,7 +153,7 @@ class SourceManualReplacementUiTest {
                             main { ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(activity) == Stage.STOPPED }
                         }
                     }
-                    assertTrue("Lifecycle transition must precede query release: rss=$rss manual=$manual recreate=$recreate",
+                    assertTrue("Lifecycle transition must precede query release manual=$manual recreate=$recreate",
                         main { host.book.sourceUpdatePending.value == true })
                     release.countDown()
                     await("The retained comparison must finish") {
@@ -172,7 +172,7 @@ class SourceManualReplacementUiTest {
                     val menu: DialogFragment = if (manual) host.child<ManualReplaceRulesDialog>() else host.child<EffectiveReplacesDialog>()
                     main {
                         // Replacement is unchecked, so the restored effective list must remain empty.
-                        assertEquals("rss=$rss manual=$manual recreate=$recreate",
+                        assertEquals("manual=$manual recreate=$recreate",
                             if (manual) rules.take(4).map { it.id } else emptyList<Long>(), ruleIds(menu))
                         val restored = host.parent.childFragmentManager.fragments.filterIsInstance<CodeDialog>().single()
                         assertTrue(restored.currentOriginalCode().contains("Edited Seed0"))
@@ -191,7 +191,7 @@ class SourceManualReplacementUiTest {
                         decor.invalidate()
                     }
                     assertTrue("Restored rule dialog must render", frame.await(15, java.util.concurrent.TimeUnit.SECONDS))
-                    screenshot("source-rule-pending-$rss-$manual-$recreate", main { checkNotNull(menu.dialog?.window) })
+                    screenshot("source-rule-pending-$manual-$recreate", main { checkNotNull(menu.dialog?.window) })
                 }
             }
         }
@@ -229,9 +229,9 @@ class SourceManualReplacementUiTest {
         }
     }
 
-    private fun manualFlow(rss: Boolean) {
+    private fun manualFlow() {
         AppConfig.importReplaceSource = false
-        withImport(rss) { host ->
+        withImport { host ->
             host.names("Seed0", "Seed1")
             main {
                 host.view<SearchView>(R.id.source_import_search).setQuery("Seed0", false)
@@ -259,7 +259,7 @@ class SourceManualReplacementUiTest {
             var code = host.open(0)
             main {
                 code.binding.cbSourceReplacementPreview.isChecked = false
-                code.binding.codeView.setText(GSON.toJson(source(rss, 0, "Edited Seed0")))
+                code.binding.codeView.setText(GSON.toJson(source(0, "Edited Seed0")))
             }
             host.menu(R.id.menu_manual_replace_rule, code)
             manual = host.child()
@@ -314,7 +314,7 @@ class SourceManualReplacementUiTest {
                 assertEquals("{ invalid draft", code.currentOriginalCode())
                 assertTrue(host.parent.childFragmentManager.fragments.none { it is ManualReplaceRulesDialog })
             }
-            screenshot("source-manual-invalid-$rss")
+            screenshot("source-manual-invalid")
             main { code.dismiss() }
             host.ready()
             host.names("Editor Seed+0", "Seed+1")
@@ -328,7 +328,7 @@ class SourceManualReplacementUiTest {
     }
 
     @Test fun automaticSourceOptionControlsManualMenus() {
-        for (rss in listOf(false)) withImport(rss) { host ->
+        withImport { host ->
             host.names("Seed++0", "Seed+1")
             host.manualEnabled(false)
             var code = host.open(0)
@@ -377,7 +377,7 @@ class SourceManualReplacementUiTest {
 
     @Test fun failedModeSwitchKeepsManualResultAndPreferences() {
         AppConfig.importReplaceSource = false
-        for (rss in listOf(false)) withImport(rss) { host ->
+        withImport { host ->
             host.menu(R.id.menu_manual_replace_rule)
             val manual = host.child<ManualReplaceRulesDialog>()
             clickRule(manual, 0)
@@ -442,7 +442,7 @@ class SourceManualReplacementUiTest {
             val text = processed.second.toString()
             assertEquals("Source import mode must not change reader behavior", !readerManual, text.contains("Body+"))
             assertEquals(readerManual, text.contains("Seed body"))
-            for (rss in listOf(false)) withImport(rss) { host ->
+            withImport { host ->
                 if (sourceAutomatic) host.names("Seed++0", "Seed+1") else host.names("Seed0", "Seed1")
                 host.manualEnabled(!sourceAutomatic)
                 main { host.view<View>(R.id.tv_cancel).performClick() }
@@ -454,12 +454,12 @@ class SourceManualReplacementUiTest {
         assertTrue(rules.subList(1, 5).none { it.id in readerCandidates })
     }
 
-    private fun source(rss: Boolean, index: Int, name: String = "Seed$index"): Any =
+    private fun source(index: Int, name: String = "Seed$index"): Any =
         BookSource(bookSourceUrl = urls[index], bookSourceName = name, searchUrl = "/search")
 
-    private fun withImport(rss: Boolean, action: (Host) -> Unit) {
+    private fun withImport(action: (Host) -> Unit) {
         val file = File(context.cacheDir, "source-manual-$id-${files.size}.json").also { files.add(it) }
-        file.writeText(GSON.toJson((0..1).map { source(rss, it) }))
+        file.writeText(GSON.toJson((0..1).map { source(it) }))
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
         val intent = Intent(context, FileAssociationActivity::class.java).apply {
             this.action = Intent.ACTION_SEND
@@ -469,14 +469,14 @@ class SourceManualReplacementUiTest {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         ActivityScenario.launch<FileAssociationActivity>(intent).use { scenario ->
-            val host = Host(scenario, rss)
+            val host = Host(scenario)
             host.findParent()
             host.ready()
             action(host)
         }
     }
 
-    private inner class Host(val scenario: ActivityScenario<FileAssociationActivity>, val rss: Boolean) {
+    private inner class Host(val scenario: ActivityScenario<FileAssociationActivity>) {
         lateinit var parent: DialogFragment
         val book get() = ViewModelProvider(parent)[ImportBookSourceViewModel::class.java]
         fun <T : View> view(id: Int): T = parent.requireView().findViewById(id)

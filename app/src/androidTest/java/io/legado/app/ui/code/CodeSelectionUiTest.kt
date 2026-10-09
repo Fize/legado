@@ -535,14 +535,14 @@ class CodeSelectionUiTest {
             replacement = "#edited-once", isRegex = false, scopeSource = true, scopeContent = false)
         appDb.replaceRuleDao.insert(rule)
         try {
-            for ((rss, replacements) in listOf(false to false, false to true)) {
+            for (replacements in listOf(false, true)) {
                 AppConfig.importReplaceSource = replacements
                 val urls = listOf("https://preview-$id.invalid/first", "https://preview-$id.invalid/second")
                 val sources = urls.mapIndexed { index, url ->
                     BookSource(bookSourceUrl = url, bookSourceName = "Preview $index", jsLib = script,
                         searchUrl = "/search", ruleSearch = SearchRule(bookList = "article", name = "text"))
                 }
-                val file = File(context.cacheDir, "preview-editor-$id-$rss.json").apply {
+                val file = File(context.cacheDir, "preview-editor-$id.json").apply {
                     writeText(GSON.toJson(sources))
                 }
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
@@ -661,7 +661,7 @@ class CodeSelectionUiTest {
                         instrumentation.waitForIdleSync()
                         checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
                             try {
-                                File(context.getExternalFilesDir("ui-regression"), "source-preview-editor-return-$rss-$replacements.png")
+                                File(context.getExternalFilesDir("ui-regression"), "source-preview-editor-return-$replacements.png")
                                     .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
                             } finally { bitmap.recycle() }
                         }
@@ -738,45 +738,6 @@ class CodeSelectionUiTest {
                                 if (ready) { assertEquals(urls[0], actual[0].bookSourceUrl); assertEquals(script, actual[1].jsLib) }
                             }
                             ready
-                        }
-                        if (rss && !replacements) {
-                            val derived = edited.replace("#edited", "#replacement-only")
-                            val readOnlyPreview = CodeDialog(edited, false, "1", derived, showAlternate = true)
-                            instrumentation.runOnMainSync {
-                                readOnlyPreview.show(parent!!.childFragmentManager, "readonly-editor-entry")
-                            }
-                            await {
-                                var ready = false
-                                instrumentation.runOnMainSync {
-                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true
-                                }
-                                ready
-                            }
-                            instrumentation.runOnMainSync {
-                                assertTrue(readOnlyPreview.binding.cbSourceReplacementPreview.isChecked)
-                                assertFalse(readOnlyPreview.binding.toolBar.menu.findItem(R.id.menu_save).isVisible)
-                            }
-                            onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
-                            await {
-                                var ready = false
-                                instrumentation.runOnMainSync {
-                                    editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
-                                        .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
-                                    val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
-                                    ready = editor != null && editor.text.toString() == derived && !editor.isEditable
-                                }
-                                ready
-                            }
-                            instrumentation.runOnMainSync { editorActivity!!.finish() }
-                            await {
-                                var ready = false
-                                instrumentation.runOnMainSync {
-                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true
-                                    if (ready) assertEquals(edited, readOnlyPreview.currentOriginalCode())
-                                }
-                                ready
-                            }
-                            instrumentation.runOnMainSync { readOnlyPreview.dismiss() }
                         }
                     }
                 } finally {
