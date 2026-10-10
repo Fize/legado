@@ -43,6 +43,9 @@ object WallpaperTheme {
 
     fun isAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
+    fun isFollowEnabled(context: Context): Boolean =
+        isAvailable() && context.getPrefBoolean(PreferKey.wallpaperColorFollow, true)
+
     /**
      * 开启或关闭跟随壁纸配色
      *
@@ -57,26 +60,27 @@ object WallpaperTheme {
     ): Boolean {
         if (!enabled) {
             unregisterListener(context)
-            if (restoreColors) {
-                //主动关闭跟随,恢复开启前备份的颜色
-                restoreBackedUpColors(context)
-            } else {
-                //手动改色导致退出跟随,以手动颜色为准,丢弃备份
-                discardBackedUpColors(context)
-            }
             context.defaultSharedPreferences.edit {
                 putBoolean(PreferKey.wallpaperColorFollow, false)
             }
+            if (restoreColors) {
+                restoreBackedUpColors(context)
+            } else {
+                discardBackedUpColors(context)
+            }
+            ThemeConfig.applyDayNight(context, recreateAllActivities = true)
             return true
         }
         if (!isAvailable()) return false
         val seed = readWallpaperSeed(context) ?: return false
-        if (autoUpdate && !registerListener(context)) return false
-        if (!autoUpdate) unregisterListener(context)
+        val listenerRegistered = if (autoUpdate) registerListener(context) else {
+            unregisterListener(context)
+            true
+        }
         backupColors(context)
         context.defaultSharedPreferences.edit {
             putBoolean(PreferKey.wallpaperColorFollow, true)
-            putBoolean(PreferKey.wallpaperColorAutoUpdate, autoUpdate)
+            putBoolean(PreferKey.wallpaperColorAutoUpdate, autoUpdate && listenerRegistered)
         }
         applyColors(context, colorsForSeed(seed), recreate = true)
         return true
@@ -84,7 +88,7 @@ object WallpaperTheme {
 
     @MainThread
     fun onColorPreferenceChanged(context: Context) {
-        if (applyingColors || !context.getPrefBoolean(PreferKey.wallpaperColorFollow)) return
+        if (applyingColors || !isFollowEnabled(context)) return
         setFollow(context, enabled = false, autoUpdate = false, restoreColors = false)
     }
 
@@ -92,9 +96,9 @@ object WallpaperTheme {
     fun syncWithPreferences(context: Context) {
         unregisterListener(context)
         if (!isAvailable()) return
-        if (!context.getPrefBoolean(PreferKey.wallpaperColorFollow)) return
-        if (!context.getPrefBoolean(PreferKey.wallpaperColorAutoUpdate, true)) return
+        if (!isFollowEnabled(context)) return
         applyCurrentColors(context, recreate = false)
+        if (!context.getPrefBoolean(PreferKey.wallpaperColorAutoUpdate, true)) return
         if (!registerListener(context)) {
             context.defaultSharedPreferences.edit {
                 putBoolean(PreferKey.wallpaperColorAutoUpdate, false)
@@ -105,18 +109,17 @@ object WallpaperTheme {
     @Suppress("RestrictedApi")
     internal fun colorsForSeed(seed: Int): IntArray {
         val dynamicColors = MaterialDynamicColors()
-        val source = Hct.fromInt(seed)
         val day = SchemeContent(Hct.fromInt(seed), false, 0.0)
         val night = SchemeContent(Hct.fromInt(seed), true, 0.0)
         return intArrayOf(
+            dynamicColors.surfaceContainer().getArgb(day),
             dynamicColors.primary().getArgb(day),
-            dynamicColors.secondary().getArgb(day),
             dynamicColors.background().getArgb(day),
-            dynamicColors.surfaceVariant().getArgb(day),
-            Hct.from(source.hue, source.chroma, 30.0).toInt(),
+            dynamicColors.surfaceContainer().getArgb(day),
+            dynamicColors.surfaceContainer().getArgb(night),
             dynamicColors.primary().getArgb(night),
             dynamicColors.background().getArgb(night),
-            dynamicColors.surfaceVariant().getArgb(night),
+            dynamicColors.surfaceContainer().getArgb(night),
         )
     }
 
@@ -133,7 +136,10 @@ object WallpaperTheme {
             .getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
             ?.primaryColor
             ?.toArgb()
-    }.getOrNull()
+            ?: context.getColor(android.R.color.system_accent1_600)
+    }.getOrElse {
+        runCatching { context.getColor(android.R.color.system_accent1_600) }.getOrNull()
+    }
 
     /** 首次开启跟随时备份当前颜色,已有备份不覆盖 */
     private fun backupColors(context: Context) {
@@ -211,7 +217,7 @@ object WallpaperTheme {
         val colorsChangedListener = WallpaperManager.OnColorsChangedListener { colors, which ->
             if (which and WallpaperManager.FLAG_SYSTEM == 0) return@OnColorsChangedListener
             val seed = colors?.primaryColor?.toArgb() ?: return@OnColorsChangedListener
-            if (!appContext.getPrefBoolean(PreferKey.wallpaperColorFollow)) {
+            if (!isFollowEnabled(appContext)) {
                 return@OnColorsChangedListener
             }
             if (!appContext.getPrefBoolean(PreferKey.wallpaperColorAutoUpdate, true)) {

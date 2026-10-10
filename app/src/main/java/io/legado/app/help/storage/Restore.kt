@@ -417,16 +417,6 @@ object Restore {
         }?.onFailure {
             AppLog.put("恢复直链上传出错\n${it.localizedMessage}", it)
         }
-        //恢复主题配置
-        File(path, ThemeConfig.configFileName).takeIf {
-            it.exists()
-        }?.runCatching {
-            FileUtils.delete(ThemeConfig.configFilePath)
-            copyTo(File(ThemeConfig.configFilePath))
-            ThemeConfig.upConfig()
-        }?.onFailure {
-            AppLog.put("恢复主题出错\n${it.localizedMessage}", it)
-        }
         File(path, BookCover.configFileName).takeIf {
             it.exists()
         }?.runCatching {

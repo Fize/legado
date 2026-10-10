@@ -11,7 +11,7 @@ class ThemeFontScalePickerTest {
     fun `font scale picker keeps the effective configured or system value`() {
         val source = readProjectFile("src/main/java/io/legado/app/ui/config/ThemeConfigFragment.kt")
             .substringAfter("PreferKey.fontScale -> NumberPickerDialog")
-            .substringBefore("PreferKey.bgImage ->")
+            .substringBefore("\"coverConfig\" ->")
 
         assertTrue(source.contains("AppContextWrapper.getFontScale(requireContext()) * 10"))
         assertTrue(source.contains(".roundToInt()"))

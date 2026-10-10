@@ -41,7 +41,7 @@ class SourceSharePassphraseImportPolicyTest {
         )
         val delayedRead = source.section(
             "private fun readSourceSharePassphrase(",
-            "private fun upBottomBarSkin()"
+            "private fun upHomePage()"
         )
 
         assertTrue(onPause.contains("pendingPassphraseRead = false"))

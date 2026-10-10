@@ -28,7 +28,7 @@ class WallpaperThemeTest {
         )
         val colors = WallpaperTheme.colorsForSeed(0xFF0066CC.toInt())
         assertEquals(8, colors.size)
-        assertTrue(Hct.fromInt(colors[0]).tone in 30.0..50.0)
+        assertTrue(Hct.fromInt(colors[0]).tone > 90.0)
         assertTrue(Hct.fromInt(colors[1]).tone in 30.0..50.0)
         assertTrue(Hct.fromInt(colors[2]).tone > 90.0)
         assertTrue(Hct.fromInt(colors[4]).tone < 40.0)

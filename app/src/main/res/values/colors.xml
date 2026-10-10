@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">@color/md_light_blue_600</color>
-    <color name="primaryDark">@color/md_light_blue_700</color>
-    <color name="accent">@color/md_pink_800</color>
+    <color name="primary">#F1F3F5</color>
+    <color name="primaryDark">#E5E8EC</color>
+    <color name="accent">#3B5BA9</color>
 
     <color name="disabled">@color/md_light_disabled</color>
 
-    <color name="divider">#66666666</color>
+    <color name="divider">#1F000000</color>
 
     <color name="lightBlue_color">#FF578FCC</color>
 
@@ -15,9 +15,9 @@
 
     <color name="night_mask">#00000000</color>
 
-    <color name="background">@color/md_grey_50</color>
-    <color name="background_card">@color/md_grey_100</color>
-    <color name="background_menu">@color/md_grey_200</color>
+    <color name="background">#F8F9FA</color>
+    <color name="background_card">#F1F3F5</color>
+    <color name="background_menu">#EBEEF2</color>
     <color name="background_prefs">#7fffffff</color>
 
     <color name="transparent">#00000000</color>

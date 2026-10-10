@@ -87,7 +87,6 @@ internal fun selectedBackupFileNames(isEnabled: (String) -> Boolean): List<Strin
                 listOf(
                     ReadBookConfig.configFileName,
                     ReadBookConfig.shareConfigFileName,
-                    ThemeConfig.configFileName,
                     "config.xml",
                     "videoConfig.xml",
                 )
@@ -303,10 +302,6 @@ object Backup {
         }
         GSON.toJson(shareReadConfigSnapshot).let {
             FileUtils.createFileIfNotExist(backupPath + File.separator + ReadBookConfig.shareConfigFileName)
-                .writeText(it)
-        }
-        GSON.toJson(ThemeConfig.configList).let {
-            FileUtils.createFileIfNotExist(backupPath + File.separator + ThemeConfig.configFileName)
                 .writeText(it)
         }
         DirectLinkUpload.getConfig()?.takeUnless { lanTransfer }?.let {

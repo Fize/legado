@@ -32,6 +32,7 @@ import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.BookCover
 import io.legado.app.model.CoverFontSizes
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.textHeight
 import io.legado.app.utils.toStringArray
 import android.view.ViewOutlineProvider
@@ -141,14 +142,33 @@ class CoverImageView @JvmOverloads constructor(
         }
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
-                outline.setRoundRect(0, 0, w, h, 12f)
+                outline.setRoundRect(0, 0, w, h, 8f.dpToPx())
             }
         }
         clipToOutline = true
     }
 
+    private val borderPaint by lazy {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 0.5f.dpToPx()
+            color = 0x18888888
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        val radius = 8f.dpToPx()
+        val halfStroke = borderPaint.strokeWidth / 2f
+        canvas.drawRoundRect(
+            halfStroke,
+            halfStroke,
+            width - halfStroke,
+            height - halfStroke,
+            radius,
+            radius,
+            borderPaint
+        )
         updateNormalizedText()
         val drawBookName = BookCover.drawBookName
         val drawBookAuthor = BookCover.drawBookAuthor

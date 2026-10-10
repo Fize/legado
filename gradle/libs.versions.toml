@@ -76,12 +76,20 @@ room = "2.8.4"
 recyclerview = "1.4.0"
 #noinspection GradleDependency
 viewpager2 = "1.1.0"
+composeBom = "2025.02.00"
 
 [libraries]
 
 activity-activity = { module = "androidx.activity:activity", version.ref = "activity" }
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
 activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "activity" }
+
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 
 androidx-annotation = { group = "androidx.annotation", name = "annotation", version = "1.10.0" }
 #androidx-annotation-experimental = { group = "androidx.annotation", name = "annotation-experimental", version = "1.3.1" }
@@ -214,6 +222,7 @@ android-test = { id = "com.android.test", version.ref = "agp" }
 #androidx-benchmark = { id = "androidx.benchmark", version = "1.3.3" }
 
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -126,7 +126,6 @@ class ImportBookSourceStateTest {
             "ImportDictRuleDialog.kt",
             "ImportHttpTtsDialog.kt",
             "ImportReplaceRuleDialog.kt",
-            "ImportThemeDialog.kt",
             "ImportTxtTocRuleDialog.kt",
         )
 

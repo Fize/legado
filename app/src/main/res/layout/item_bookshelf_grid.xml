@@ -16,10 +16,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
-        android:paddingLeft="4dp"
-        android:paddingRight="4dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:paddingLeft="6dp"
+        android:paddingRight="6dp"
         android:scrollbars="none"
         app:layout_constraintTop_toTopOf="parent">
 
@@ -73,6 +73,7 @@
                 app:layout_constraintBottom_toBottomOf="@+id/iv_cover"
                 app:layout_constraintEnd_toEndOf="@+id/iv_cover"
                 app:layout_constraintStart_toStartOf="@+id/iv_cover"
+                app:trackCornerRadius="2dp"
                 app:trackThickness="2dp"
                 tools:ignore="UnusedAttribute"
                 tools:progress="60"
@@ -86,13 +87,15 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
             android:gravity="top|center_horizontal"
             android:includeFontPadding="false"
+            android:lineSpacingExtra="2dp"
             android:lines="2"
             android:scrollbars="none"
             android:text="@string/book_name"
             android:textColor="@color/primaryText"
-            android:textSize="12sp"
+            android:textSize="13sp"
             tools:ignore="RtlHardcoded,RtlSymmetry" />
 
     </LinearLayout>

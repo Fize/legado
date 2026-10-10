@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">@color/md_blue_grey_600</color>
-    <color name="primaryDark">@color/md_blue_grey_700</color>
-    <color name="accent">@color/md_deep_orange_800</color>
+    <color name="primary">#1A1C20</color>
+    <color name="primaryDark">#121316</color>
+    <color name="accent">#8FB0FF</color>
 
     <color name="disabled">@color/md_dark_disabled</color>
 
-    <color name="background">@color/md_grey_900</color>
-    <color name="background_card">@color/md_grey_850</color>
-    <color name="background_menu">@color/md_grey_800</color>
+    <color name="background">#121316</color>
+    <color name="background_card">#1A1C20</color>
+    <color name="background_menu">#25282D</color>
     <color name="background_prefs">#10303030</color>
 
     <color name="night_mask">#69000000</color>

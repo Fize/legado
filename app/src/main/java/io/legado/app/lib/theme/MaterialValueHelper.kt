@@ -142,23 +142,12 @@ val Fragment.isDarkTheme: Boolean
     get() = requireContext().isDarkTheme
 
 val Context.elevation: Float
-    @SuppressLint("PrivateResource")
-    get() {
-        return if (AppConfig.elevation < 0) {
-            ThemeUtils.resolveFloat(
-                this,
-                android.R.attr.elevation,
-                resources.getDimension(com.google.android.material.R.dimen.design_appbar_elevation)
-            )
-        } else {
-            AppConfig.elevation.toFloat().dpToPx()
-        }
-    }
+    get() = 0f
 
 val Context.filletBackground: GradientDrawable
     get() {
         val background = GradientDrawable()
-        background.cornerRadius = 3f.dpToPx()
+        background.cornerRadius = 24f.dpToPx()
         background.setColor(backgroundColor)
         return background
     }

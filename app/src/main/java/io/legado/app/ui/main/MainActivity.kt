@@ -3,15 +3,17 @@
 package io.legado.app.ui.main
 
 import android.graphics.Rect
-import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.text.format.DateUtils
-import android.view.MenuItem
 import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.doOnLayout
-import androidx.core.view.get
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -19,7 +21,6 @@ import androidx.fragment.app.FragmentStatePagerAdapter
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -28,9 +29,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityMainBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppWebDav
-import io.legado.app.help.BottomBarSkinManager
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.SourceSharePassphraseImportPolicy
 import io.legado.app.help.book.BookHelp
@@ -55,14 +54,10 @@ import io.legado.app.ui.main.bookshelf.style1.BookshelfFragment1
 import io.legado.app.ui.main.bookshelf.style2.BookshelfFragment2
 import io.legado.app.ui.main.explore.ExploreFragment
 import io.legado.app.ui.main.my.MyFragment
-import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.ui.widget.text.BadgeView
 import io.legado.app.utils.clearClip
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getClipText
-import io.legado.app.utils.isCreated
 import io.legado.app.utils.imeHeight
-import io.legado.app.utils.navigationBarHeight
+import io.legado.app.utils.isCreated
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
@@ -71,10 +66,8 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import splitties.views.bottomPadding
-import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.hours
 
 /**
@@ -82,8 +75,6 @@ import kotlin.time.Duration.Companion.hours
  */
 @Suppress("PrivatePropertyName")
 class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
-    BottomNavigationView.OnNavigationItemSelectedListener,
-    BottomNavigationView.OnNavigationItemReselectedListener,
     MainViewModel.CallBack {
 
     override val binding by viewBinding(ActivityMainBinding::inflate)
@@ -101,15 +92,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private var bottomMenuCount = 3
     private val EXIT_INTERVAL = 2000L
     private val realPositions = arrayOf(idBookshelf, idExplore, idMy)
-    private val menuIdToSlot = linkedMapOf(
-        R.id.menu_bookshelf to "bookshelf",
-        R.id.menu_discovery to "home",
-        R.id.menu_my_config to "settings",
-    )
     private val adapter by lazy {
         TabFragmentPageAdapter(supportFragmentManager)
     }
-    private var onUpBooksBadgeView: BadgeView? = null
+    private var selectedTabIdState by mutableIntStateOf(idBookshelf)
+    private var showDiscoveryState by mutableStateOf(true)
+    private var upBooksCountState by mutableIntStateOf(0)
     private var lastPassphraseText: String? = null
     private var pendingPassphraseRead = false
     private var passphraseReadGeneration = 0
@@ -118,7 +106,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         upBottomMenu()
         initView()
         upHomePage()
-        upBottomBarSkin()
         onBackPressedDispatcher.addCallback(this) {
             if (pagePosition != 0) {
                 binding.viewPagerMain.currentItem = 0
@@ -195,24 +182,17 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    override fun onNavigationItemSelected(item: MenuItem): Boolean = binding.run {
-        when (item.itemId) {
-            R.id.menu_bookshelf ->
-                viewPagerMain.setCurrentItem(0, false)
-
-            R.id.menu_discovery ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
-
-
-            R.id.menu_my_config ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
+    private fun onTabSelected(tabId: Int) = binding.run {
+        when (tabId) {
+            idBookshelf -> viewPagerMain.setCurrentItem(0, false)
+            idExplore -> viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
+            idMy -> viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
         }
-        return false
     }
 
-    override fun onNavigationItemReselected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_bookshelf -> {
+    private fun onTabReselected(tabId: Int) {
+        when (tabId) {
+            idBookshelf -> {
                 if (System.currentTimeMillis() - bookshelfReselected > 300) {
                     bookshelfReselected = System.currentTimeMillis()
                 } else {
@@ -220,7 +200,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 }
             }
 
-            R.id.menu_discovery -> {
+            idExplore -> {
                 if (System.currentTimeMillis() - exploreReselected > 300) {
                     exploreReselected = System.currentTimeMillis()
                 } else {
@@ -245,15 +225,17 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         viewPagerMain.offscreenPageLimit = 3
         viewPagerMain.adapter = adapter
         viewPagerMain.addOnPageChangeListener(PageChangeCallback())
-        bottomNavigationView.setOnNavigationItemSelectedListener(this@MainActivity)
-        bottomNavigationView.setOnNavigationItemReselectedListener(this@MainActivity)
-        if (AppConfig.isEInkMode) {
-            bottomNavigationView.setBackgroundResource(R.drawable.bg_eink_border_top)
-        }
-        bottomNavigationView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val height = windowInsets.navigationBarHeight
-            view.bottomPadding = height
-            windowInsets.inset(0, 0, 0, height)
+        bottomNavigationView.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        bottomNavigationView.setContent {
+            MainNavigationBar(
+                selectedTabId = selectedTabIdState,
+                showDiscovery = showDiscoveryState,
+                upBooksCount = upBooksCountState,
+                onTabSelected = ::onTabSelected,
+                onTabReselected = ::onTabReselected,
+            )
         }
     }
 
@@ -353,30 +335,18 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     override fun observeLiveBus() {
         viewModel.onUpBooksLiveData.observe(this) {
-            if (onUpBooksBadgeView == null) {
-                onUpBooksBadgeView = binding.bottomNavigationView.addBadgeView(0)
-            }
-            onUpBooksBadgeView!!.setBadgeCount(it)
+            upBooksCountState = it
         }
         observeEvent<String>(EventBus.RECREATE) {
             recreate()
         }
         observeEvent<Boolean>(EventBus.NOTIFY_MAIN) {
             binding.apply {
-                if (it) {
-                    bottomNavigationView.menu.clear()
-                    bottomNavigationView.inflateMenu(R.menu.main_bnv)
-                    onUpBooksBadgeView = null
-                }
                 upBottomMenu()
-                upBottomBarSkin()
                 if (it) {
                     viewPagerMain.setCurrentItem(bottomMenuCount - 1, false)
                 }
             }
-        }
-        observeEvent<String>(EventBus.BOTTOM_BAR_SKIN) {
-            upBottomBarSkin()
         }
         observeEvent<String>(PreferKey.threadCount) {
             viewModel.upPool()
@@ -393,9 +363,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     private fun upBottomMenu() {
         val showDiscovery = AppConfig.showDiscovery
-        binding.bottomNavigationView.menu.let { menu ->
-            menu.findItem(R.id.menu_discovery).isVisible = showDiscovery
-        }
+        showDiscoveryState = showDiscovery
         var index = 0
         if (showDiscovery) {
             index++
@@ -405,6 +373,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         realPositions[index] = idMy
         bottomMenuCount = index + 1
         adapter.notifyDataSetChanged()
+        selectedTabIdState = realPositions[pagePosition.coerceIn(0, bottomMenuCount - 1)]
     }
 
     private fun scheduleSourceSharePassphraseRead(delayMillis: Long) {
@@ -486,20 +455,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    private fun upBottomBarSkin() {
-        val skin = BottomBarSkinManager.active
-        if (skin.isEmpty() || !BottomBarSkinManager.hasSkin(skin)) {
-            binding.bottomNavigationView.applySkin(null, 0)
-            return
-        }
-        val sizePx = 30.dpToPx()
-        val map = HashMap<Int, StateListDrawable>()
-        menuIdToSlot.forEach { (id, slot) ->
-            BottomBarSkinManager.getStateDrawable(skin, slot, sizePx)?.let { map[id] = it }
-        }
-        binding.bottomNavigationView.applySkin(map, sizePx)
-    }
-
     private fun upHomePage() {
         when (AppConfig.defaultHomePage) {
             "bookshelf" -> {}
@@ -522,7 +477,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
         override fun onPageSelected(position: Int) {
             pagePosition = position
-            binding.bottomNavigationView.menu[realPositions[position]].isChecked = true
+            selectedTabIdState = realPositions[position]
         }
 
     }

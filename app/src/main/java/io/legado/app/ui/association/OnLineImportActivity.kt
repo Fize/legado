@@ -37,9 +37,6 @@ class OnLineImportActivity :
                 "httpTts" -> showDialogFragment(
                     ImportHttpTtsDialog(it.second, true)
                 )
-                "theme" -> showDialogFragment(
-                    ImportThemeDialog(it.second, true)
-                )
                 "txtRule" -> showDialogFragment(
                     ImportTxtTocRuleDialog(it.second, true)
                 )
@@ -52,6 +49,7 @@ class OnLineImportActivity :
                     finish()
                 }
                 "readConfig" -> finallyDialog(getString(R.string.success), it.second)
+                else -> finish()
             }
         }
         viewModel.readConfigLive.observe(this) {
@@ -85,9 +83,6 @@ class OnLineImportActivity :
                 )
                 "/dictRule" -> showDialogFragment(
                     ImportDictRuleDialog(url, true)
-                )
-                "/theme" -> showDialogFragment(
-                    ImportThemeDialog(url, true)
                 )
                 "/auto" -> viewModel.determineType(url)
                 "/readConfig" -> viewModel.getReadConfig(url)
