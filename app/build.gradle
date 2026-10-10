@@ -13,26 +13,30 @@ plugins {
 apply from: 'download.gradle'
 apply from: 'cronet-loader.gradle'
 
-static def releaseTime() {
-    return new Date().format("yyMMddHH", TimeZone.getTimeZone("GMT+8"))
+def name = "legado"
+def version = providers.gradleProperty("versionName").orNull
+if (!version) {
+    try {
+        def latestTag = providers.exec {
+            commandLine 'git', 'describe', '--tags', '--match', 'v*', '--abbrev=0'
+            ignoreExitValue = true
+        }.standardOutput.asText.get().trim()
+        version = latestTag ? latestTag.replaceFirst('^v', '') : "1.0.0"
+    } catch (ignored) {
+        version = "1.0.0"
+    }
 }
 
-def name = "legado"
-def version = "3." + releaseTime()
 def versionCodeValue = 30000
-// Preserve the published code at this point, then ignore GitHub wrapper merge commits.
-def versionCodeBaseCommit = '9639f027fbc8cfdf57ce136a9e0c98829a235aef'
-def versionCodeAtBase = 37540
 try {
     def gitCount = providers.exec {
-        commandLine 'git', 'rev-list', "${versionCodeBaseCommit}..HEAD", '--count', '--no-merges'
+        commandLine 'git', 'rev-list', '--count', 'HEAD'
         ignoreExitValue = true
     }.standardOutput.asText.get().trim()
     if (gitCount) {
-        versionCodeValue = versionCodeAtBase + Integer.parseInt(gitCount)
+        versionCodeValue = 30000 + Integer.parseInt(gitCount)
     }
 } catch (ignored) {
-    // Keep source archives buildable when Git is unavailable.
 }
 
 android {

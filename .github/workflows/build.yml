@@ -1,0 +1,132 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (optional, e.g. 1.0.0)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve Version
+        id: set-ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            raw_ver="${INPUT_VERSION#v}"
+            tag_name="v${raw_ver}"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            raw_ver="${REF_NAME#v}"
+            tag_name="$REF_NAME"
+          else
+            latest_tag=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v1.0.0")
+            raw_ver="${latest_tag#v}"
+            tag_name="$latest_tag"
+          fi
+          echo "version=$raw_ver" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.3.0
+
+      - name: Prepare Assets
+        run: |
+          echo "" > "$GITHUB_WORKSPACE/app/src/main/assets/18PlusList.txt"
+
+      - name: Configure APK Signing
+        env:
+          RELEASE_KEY_STORE: ${{ secrets.RELEASE_KEY_STORE }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+        run: |
+          if [ -n "$RELEASE_KEY_STORE" ] && [ -n "$RELEASE_KEY_PASSWORD" ] && [ -n "$RELEASE_STORE_PASSWORD" ]; then
+            printf '%s' "$RELEASE_KEY_STORE" | base64 --decode > "$GITHUB_WORKSPACE/app/legado.jks"
+            {
+              echo ""
+              echo "RELEASE_STORE_FILE=./legado.jks"
+              echo "RELEASE_KEY_ALIAS=${RELEASE_KEY_ALIAS:-legado}"
+              printf 'RELEASE_STORE_PASSWORD=%s\n' "$RELEASE_STORE_PASSWORD"
+              printf 'RELEASE_KEY_PASSWORD=%s\n' "$RELEASE_KEY_PASSWORD"
+            } >> "$GITHUB_WORKSPACE/gradle.properties"
+          else
+            cp "$GITHUB_WORKSPACE/.github/workflows/legado.jks" "$GITHUB_WORKSPACE/app/legado.jks"
+            {
+              echo ""
+              echo "RELEASE_STORE_FILE=./legado.jks"
+              echo "RELEASE_KEY_ALIAS=legado"
+              echo "RELEASE_STORE_PASSWORD=gedoor_legado"
+              echo "RELEASE_KEY_PASSWORD=gedoor_legado"
+            } >> "$GITHUB_WORKSPACE/gradle.properties"
+          fi
+
+      - name: Build Split APKs
+        env:
+          VERSION: ${{ steps.set-ver.outputs.version }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleAppRelease -PversionName="$VERSION" --build-cache --parallel --daemon
+
+      - name: Collect Split APKs
+        env:
+          VERSION: ${{ steps.set-ver.outputs.version }}
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            src=$(find "$GITHUB_WORKSPACE/app/build/outputs/apk/app/release" -type f -name "*${abi}*.apk" | head -n 1)
+            if [ -z "$src" ]; then
+              echo "Missing APK for ABI: $abi" >&2
+              exit 1
+            fi
+            cp "$src" "$GITHUB_WORKSPACE/apk/legado_v${VERSION}_${abi}.apk"
+          done
+          ls -lh "$GITHUB_WORKSPACE/apk/"
+
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: legado-v${{ steps.set-ver.outputs.version }}
+          if-no-files-found: error
+          path: ${{ github.workspace }}/apk/*.apk
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.set-ver.outputs.tag }}
+          name: Release ${{ steps.set-ver.outputs.tag }}
+          artifacts: ${{ github.workspace }}/apk/*.apk
+          allowUpdates: true
+          removeArtifacts: true
+          replacesArtifacts: true
+          generateReleaseNotes: true
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
