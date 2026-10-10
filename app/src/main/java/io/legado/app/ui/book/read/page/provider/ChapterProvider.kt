@@ -751,12 +751,12 @@ object ChapterProvider {
             "0" -> doublePage = false
             "1" -> doublePage = true
             "2" -> {
-                doublePage = (viewWidth > viewHeight)
+                doublePage = (viewWidth > viewHeight && viewWidth >= 600.dpToPx())
                         && ReadBook.pageAnim() != 3
             }
 
             "3" -> {
-                doublePage = (viewWidth > viewHeight || appCtx.isPad)
+                doublePage = (viewWidth > viewHeight || appCtx.isPad || viewWidth >= 840.dpToPx())
                         && ReadBook.pageAnim() != 3
             }
         }
@@ -765,9 +765,19 @@ object ChapterProvider {
             return
         }
 
-        paddingLeft = ReadBookConfig.paddingLeft.dpToPx()
+        val basePaddingLeft = ReadBookConfig.paddingLeft.dpToPx()
+        val basePaddingRight = ReadBookConfig.paddingRight.dpToPx()
+        val (resolvedLeft, resolvedRight) = io.legado.app.utils.resolveAdaptiveReaderPadding(
+            viewWidth = viewWidth,
+            configuredLeft = basePaddingLeft,
+            configuredRight = basePaddingRight,
+            isDoublePage = doublePage,
+            maxSingleColumnWidth = 600.dpToPx(),
+            maxDoubleColumnWidth = 520.dpToPx(),
+        )
+        paddingLeft = resolvedLeft
         paddingTop = ReadBookConfig.paddingTop.dpToPx()
-        paddingRight = ReadBookConfig.paddingRight.dpToPx()
+        paddingRight = resolvedRight
         paddingBottom = ReadBookConfig.paddingBottom.dpToPx()
         visibleWidth = if (doublePage) {
             viewWidth / 2 - paddingLeft - paddingRight

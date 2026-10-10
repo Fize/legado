@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -12,39 +12,78 @@
         android:layout_height="wrap_content"
         app:attachToActivity="false"
         app:contentLayout="@layout/view_search"
-        app:layout_constraintTop_toTopOf="parent"
         app:title="@string/discovery" />
 
-    <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
-        android:id="@+id/rv_find"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
-        app:layout_constraintBottom_toBottomOf="parent"
-        tools:listitem="@layout/item_find_book" />
+        android:layout_weight="1"
+        android:orientation="horizontal">
 
-    <io.legado.app.ui.widget.recycler.scroller.FastScroller
-        android:id="@+id/fast_scroller"
-        android:layout_width="wrap_content"
-        android:layout_height="0dp"
-        android:layout_marginTop="@dimen/fastscroll_scrollbar_margin_top"
-        android:layout_marginBottom="@dimen/fastscroll_scrollbar_margin_bottom"
-        app:layout_constraintTop_toTopOf="@id/rv_find"
-        app:layout_constraintBottom_toBottomOf="@id/rv_find"
-        app:layout_constraintEnd_toEndOf="@id/rv_find" />
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/master_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/tv_empty_msg"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:gravity="center"
-        android:visibility="gone"
-        android:text="@string/explore_empty"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        tools:text="TextView" />
+            <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
+                android:id="@+id/rv_find"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                tools:listitem="@layout/item_find_book" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+            <io.legado.app.ui.widget.recycler.scroller.FastScroller
+                android:id="@+id/fast_scroller"
+                android:layout_width="wrap_content"
+                android:layout_height="0dp"
+                android:layout_marginTop="@dimen/fastscroll_scrollbar_margin_top"
+                android:layout_marginBottom="@dimen/fastscroll_scrollbar_margin_bottom"
+                app:layout_constraintBottom_toBottomOf="@id/rv_find"
+                app:layout_constraintEnd_toEndOf="@id/rv_find"
+                app:layout_constraintTop_toTopOf="@id/rv_find" />
+
+            <TextView
+                android:id="@+id/tv_empty_msg"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="16dp"
+                android:gravity="center"
+                android:text="@string/explore_empty"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="TextView" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <View
+            android:id="@+id/pane_divider"
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="@color/divider"
+            android:visibility="gone" />
+
+        <FrameLayout
+            android:id="@+id/detail_container"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tv_detail_empty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_margin="24dp"
+                android:gravity="center"
+                android:text="点击左侧书源分类标签查看书籍列表"
+                android:textColor="@color/secondaryText"
+                android:textSize="15sp" />
+
+        </FrameLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

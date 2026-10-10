@@ -84,15 +84,19 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
     }
 
     fun initData(intent: Intent, savedState: Bundle? = null) {
+        initData(intent.extras, savedState)
+    }
+
+    fun initData(arguments: Bundle?, savedState: Bundle? = null) {
         if (initialized) return
         initialized = true
         categoryData.value = ExploreCategory(
-            savedState?.getString("exploreName") ?: intent.getStringExtra("exploreName").orEmpty(),
-            savedState?.getString("exploreUrl") ?: intent.getStringExtra("exploreUrl").orEmpty(),
+            savedState?.getString("exploreName") ?: arguments?.getString("exploreName").orEmpty(),
+            savedState?.getString("exploreUrl") ?: arguments?.getString("exploreUrl").orEmpty(),
         )
         skipPage((savedState?.getInt("explorePage", 1) ?: 1).coerceAtLeast(1))
         execute {
-            intent.getStringExtra("sourceUrl")?.let { appDb.bookSourceDao.getBookSource(it) }
+            arguments?.getString("sourceUrl")?.let { appDb.bookSourceDao.getBookSource(it) }
                 ?: error(context.getString(R.string.error_no_source))
         }.onSuccess {
             bookSource = it

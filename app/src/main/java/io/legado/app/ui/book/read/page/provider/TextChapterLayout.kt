@@ -635,28 +635,25 @@ class TextChapterLayout(
     ) {
         if (size.width > 0 && size.height > 0) {
             prepareNextPageIfNeed(durY)
-            var height = size.height
-            var width = size.width
-            when (imageStyle?.uppercase()) {
+            val isScrollPage = pageAnim == PageAnim.scrollPageAnim
+            val styleUpper = imageStyle?.uppercase()
+            val (resolvedW, resolvedH) = io.legado.app.utils.resolveIllustrationSize(
+                origWidth = size.width,
+                origHeight = size.height,
+                visibleWidth = visibleWidth,
+                visibleHeight = visibleHeight,
+                isFullStyle = styleUpper == Book.imgStyleFull || styleUpper == Book.imgStyleSingle,
+            )
+            val width = resolvedW
+            val height = resolvedH
+            when (styleUpper) {
                 Book.imgStyleFull -> {
-                    width = visibleWidth
-                    height = size.height * visibleWidth / size.width
-                    if (pageAnim != PageAnim.scrollPageAnim && height > visibleHeight - durY) {
-                        if (height > visibleHeight) {
-                            width = width * visibleHeight / height
-                            height = visibleHeight
-                        }
+                    if (!isScrollPage) {
                         prepareNextPageIfNeed(durY + height)
                     }
                 }
 
                 Book.imgStyleSingle -> {
-                    width = visibleWidth
-                    height = size.height * visibleWidth / size.width
-                    if (height > visibleHeight) {
-                        width = width * visibleHeight / height
-                        height = visibleHeight
-                    }
                     if (durY > 0f) {
                         prepareNextPageIfNeed()
                     }
@@ -669,14 +666,6 @@ class TextChapterLayout(
                 }
 
                 else -> {
-                    if (size.width > visibleWidth) {
-                        height = size.height * visibleWidth / size.width
-                        width = visibleWidth
-                    }
-                    if (height > visibleHeight) {
-                        width = width * visibleHeight / height
-                        height = visibleHeight
-                    }
                     prepareNextPageIfNeed(durY + height)
                 }
             }

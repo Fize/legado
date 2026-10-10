@@ -169,12 +169,31 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         }
     }
 
+    private val spineDividerPaint by lazy {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.dpToPx().toFloat()
+        }
+    }
+
     /**
      * 绘制页面
      */
     private fun drawPage(canvas: Canvas) {
         var relativeOffset = relativeOffset(0)
         textPage.draw(this, canvas, relativeOffset)
+        if (textPage.doublePage && !callBack.isScroll) {
+            val spineX = width / 2f
+            spineDividerPaint.color = ChapterProvider.contentPaint.color
+            spineDividerPaint.alpha = if (AppConfig.isEInkMode) 180 else 36
+            canvas.drawLine(
+                spineX,
+                ChapterProvider.paddingTop.toFloat(),
+                spineX,
+                ChapterProvider.visibleBottom.toFloat(),
+                spineDividerPaint
+            )
+        }
         if (!callBack.isScroll) return
         //滚动翻页
         if (!pageFactory.hasNext()) return

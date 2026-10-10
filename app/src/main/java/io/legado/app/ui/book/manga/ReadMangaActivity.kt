@@ -69,6 +69,7 @@ import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.StartActivityContract
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fastBinarySearch
 import io.legado.app.utils.findCenterViewPosition
 import io.legado.app.utils.fromJsonObject
@@ -759,10 +760,26 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         if (mRecyclerViewPreloader != null) {
             binding.recyclerView.removeOnScrollListener(mRecyclerViewPreloader!!)
         }
+        val dm = resources.displayMetrics
+        val columnWidth = io.legado.app.utils.resolveMangaColumnWidth(
+            containerWidthPx = dm.widthPixels,
+            containerHeightPx = dm.heightPixels,
+            isHorizontalScroll = AppConfig.enableMangaHorizontalScroll,
+            maxVerticalColumnWidthPx = 680.dpToPx(),
+        )
+        val preloadWidth = if (columnWidth > 0) columnWidth else dm.widthPixels
+        val sizeProvider = FixedPreloadSizeProvider<Any>(preloadWidth, SIZE_ORIGINAL)
         mRecyclerViewPreloader = RecyclerViewPreloader(
-            Glide.with(this), mAdapter, mSizeProvider, maxPreload
+            Glide.with(this), mAdapter, sizeProvider, maxPreload
         )
         binding.recyclerView.addOnScrollListener(mRecyclerViewPreloader!!)
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        setRecyclerViewPreloader(AppConfig.mangaPreDownloadNum)
+        mAdapter.notifyDataSetChanged()
     }
 
     private fun setHorizontalScroll(enable: Boolean) {
@@ -773,6 +790,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         recycler.stopScroll()
         mPagerSnapHelper.attachToRecyclerView(null)
         mAdapter.isHorizontal = enable
+        setRecyclerViewPreloader(AppConfig.mangaPreDownloadNum)
         // Keep adapter positions in reading order. Only their horizontal placement is reversed.
         recycler.layoutDirection = View.LAYOUT_DIRECTION_LTR
         mLayoutManager.orientation = if (enable) LinearLayoutManager.HORIZONTAL else LinearLayoutManager.VERTICAL

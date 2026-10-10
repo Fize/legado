@@ -1,6 +1,7 @@
 package io.legado.app.ui.main.bookshelf.style1.books
 
 import android.annotation.SuppressLint
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
@@ -31,6 +32,7 @@ import io.legado.app.ui.main.MainViewModel
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChangeFirst
 import io.legado.app.utils.observeEvent
+import io.legado.app.utils.resolveBookshelfSpanCount
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
@@ -65,6 +67,11 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
     private val binding by viewBinding(FragmentBooksBinding::bind)
     private val activityViewModel by activityViewModels<MainViewModel>()
     private val bookshelfLayout by lazy { AppConfig.bookshelfLayout }
+    private val currentSpanCount: Int
+        get() = resolveBookshelfSpanCount(
+            configuredLayout = bookshelfLayout,
+            screenWidthDp = resources.configuration.screenWidthDp
+        )
     private val booksAdapter: BaseBooksAdapter<*> by lazy {
         when (bookshelfLayout) {
             0 -> {
@@ -114,40 +121,15 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
             activityViewModel.upToc(booksAdapter.getItems(), onlyUpdateRead)
         }
         if (bookshelfLayout >= 2) {
-            binding.rvBookshelf.layoutManager = GridLayoutManager(context, bookshelfLayout)
             binding.rvBookshelf.setRecycledViewPool(activityViewModel.booksGridRecycledViewPool)
         } else {
-            binding.rvBookshelf.layoutManager = LinearLayoutManager(context)
             binding.rvBookshelf.setRecycledViewPool(activityViewModel.booksListRecycledViewPool)
         }
+        upLayoutManager()
         booksAdapter.stateRestorationPolicy = StateRestorationPolicy.PREVENT_WHEN_EMPTY
         binding.rvBookshelf.itemAnimator = null
         binding.rvBookshelf.adapter = booksAdapter
-        /**
-         * 应该是当初没有使用override val keepScrollPosition = true 加的代码
-         * 最近阅读插入顶部时会造成滚动
-         * 但是采用keepScrollPosition = true复原滚动后,代码就多余了
-         * 采用下面代码反而会向上多滚动一个行
-         * 再加上2025/12/19代码,因为下面的代码会出现很奇怪的自动滚动到顶部现象,没理出原因,注释掉下面代码
-         * **/
-//        booksAdapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
-//            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-//                val layoutManager = binding.rvBookshelf.layoutManager
-//                if (positionStart == 0 && itemCount == 1 && layoutManager is LinearLayoutManager) {
-//                    val scrollTo = layoutManager.findFirstVisibleItemPosition() - itemCount
-//                    binding.rvBookshelf.scrollToPosition(max(0, scrollTo))
-//                }
-//            }
-//
-//            override fun onItemRangeMoved(fromPosition: Int, toPosition: Int, itemCount: Int) {
-//                val layoutManager = binding.rvBookshelf.layoutManager
-//                if (toPosition == 0 && itemCount == 1 && layoutManager is LinearLayoutManager) {
-//                    val scrollTo = layoutManager.findFirstVisibleItemPosition() - itemCount
-//                    binding.rvBookshelf.scrollToPosition(max(0, scrollTo))
-//                }
-//            }
-//        })
-        binding.rvBookshelf.addItemDecoration( object : RecyclerView.ItemDecoration() {
+        binding.rvBookshelf.addItemDecoration(object : RecyclerView.ItemDecoration() {
             override fun getItemOffsets(
                 outRect: Rect,
                 view: View,
@@ -155,18 +137,19 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
                 state: RecyclerView.State
             ) {
                 val position = parent.getChildAdapterPosition(view)
-                if (bookshelfLayout >= 2) {
-                    val spanCount = bookshelfLayout
+                val spanCount = currentSpanCount
+                val hMargin = if (bookshelfLayout >= 2) bookshelfMargin else 0
+                if (spanCount >= 2) {
                     val rowIndex = position / spanCount
                     when (rowIndex) {
                         0 -> { //第一行加额外上边距
-                            outRect.set(bookshelfMargin, bookshelfMargin + 24, bookshelfMargin, bookshelfMargin)
+                            outRect.set(hMargin, bookshelfMargin + 24, hMargin, bookshelfMargin)
                         }
                         totalRows - 1 -> { //最后一行加额外下边距
-                            outRect.set(bookshelfMargin, bookshelfMargin, bookshelfMargin, bookshelfMargin + 24)
+                            outRect.set(hMargin, bookshelfMargin, hMargin, bookshelfMargin + 24)
                         }
                         else -> {
-                            outRect.set(bookshelfMargin, bookshelfMargin, bookshelfMargin, bookshelfMargin)
+                            outRect.set(hMargin, bookshelfMargin, hMargin, bookshelfMargin)
                         }
                     }
                 } else {
@@ -185,6 +168,33 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
             }
         })
         startLastUpdateTimeJob()
+    }
+
+    private fun upLayoutManager() {
+        val spanCount = currentSpanCount
+        if (spanCount >= 2) {
+            totalRows = if (itemCount % spanCount == 0) itemCount / spanCount else itemCount / spanCount + 1
+            val currentLm = binding.rvBookshelf.layoutManager
+            if (currentLm is GridLayoutManager) {
+                currentLm.spanCount = spanCount
+            } else {
+                binding.rvBookshelf.layoutManager = GridLayoutManager(context, spanCount)
+            }
+        } else {
+            if (binding.rvBookshelf.layoutManager !is LinearLayoutManager ||
+                binding.rvBookshelf.layoutManager is GridLayoutManager
+            ) {
+                binding.rvBookshelf.layoutManager = LinearLayoutManager(context)
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (view != null) {
+            upLayoutManager()
+            binding.rvBookshelf.invalidateItemDecorations()
+        }
     }
 
     private fun upFastScrollerBar() {
@@ -246,7 +256,7 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
                 AppLog.put("书架更新出错", it)
             }.conflate().flowOn(Dispatchers.Default).collect { list ->
                 itemCount = list.size
-                val spanCount = bookshelfLayout
+                val spanCount = currentSpanCount
                 if (spanCount >= 2) {
                     totalRows = if (itemCount % spanCount == 0) itemCount / spanCount else itemCount / spanCount + 1
                 }

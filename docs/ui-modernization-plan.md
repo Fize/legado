@@ -108,8 +108,10 @@ flowchart TD
 3. **关键页面双栏主从布局（List-Detail Two-Pane）**：
    - **「我的 / 设置」与「发现」页面**：平板端采用左栏导航列表 + 右栏详情内容区的双栏并行结构，告别大屏单列长条拉伸。
    - **弹窗与底部面板宽度约束**：在大屏设备上限制对话框与底部面板最大宽度（`maxWidth = 560dp`），避免横向铺满全屏。
-4. **大屏阅读器体验优化**：
-   - 优化平板横屏下的正文最大行宽/页边距，支持大屏双页并排阅读模式（Two-Page Spread）。
+4. **大屏文字、轻小说插图与漫画阅读器排版深度优化**：
+   - **小说双页与单页舒适行宽**：优化平板横屏下的双页并排阅读模式（Two-Page Spread + 1dp 仿真书脊中缝线），并在平板竖屏单页模式下自动约束正文最大行宽（`<= 600dp`）。
+   - **轻小说内嵌插图排版修复**：修复 [TextChapterLayout.kt](file:///Users/xiaobaitu/github.com/legado/app/src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt) 中大图换页判断顺序导致的空白页问题，并支持高分屏平板下插画按版心比例自适应缩放。
+   - **漫画阅读器（条漫与页漫）大屏适配**：在 [MangaVH.kt](file:///Users/xiaobaitu/github.com/legado/app/src/main/java/io/legado/app/ui/book/manga/recyclerview/MangaVH.kt) 与 [ReadMangaActivity.kt](file:///Users/xiaobaitu/github.com/legado/app/src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt) 中，为竖向条漫模式引入大屏最大画幅宽度约束（`<= 680dp` 水平居中，防止平板横竖屏下分镜被强行撑满全屏导致过度放大与模糊），并优化横向页漫模式对单页与跨页大图的自适应居中展示。
 
 ---
 
@@ -124,4 +126,16 @@ flowchart TD
      - 底部导航栏具备 M3 胶囊指示器与清晰图标文字标签，支持角标与双击回到顶部。
      - 书架 3 列圆角封面、列表布局 `16dp` 圆角「继续阅读」横幅卡片、`24dp` 圆角弹窗及精简后的主题设置页交互正常。
      - 在线导入书源、搜索书籍、发现页分类浏览、加入书架与阅读器翻页、本地备份与清空恢复全链路验证通过，Logcat 零崩溃。
+- **第二阶段验收标准（已完成 ✅）**：
+  1. [x] [`WindowSizeHelperTest.kt`](file:///Users/xiaobaitu/github.com/legado/app/src/test/java/io/legado/app/utils/WindowSizeHelperTest.kt) 新增断点判定、书架自适应列数、弹窗最大宽度约束、阅读器单/双栏版心边距、轻小说插图缩放防空白页及漫画条漫限宽居中全部单元测试通过。
+  2. [x] `./gradlew testAppDebugUnitTest assembleAppDebug` 构建通过并安装至模拟器实测。
+  3. [x] 平板端（竖屏 `800dp x 1280dp` & 横屏 `1280dp x 800dp`）端到端实测验证：
+     - 主界面自动切换为左侧垂直 `MainNavigationRail`，支持手机/平板与横竖屏无缝切换。
+     - 书架列表模式在大屏下自动升级为 2 列双栏卡片；默认 3 列网格在平板竖屏扩展为 5 列、平板横屏扩展为 6 列。
+     - 「发现」页采用左栏分类（`340dp`）+ 右栏书籍列表（`ExploreShowFragment`）双栏主从结构，点击分类直接在右侧加载。
+     - 「我的」页采用左栏主菜单（`360dp`）+ 右栏子设置面板（`OtherConfigFragment` / `BackupConfigFragment` / `ThemeConfigFragment`）双栏主从结构。
+     - 大屏弹窗最大宽度自动约束在 `560dp` / `640dp` 居中展示。
+     - 小说阅读器平板横屏自动开启双页并排模式（含 `1dp` 仿真书脊中缝线与单栏舒适行宽 `<= 520dp`），内嵌插图按版心比例自适应缩放且无空白页。
+     - 漫画阅读器（`ReadMangaActivity`）竖向条漫在大屏下自动限宽 `680dp` 水平居中，两侧深色留白，画面清晰完整。
+
 

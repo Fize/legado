@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.doOnLayout
+import androidx.core.view.isVisible
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -58,6 +59,7 @@ import io.legado.app.utils.clearClip
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.isCreated
+import io.legado.app.utils.isExpandedScreen
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
@@ -237,6 +239,30 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 onTabReselected = ::onTabReselected,
             )
         }
+        navigationRailView.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        navigationRailView.setContent {
+            MainNavigationRail(
+                selectedTabId = selectedTabIdState,
+                showDiscovery = showDiscoveryState,
+                upBooksCount = upBooksCountState,
+                onTabSelected = ::onTabSelected,
+                onTabReselected = ::onTabReselected,
+            )
+        }
+        upNavigationMode()
+    }
+
+    private fun upNavigationMode() = binding.run {
+        val expanded = isExpandedScreen
+        navigationRailView.isVisible = expanded
+        bottomNavigationView.isVisible = !expanded
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        upNavigationMode()
     }
 
     /**

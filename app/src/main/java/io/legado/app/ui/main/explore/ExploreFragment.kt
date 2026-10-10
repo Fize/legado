@@ -1,13 +1,16 @@
 package io.legado.app.ui.main.explore
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.SubMenu
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.isGone
+import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -25,12 +28,15 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.book.explore.ExploreShowActivity
+import io.legado.app.ui.book.explore.ExploreShowFragment
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
+import io.legado.app.utils.isExpandedScreen
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.transaction
@@ -103,8 +109,29 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         setSupportToolbar(binding.titleBar.toolbar)
         initSearchView()
         initRecyclerView()
+        upTwoPaneLayout()
         initGroupData()
         upExploreData()
+    }
+
+    private fun upTwoPaneLayout() {
+        val expanded = requireContext().isExpandedScreen
+        binding.masterContainer.layoutParams = binding.masterContainer.layoutParams.apply {
+            width = if (expanded) 340.dpToPx() else ViewGroup.LayoutParams.MATCH_PARENT
+        }
+        binding.paneDivider.isVisible = expanded
+        binding.detailContainer.isVisible = expanded
+        if (expanded) {
+            val hasDetail = childFragmentManager.findFragmentById(R.id.detail_container) != null
+            binding.tvDetailEmpty.isGone = hasDetail
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (view != null) {
+            upTwoPaneLayout()
+        }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu) {
@@ -294,10 +321,18 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     override fun openExplore(sourceUrl: String, title: String, exploreUrl: String?) {
         if (exploreUrl.isNullOrBlank()) return
-        startActivity<ExploreShowActivity> {
-            putExtra("exploreName", title)
-            putExtra("sourceUrl", sourceUrl)
-            putExtra("exploreUrl", exploreUrl)
+        if (requireContext().isExpandedScreen) {
+            binding.tvDetailEmpty.isGone = true
+            val detailFragment = ExploreShowFragment.newInstance(sourceUrl, title, exploreUrl)
+            childFragmentManager.beginTransaction()
+                .replace(R.id.detail_container, detailFragment, "exploreDetail:${sourceUrl}:${exploreUrl}")
+                .commitAllowingStateLoss()
+        } else {
+            startActivity<ExploreShowActivity> {
+                putExtra("exploreName", title)
+                putExtra("sourceUrl", sourceUrl)
+                putExtra("exploreUrl", exploreUrl)
+            }
         }
     }
 

@@ -26,6 +26,7 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.glide.progress.ProgressManager
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadManga
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.printOnDebug
 
 internal fun mangaImagePath(imageUrl: String): String {
@@ -106,24 +107,27 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
                     isFirstResource: Boolean,
                 ): Boolean {
                     mFlProgress.isGone = true
+                    val dm = context.resources.displayMetrics
+                    val columnWidth = io.legado.app.utils.resolveMangaColumnWidth(
+                        containerWidthPx = dm.widthPixels,
+                        containerHeightPx = dm.heightPixels,
+                        isHorizontalScroll = isHorizontal,
+                        maxVerticalColumnWidthPx = 680.dpToPx(),
+                    )
                     if (!isHorizontal) {
                         itemView.updateLayoutParams<ViewGroup.LayoutParams> {
                             height = ViewGroup.LayoutParams.WRAP_CONTENT
                         }
                         mImage.updateLayoutParams<FrameLayout.LayoutParams> {
-                            gravity = Gravity.NO_GRAVITY
-                        }
-                        if (isLastImage) {
-                            mImage.updateLayoutParams<FrameLayout.LayoutParams> {
-                                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                            width = columnWidth
+                            height = if (isLastImage) {
+                                ViewGroup.LayoutParams.WRAP_CONTENT
+                            } else {
+                                ViewGroup.LayoutParams.MATCH_PARENT
                             }
-                            itemView.minimumHeight = minHeight
-                        } else {
-                            mImage.updateLayoutParams<FrameLayout.LayoutParams> {
-                                height = ViewGroup.LayoutParams.MATCH_PARENT
-                            }
-                            itemView.minimumHeight = 0
+                            gravity = Gravity.CENTER_HORIZONTAL
                         }
+                        itemView.minimumHeight = if (isLastImage) minHeight else 0
                         mImage.scaleType = ImageView.ScaleType.FIT_XY
                     } else {
                         itemView.updateLayoutParams<ViewGroup.LayoutParams> {
@@ -131,6 +135,7 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
                         }
                         itemView.minimumHeight = 0
                         mImage.updateLayoutParams<FrameLayout.LayoutParams> {
+                            width = ViewGroup.LayoutParams.MATCH_PARENT
                             height = ViewGroup.LayoutParams.MATCH_PARENT
                             gravity = Gravity.CENTER
                         }

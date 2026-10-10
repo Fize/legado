@@ -38,6 +38,22 @@ fun AlertDialog.applyTint(): AlertDialog {
         listView?.forEach {
             it.applyTint(context.accentColor)
         }
+        val screenWidthDp = context.resources.configuration.screenWidthDp
+        if (screenWidthDp >= 600) {
+            val dm = context.windowManager.windowSize
+            val maxDialogWidthPx = 560.dpToPx()
+            val targetWidth = resolveDialogWidth(
+                windowWidthPx = dm.widthPixels,
+                widthMix = 0.85f,
+                screenWidthDp = screenWidthDp,
+                maxWidthPx = maxDialogWidthPx
+            )
+            window?.let { win ->
+                if (win.decorView.width > maxDialogWidthPx) {
+                    win.setLayout(targetWidth, WindowManager.LayoutParams.WRAP_CONTENT)
+                }
+            }
+        }
     }
     return this
 }
@@ -52,8 +68,10 @@ fun DialogFragment.setLayout(widthMix: Float, heightMix: Float) {
 
 fun Dialog.setLayout(widthMix: Float, heightMix: Float) {
     val dm = context.windowManager.windowSize
+    val screenWidthDp = context.resources.configuration.screenWidthDp
+    val maxWidthPx = if (widthMix >= 0.95f) 640.dpToPx() else 560.dpToPx()
     window?.setLayout(
-        (dm.widthPixels * widthMix).toInt(),
+        resolveDialogWidth(dm.widthPixels, widthMix, screenWidthDp, maxWidthPx),
         (dm.heightPixels * heightMix).toInt()
     )
 }
@@ -76,8 +94,10 @@ fun DialogFragment.setLayout(widthMix: Float, height: Int) {
 
 fun Dialog.setLayout(widthMix: Float, height: Int) {
     val dm = context.windowManager.windowSize
+    val screenWidthDp = context.resources.configuration.screenWidthDp
+    val maxWidthPx = if (widthMix >= 0.95f) 640.dpToPx() else 560.dpToPx()
     window?.setLayout(
-        (dm.widthPixels * widthMix).toInt(),
+        resolveDialogWidth(dm.widthPixels, widthMix, screenWidthDp, maxWidthPx),
         height
     )
 }

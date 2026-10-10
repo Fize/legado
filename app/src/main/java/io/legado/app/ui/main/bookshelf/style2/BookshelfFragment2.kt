@@ -1,6 +1,7 @@
 package io.legado.app.ui.main.bookshelf.style2
 
 import android.annotation.SuppressLint
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
@@ -32,6 +33,7 @@ import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChangeFirst
 import io.legado.app.utils.getCompatDrawable
 import io.legado.app.utils.observeEvent
+import io.legado.app.utils.resolveBookshelfSpanCount
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.showDialogFragment
@@ -65,6 +67,11 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
 
     private val binding by viewBinding(FragmentBookshelf2Binding::bind)
     private val bookshelfLayout by lazy { AppConfig.bookshelfLayout }
+    private val currentSpanCount: Int
+        get() = resolveBookshelfSpanCount(
+            configuredLayout = bookshelfLayout,
+            screenWidthDp = resources.configuration.screenWidthDp
+        )
     private val booksAdapter: BaseBooksAdapter<*> by lazy {
         if (bookshelfLayout >= 2) {
             BooksAdapterGrid(requireContext(), this)
@@ -106,18 +113,14 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             binding.refreshLayout.isRefreshing = false
             activityViewModel.upToc(books, onlyUpdateRead)
         }
-        if (bookshelfLayout >= 2) {
-            binding.rvBookshelf.layoutManager = GridLayoutManager(context, bookshelfLayout)
-        } else {
-            binding.rvBookshelf.layoutManager = LinearLayoutManager(context)
-        }
+        upLayoutManager()
         binding.rvBookshelf.adapter = booksAdapter
         /**
          * 采用 layoutManager?.onRestoreInstanceState(layoutState)
          * 恢复滚动位置
          * **/
-        binding.rvBookshelf.itemAnimator =  null
-        binding.rvBookshelf.addItemDecoration( object : RecyclerView.ItemDecoration() {
+        binding.rvBookshelf.itemAnimator = null
+        binding.rvBookshelf.addItemDecoration(object : RecyclerView.ItemDecoration() {
             override fun getItemOffsets(
                 outRect: Rect,
                 view: View,
@@ -125,18 +128,19 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
                 state: RecyclerView.State
             ) {
                 val position = parent.getChildAdapterPosition(view)
-                if (bookshelfLayout >= 2) {
-                    val spanCount = bookshelfLayout
+                val spanCount = currentSpanCount
+                val hMargin = if (bookshelfLayout >= 2) bookshelfMargin else 0
+                if (spanCount >= 2) {
                     val rowIndex = position / spanCount
                     when (rowIndex) {
                         0 -> { //第一行加额外上边距
-                            outRect.set(bookshelfMargin, bookshelfMargin + 24, bookshelfMargin, bookshelfMargin)
+                            outRect.set(hMargin, bookshelfMargin + 24, hMargin, bookshelfMargin)
                         }
                         totalRows - 1 -> { //最后一行加额外下边距
-                            outRect.set(bookshelfMargin, bookshelfMargin, bookshelfMargin, bookshelfMargin + 24)
+                            outRect.set(hMargin, bookshelfMargin, hMargin, bookshelfMargin + 24)
                         }
                         else -> {
-                            outRect.set(bookshelfMargin, bookshelfMargin, bookshelfMargin, bookshelfMargin)
+                            outRect.set(hMargin, bookshelfMargin, hMargin, bookshelfMargin)
                         }
                     }
                 } else {
@@ -154,6 +158,33 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
                 }
             }
         })
+    }
+
+    private fun upLayoutManager() {
+        val spanCount = currentSpanCount
+        if (spanCount >= 2) {
+            totalRows = if (itemCount % spanCount == 0) itemCount / spanCount else itemCount / spanCount + 1
+            val currentLm = binding.rvBookshelf.layoutManager
+            if (currentLm is GridLayoutManager) {
+                currentLm.spanCount = spanCount
+            } else {
+                binding.rvBookshelf.layoutManager = GridLayoutManager(context, spanCount)
+            }
+        } else {
+            if (binding.rvBookshelf.layoutManager !is LinearLayoutManager ||
+                binding.rvBookshelf.layoutManager is GridLayoutManager
+            ) {
+                binding.rvBookshelf.layoutManager = LinearLayoutManager(context)
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (view != null) {
+            upLayoutManager()
+            binding.rvBookshelf.invalidateItemDecorations()
+        }
     }
 
     private fun upFastScrollerBar() {
@@ -235,7 +266,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
                 }
                 booksAdapter.updateItems(currentGroupId)
                 itemCount = getItemCount()
-                val spanCount = bookshelfLayout
+                val spanCount = currentSpanCount
                 if (spanCount >= 2) {
                     totalRows = if (itemCount % spanCount == 0) itemCount / spanCount else itemCount / spanCount + 1
                 }

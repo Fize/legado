@@ -789,7 +789,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     val doublePageHorizontal: String?
-        get() = appCtx.getPrefString(PreferKey.doublePageHorizontal)
+        get() = appCtx.getPrefString(PreferKey.doublePageHorizontal, "2")
 
     val progressBarBehavior: String?
         get() = appCtx.getPrefString(PreferKey.progressBarBehavior, "page")
