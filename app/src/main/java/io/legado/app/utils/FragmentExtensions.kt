@@ -108,12 +108,5 @@ fun Fragment.startActivityForBook(
     startActivity(intent)
 }
 
-fun Fragment.showHelp(fileName: String) {
-    val mdText = String(requireContext().assets.open("web/help/md/${fileName}.md").readBytes())
-    showDialogFragment(
-        TextDialog(getString(R.string.help), mdText, TextDialog.Mode.MD, showToc = true)
-    )
-}
-
 val Fragment.isCreated
     get() = lifecycle.currentState.isAtLeast(Lifecycle.State.CREATED)

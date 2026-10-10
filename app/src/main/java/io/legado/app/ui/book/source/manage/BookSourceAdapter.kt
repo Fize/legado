@@ -196,7 +196,6 @@ class BookSourceAdapter(
             item(context.getString(R.string.to_bottom), "bottom", defaultOrder)
             item(context.getString(R.string.login), "login", source.hasLoginUrl)
             item(context.getString(R.string.search), "search")
-            item(context.getString(R.string.debug), "debug")
             item(context.getString(R.string.delete), "delete")
             item(
                 context.getString(
@@ -216,7 +215,6 @@ class BookSourceAdapter(
                 }
 
                 "search" -> callBack.searchBook(source)
-                "debug" -> callBack.debug(source)
                 "delete" -> {
                     callBack.del(source)
                     selected.remove(source)
@@ -429,7 +427,6 @@ class BookSourceAdapter(
         fun toTop(bookSource: BookSourcePart)
         fun toBottom(bookSource: BookSourcePart)
         fun searchBook(bookSource: BookSourcePart)
-        fun debug(bookSource: BookSourcePart)
         fun move(sourceUrl: String, targetUrl: String, after: Boolean, onFinally: () -> Unit)
         fun reload()
         fun enable(enable: Boolean, bookSource: BookSourcePart)

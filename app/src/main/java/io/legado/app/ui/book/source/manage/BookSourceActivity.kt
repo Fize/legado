@@ -32,7 +32,6 @@ import io.legado.app.databinding.ActivityBookSourceBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
-import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.sourceSharePassphraseButton
@@ -43,9 +42,7 @@ import io.legado.app.model.Debug
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.search.SearchScope
-import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
-import io.legado.app.ui.book.source.edit.JsSourceEditActivity
 import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
@@ -67,7 +64,6 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -204,9 +200,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
         initSelectActionBar()
         resumeCheckSource()
-        if (!LocalConfig.bookSourcesHelpVersionIsLast) {
-            showHelp("SourceMBookHelp")
-        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -233,8 +226,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_add_book_source -> startActivity<BookSourceEditActivity>()
-            R.id.menu_add_js_source -> startActivity<JsSourceEditActivity>()
             R.id.menu_import_qr -> qrResult.launch()
             R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
             R.id.menu_import_local -> importDoc.launch {
@@ -323,7 +314,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 upBookSource(searchView.query?.toString())
             }
 
-            R.id.menu_help -> showHelp("SourceMBookHelp")
             R.id.menu_block_source_navigation -> {
                 AppConfig.blockSourceNavigation = !AppConfig.blockSourceNavigation
                 item.isChecked = AppConfig.blockSourceNavigation
@@ -857,12 +847,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun searchBook(bookSource: BookSourcePart) {
         SearchActivity.start(this, bookSource)
-    }
-
-    override fun debug(bookSource: BookSourcePart) {
-        startActivity<BookSourceDebugActivity> {
-            putExtra("key", bookSource.bookSourceUrl)
-        }
     }
 
     override fun onDestroy() {

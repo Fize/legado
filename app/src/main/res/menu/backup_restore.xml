@@ -5,12 +5,6 @@
     tools:ignore="AlwaysShowAction">
 
     <item
-        android:id="@+id/menu_help"
-        android:icon="@drawable/ic_help"
-        android:title="@string/help"
-        app:showAsAction="always" />
-
-    <item
         android:id="@+id/menu_import_old"
         android:title="@string/menu_import_old_version"
         app:showAsAction="never" />

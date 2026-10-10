@@ -226,12 +226,18 @@ object Restore {
         val restoredVideoPreferences = readPreferenceSnapshot(appCtx, path, "videoConfig")
         val restoredCookies = if (!lanTransfer && !BackupConfig.ignoreCookies) {
             File(path, BackupConfig.cookieFileName).takeIf { it.exists() }?.let { file ->
-                if (password.isNullOrBlank()) {
-                    throw NoStackTraceException(
-                        appCtx.getString(R.string.cookie_backup_password_required)
-                    )
+                val raw = file.readText()
+                val json = if (raw.isJsonArray()) {
+                    raw
+                } else {
+                    if (password.isNullOrBlank()) {
+                        throw NoStackTraceException(
+                            appCtx.getString(R.string.cookie_backup_password_required)
+                        )
+                    }
+                    aes.decryptStr(raw)
                 }
-                parseCookieBackup(aes.decryptStr(file.readText()))
+                parseCookieBackup(json)
             }
         } else {
             null
@@ -240,15 +246,15 @@ object Restore {
             !BackupConfig.ignoreSourceVariables
         ) {
             File(path, BackupConfig.runtimeSourceCacheFileName).takeIf { it.exists() }?.let { file ->
-                if (password.isNullOrBlank()) {
-                    throw NoStackTraceException(
-                        appCtx.getString(R.string.source_variables_backup_password_required)
-                    )
-                }
                 val raw = file.readText()
                 val json = if (raw.isJsonArray()) {
                     raw
                 } else {
+                    if (password.isNullOrBlank()) {
+                        throw NoStackTraceException(
+                            appCtx.getString(R.string.source_variables_backup_password_required)
+                        )
+                    }
                     aes.decryptStr(raw)
                 }
                 parseRuntimeSourceCacheBackup(json)
@@ -482,16 +488,18 @@ object Restore {
                             edit.putString(key, fontPath)
                         }
                         PreferKey.webDavPassword -> {
-                            kotlin.runCatching {
-                                aes.decryptStr(value.toString())
-                            }.getOrNull()?.let {
-                                edit.putString(key, it)
-                            } ?: let {
-                                if (appCtx.getPrefString(PreferKey.webDavPassword)
-                                        .isNullOrBlank()
-                                ) {
-                                    edit.putString(key, value.toString())
-                                }
+                            val raw = value.toString()
+                            val decrypted = if (!password.isNullOrBlank()) {
+                                kotlin.runCatching { aes.decryptStr(raw) }.getOrNull()
+                            } else {
+                                null
+                            }
+                            if (decrypted != null) {
+                                edit.putString(key, decrypted)
+                            } else if (raw.isNotBlank() ||
+                                appCtx.getPrefString(PreferKey.webDavPassword).isNullOrBlank()
+                            ) {
+                                edit.putString(key, raw)
                             }
                         }
 

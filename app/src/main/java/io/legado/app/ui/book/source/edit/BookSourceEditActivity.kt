@@ -29,7 +29,6 @@ import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.data.entities.rule.TocRule
 import io.legado.app.databinding.ActivityBookSourceEditBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
@@ -39,7 +38,6 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.search.SearchActivity
-import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
@@ -65,7 +63,6 @@ import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.share
 import io.legado.app.utils.shareWithQr
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.toastOnUi
@@ -159,14 +156,6 @@ class BookSourceEditActivity :
                 return@initData
             }
             upSourceView(viewModel.bookSource)
-        }
-    }
-
-    override fun onPostCreate(savedInstanceState: Bundle?) {
-        super.onPostCreate(savedInstanceState)
-        if (redirectJsSourceUrl != null) return
-        if (!LocalConfig.ruleHelpVersionIsLast) {
-            showHelp("ruleHelp")
         }
     }
 
@@ -264,12 +253,6 @@ class BookSourceEditActivity :
                 finish()
             }
 
-            R.id.menu_debug_source -> saveSource { source ->
-                startActivity<BookSourceDebugActivity> {
-                    putExtra("key", source.bookSourceUrl)
-                }
-            }
-
             R.id.menu_clear_cookie -> viewModel.clearCookie(getSource().bookSourceUrl)
             R.id.menu_auto_complete -> viewModel.autoComplete = !viewModel.autoComplete
             R.id.menu_copy_source -> sendToClip(GSON.toJson(getSource()))
@@ -283,7 +266,6 @@ class BookSourceEditActivity :
             )
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_help -> showHelp("ruleHelp")
             R.id.menu_login -> saveSource { source ->
                 startActivity<SourceLoginActivity> {
                     putExtra("type", "bookSource")
@@ -858,9 +840,6 @@ class BookSourceEditActivity :
     override fun helpActions(): List<SelectItem<String>> {
         val helpActions = arrayListOf(
             SelectItem("插入URL参数", "urlOption"),
-            SelectItem("书源教程", "ruleHelp"),
-            SelectItem("js教程", "jsHelp"),
-            SelectItem("正则教程", "regexHelp"),
         )
         val view = window.decorView.findFocus()
         if (view is EditText) {
@@ -885,9 +864,6 @@ class BookSourceEditActivity :
         when (action) {
             "addGroup" -> alertGroups()
             "urlOption" -> UrlOptionDialog(this) { sendText(it) }.show()
-            "ruleHelp" -> showHelp("ruleHelp")
-            "jsHelp" -> showHelp("jsHelp")
-            "regexHelp" -> showHelp("regexHelp")
             "selectFile" -> selectDoc.launch {
                 mode = HandleFileContract.FILE
             }

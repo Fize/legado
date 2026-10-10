@@ -12,7 +12,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ActivityJsSourceEditBinding
 import io.legado.app.model.jsSource.JsSourceUpsert
-import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.utils.StartActivityContract
@@ -37,13 +36,6 @@ class JsSourceEditActivity : BaseActivity<ActivityJsSourceEditBinding>(imageBg =
     private var pendingText: String? = null
     private var stage = JsSourceEditStage.READY
 
-    private val debugResult = registerForActivityResult(
-        StartActivityContract(BookSourceDebugActivity::class.java)
-    ) {
-        stage = stage.afterDebugResult()
-        pendingText?.let(::openEditor) ?: super.finish()
-    }
-
     private val editorResult = registerForActivityResult(
         StartActivityContract(CodeEditActivity::class.java)
     ) { result ->
@@ -55,11 +47,9 @@ class JsSourceEditActivity : BaseActivity<ActivityJsSourceEditBinding>(imageBg =
         }
         pendingText = text
         val action = result.data?.getStringExtra(CodeEditActivity.EXTRA_RESULT_ACTION)
-        val debugRequested = action == CodeEditActivity.RESULT_ACTION_DEBUG_SOURCE
         val loginRequested = action == CodeEditActivity.RESULT_ACTION_LOGIN_SOURCE
-        stage = stageForEditorResult(debugRequested, loginRequested)
+        stage = stageForEditorResult(loginRequested = loginRequested)
         when {
-            debugRequested -> saveForDebug(text)
             loginRequested -> saveForLogin(text)
             else -> saveSource(text)
         }
@@ -83,16 +73,13 @@ class JsSourceEditActivity : BaseActivity<ActivityJsSourceEditBinding>(imageBg =
             ?: JsSourceEditStage.READY
         lifecycleScope.launch {
             val text = pendingText ?: withContext(Dispatchers.IO) {
-                openedSourceUrl?.let { appDb.bookSourceDao.getBookSource(it)?.mainJs }
-                ?: assets.open("js_source_template.js").bufferedReader().use { it.readText() }
+                openedSourceUrl?.let { appDb.bookSourceDao.getBookSource(it)?.mainJs }.orEmpty()
             }
             pendingText = text
             when (stage.restoreAction()) {
                 JsSourceEditRestoreAction.OPEN_EDITOR -> openEditor(text)
                 JsSourceEditRestoreAction.SAVE_AND_FINISH -> saveSource(text)
-                JsSourceEditRestoreAction.SAVE_FOR_DEBUG -> saveForDebug(text)
                 JsSourceEditRestoreAction.SAVE_FOR_LOGIN -> saveForLogin(text)
-                JsSourceEditRestoreAction.LAUNCH_DEBUG -> launchDebugWhenResumed()
                 JsSourceEditRestoreAction.LAUNCH_LOGIN -> launchLoginWhenResumed()
                 JsSourceEditRestoreAction.AWAIT_RESULT -> Unit
             }
@@ -115,32 +102,7 @@ class JsSourceEditActivity : BaseActivity<ActivityJsSourceEditBinding>(imageBg =
             putExtra("languageName", "source.js")
             putExtra("returnUnchangedText", true)
             putExtra(CodeEditActivity.EXTRA_CHECK_JAVASCRIPT_SYNTAX, true)
-            putExtra(CodeEditActivity.EXTRA_SHOW_DEBUG_SOURCE, true)
             putExtra(CodeEditActivity.EXTRA_SHOW_LOGIN_SOURCE, true)
-        }
-    }
-
-    private fun saveForDebug(text: String) {
-        saveSource(text, showSuccessToast = false, finishAfterSave = false) {
-            launchDebugWhenResumed()
-        }
-    }
-
-    private fun launchDebugWhenResumed() {
-        val sourceUrl = openedSourceUrl ?: run {
-            val text = pendingText ?: return super.finish()
-            stage = JsSourceEditStage.SAVING_FOR_DEBUG
-            saveForDebug(text)
-            return
-        }
-        lifecycleScope.launch {
-            lifecycle.withStateAtLeast(Lifecycle.State.RESUMED) {
-                if (stage != JsSourceEditStage.DEBUG_READY) return@withStateAtLeast
-                stage = JsSourceEditStage.DEBUG_OPEN
-                debugResult.launch {
-                    putExtra("key", sourceUrl)
-                }
-            }
         }
     }
 

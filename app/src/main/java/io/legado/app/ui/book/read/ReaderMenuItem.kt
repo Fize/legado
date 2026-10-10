@@ -48,8 +48,7 @@ enum class ReaderMenuItem(
         intArrayOf(R.id.menu_effective_replaces),
         R.string.effective_replaces
     ),
-    Log("log", intArrayOf(R.id.menu_log), R.string.log),
-    Help("help", intArrayOf(R.id.menu_help), R.string.help);
+    Log("log", intArrayOf(R.id.menu_log), R.string.log);
 
     fun findVisible(menu: Menu): MenuItem? {
         return menuIds.asSequence()

@@ -119,10 +119,10 @@ class SafeEditorResultCodecTest {
     }
 
     @Test
-    fun `optional source debug action reads the active safe editor`() {
+    fun `optional source login action reads the active safe editor`() {
         val activity = activitySource()
 
-        assertTrue(activity.contains("menu.findItem(R.id.menu_debug_source)?.apply"))
+        assertTrue(activity.contains("menu.findItem(R.id.menu_login)?.apply"))
         assertTrue(activity.contains("readSafeEditorState { state ->"))
         assertTrue(
             activity.contains(

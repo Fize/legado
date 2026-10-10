@@ -76,7 +76,7 @@ class RuntimeSourceCacheBackupTest {
         assertTrue(config.contains("runtimeSourceCacheContentKey = \"backupSourceVariables\""))
         assertTrue(config.contains("runtimeSourceCacheIgnoreKey = \"ignoreSourceVariables\""))
         assertTrue(config.contains("runtimeSourceCacheFileName = \"runtimeSourceCache.json\""))
-        assertTrue(backup.contains("aes.encryptBase64(GSON.toJson(runtimeCaches))"))
+        assertTrue(backup.contains("writeText(GSON.toJson(runtimeCaches))"))
         assertTrue(backup.contains("enabledContentKeys.remove(BackupConfig.runtimeSourceCacheContentKey)"))
         assertTrue(restore.contains("!lanTransfer &&"))
         assertTrue(restore.contains("!BackupConfig.ignoreSourceVariables"))

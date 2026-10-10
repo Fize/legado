@@ -272,11 +272,6 @@
             android:name=".ui.book.manage.BookshelfManageActivity"
             android:launchMode="singleTop"
             android:screenOrientation="behind" />
-        <!-- 书源调试 -->
-        <activity
-            android:name=".ui.book.source.debug.BookSourceDebugActivity"
-            android:launchMode="singleTop"
-            android:screenOrientation="behind" />
         <!-- 目录 -->
         <activity
             android:name=".ui.book.toc.TocActivity"

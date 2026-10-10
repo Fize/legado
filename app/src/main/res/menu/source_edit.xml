@@ -17,12 +17,6 @@
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/menu_debug_source"
-        android:icon="@drawable/ic_bug_report"
-        android:title="@string/debug_source"
-        app:showAsAction="always" />
-
-    <item
         android:id="@+id/menu_login"
         android:title="@string/login"
         app:showAsAction="never" />
@@ -76,11 +70,6 @@
     <item
         android:id="@+id/menu_log"
         android:title="@string/log"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/menu_help"
-        android:title="@string/help"
         app:showAsAction="never" />
 
 </menu>

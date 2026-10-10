@@ -52,7 +52,6 @@ class SourcePopupActionMigrationTest {
             "R.string.to_bottom",
             "R.string.login",
             "R.string.search",
-            "R.string.debug",
             "R.string.delete",
             "R.string.disable_explore else R.string.enable_explore"
         )
@@ -85,7 +84,6 @@ class SourcePopupActionMigrationTest {
             "\"bottom\" -> callBack.toBottom(source)",
             "\"login\" -> context.startActivity<SourceLoginActivity>",
             "\"search\" -> callBack.searchBook(source)",
-            "\"debug\" -> callBack.debug(source)",
             "\"delete\" -> {",
             "callBack.del(source)",
             "selected.remove(source)",

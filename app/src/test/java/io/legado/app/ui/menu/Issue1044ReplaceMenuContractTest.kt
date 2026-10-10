@@ -14,8 +14,7 @@ class Issue1044ReplaceMenuContractTest {
             "menu_import_local",
             "menu_import_onLine",
             "menu_import_qr",
-            "menu_manual_replace_rule",
-            "menu_help"
+            "menu_manual_replace_rule"
         ).map { id ->
             val index = menu.indexOf("android:id=\"@+id/$id\"")
             assertTrue("$id should exist in replace_rule.xml", index >= 0)

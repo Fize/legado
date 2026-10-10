@@ -58,7 +58,6 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -67,11 +66,9 @@ class CodeEditActivity :
     KeyboardToolPop.CallBack, ChangeThemeDialog.CallBack, SettingsDialog.CallBack,
     CurlAnalyzeUrlDialog.Callback {
     companion object {
-        const val EXTRA_SHOW_DEBUG_SOURCE = "showDebugSourceAction"
         const val EXTRA_SHOW_LOGIN_SOURCE = "showLoginSourceAction"
         const val EXTRA_CHECK_JAVASCRIPT_SYNTAX = "checkJavaScriptSyntax"
         const val EXTRA_RESULT_ACTION = "resultAction"
-        const val RESULT_ACTION_DEBUG_SOURCE = "debugSource"
         const val RESULT_ACTION_LOGIN_SOURCE = "loginSource"
 
         private var isInitialized = false
@@ -90,7 +87,6 @@ class CodeEditActivity :
     private val editorSearcher: EditorSearcher by lazy { editor.searcher }
     private var searchOptions: SearchOptions? = null
     private var menuSaveBtn: MenuItem? = null
-    private var menuDebugSourceBtn: MenuItem? = null
     private var menuLoginSourceBtn: MenuItem? = null
     private var useSafeEditor = false
     private var safeEditor: WebView? = null
@@ -335,7 +331,6 @@ class CodeEditActivity :
             safeEditorStatus == SafeEditorStatus.READY &&
             !safeEditorReadPending
         menuSaveBtn?.isEnabled = enabled
-        menuDebugSourceBtn?.isEnabled = enabled && isDebugSourceActionEnabled()
         menuLoginSourceBtn?.isEnabled = enabled && isLoginSourceActionEnabled()
     }
 
@@ -700,10 +695,6 @@ class CodeEditActivity :
         super.finish()
     }
 
-    private fun isDebugSourceActionEnabled(): Boolean {
-        return intent.getBooleanExtra(EXTRA_SHOW_DEBUG_SOURCE, false)
-    }
-
     private fun isLoginSourceActionEnabled(): Boolean {
         return intent.getBooleanExtra(EXTRA_SHOW_LOGIN_SOURCE, false)
     }
@@ -737,7 +728,6 @@ class CodeEditActivity :
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.code_edit_activity, menu)
         menuSaveBtn = menu.findItem(R.id.menu_save)
-        menuDebugSourceBtn = menu.findItem(R.id.menu_debug_source)
         menuLoginSourceBtn = menu.findItem(R.id.menu_login)
         updateEditorMenu(menu)
         return super.onCompatCreateOptionsMenu(menu)
@@ -766,13 +756,6 @@ class CodeEditActivity :
         }
         menu.findItem(R.id.menu_save)?.apply {
             isVisible = viewModel.writable
-            isEnabled = canReturnText
-        }
-        menu.findItem(R.id.menu_debug_source)?.apply {
-            isVisible = shouldShowDebugSourceAction(
-                viewModel.writable,
-                isDebugSourceActionEnabled()
-            )
             isEnabled = canReturnText
         }
         menu.findItem(R.id.menu_login)?.apply {
@@ -911,7 +894,6 @@ class CodeEditActivity :
         when (item.itemId) {
             R.id.menu_search -> if (!useSafeEditor) search()
             R.id.menu_save -> save(false)
-            R.id.menu_debug_source -> returnText(RESULT_ACTION_DEBUG_SOURCE)
             R.id.menu_login -> returnText(RESULT_ACTION_LOGIN_SOURCE)
             R.id.menu_select_all -> if (!useSafeEditor) editor.selectAll()
             R.id.menu_format_code -> if (!useSafeEditor) viewModel.formatCode(editor)
@@ -948,19 +930,10 @@ class CodeEditActivity :
     }
 
     override fun helpActions(): List<SelectItem<String>> {
-        return arrayListOf(
-            SelectItem("书源教程", "ruleHelp"),
-            SelectItem("js教程", "jsHelp"),
-            SelectItem("正则教程", "regexHelp")
-        )
+        return emptyList()
     }
 
     override fun onHelpActionSelect(action: String) {
-        when (action) {
-            "ruleHelp" -> showHelp("ruleHelp")
-            "jsHelp" -> showHelp("jsHelp")
-            "regexHelp" -> showHelp("regexHelp")
-        }
     }
 
     override fun sendText(text: String) {
@@ -1031,10 +1004,6 @@ class CodeEditActivity :
             editor.redo()
         }
     }
-}
-
-internal fun shouldShowDebugSourceAction(writable: Boolean, requested: Boolean): Boolean {
-    return writable && requested
 }
 
 internal fun shouldShowLoginSourceAction(writable: Boolean, requested: Boolean): Boolean {

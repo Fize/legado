@@ -94,20 +94,15 @@ class CookieBackupCompatibilityTest {
         val contentIsEnabled = config.substringAfter("internal fun contentIsEnabled(")
             .substringBefore("fun saveIgnoreConfig")
 
-        assertTrue(backupFunction.contains("aes.encryptBase64(GSON.toJson(appDb.cookieDao.all))"))
+        assertTrue(backupFunction.contains("writeText(GSON.toJson(appDb.cookieDao.all))"))
         assertTrue(backupFunction.contains("BackupConfig.cookieContentKey in enabledContentKeys"))
-        assertTrue(backupFunction.contains("val password = LocalConfig.password"))
-        assertTrue(backupFunction.contains("password.isNullOrBlank()"))
-        assertTrue(backupFunction.contains("val aes = BackupAES(password)"))
-        assertTrue(
-            backupFunction.indexOf("password.isNullOrBlank()") <
-                backupFunction.indexOf("LocalConfig.lastBackup = System.currentTimeMillis()")
-        )
+        assertTrue(!backupFunction.contains("BackupAES"))
         assertTrue(restoreFunction.contains("!BackupConfig.ignoreCookies"))
+        assertTrue(restoreFunction.contains("if (raw.isJsonArray())"))
         assertTrue(restoreFunction.contains("val password = LocalConfig.password"))
         assertTrue(restoreFunction.contains("password.isNullOrBlank()"))
         assertTrue(restoreFunction.contains("val aes = BackupAES(password)"))
-        assertTrue(restoreFunction.contains("aes.decryptStr(file.readText())"))
+        assertTrue(restoreFunction.contains("aes.decryptStr(raw)"))
         assertTrue(
             restoreFunction.indexOf("val restoredCookies") <
                 restoreFunction.indexOf("fileToListT<Book>")

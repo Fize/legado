@@ -13,7 +13,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.remote.RemoteBook
@@ -24,7 +23,6 @@ import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.find
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.showHelp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
@@ -84,9 +82,6 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         binding.recyclerView.adapter = adapter
         binding.selectActionBar.setMainActionText(R.string.add_to_bookshelf)
         binding.selectActionBar.setCallBack(this)
-        if (!LocalConfig.webDavBookHelpVersionIsLast) {
-            showHelp("webDavBookHelp")
-        }
     }
 
     private fun sortCheck(sortKey: RemoteBookSort) {
@@ -115,7 +110,6 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
             R.id.menu_refresh -> upPath()
             R.id.menu_server_config -> showDialogFragment<ServersDialog>()
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_help -> showHelp("webDavBookHelp")
             R.id.menu_sort_name -> {
                 item.isChecked = true
                 sortCheck(RemoteBookSort.Name)

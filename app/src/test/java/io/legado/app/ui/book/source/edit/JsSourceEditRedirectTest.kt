@@ -25,7 +25,6 @@ class JsSourceEditRedirectTest {
         assertTrue(formInitialization >= 0)
         assertTrue(redirect < formInitialization)
         assertTrue(activity.contains("if (savedInstanceState == null)"))
-        assertTrue(activity.contains("if (redirectJsSourceUrl != null) return"))
     }
 
     @Test

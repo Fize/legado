@@ -8,11 +8,4 @@
         android:title="@string/customize_my"
         app:showAsAction="never" />
 
-    <item
-        android:id="@+id/menu_help"
-        android:title="@string/help"
-        android:icon="@drawable/ic_help"
-        app:showAsAction="always"
-        tools:ignore="AlwaysShowAction" />
-
 </menu>

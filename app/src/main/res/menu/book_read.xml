@@ -165,11 +165,6 @@
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/menu_help"
-        android:title="@string/help"
-        app:showAsAction="never" />
-
-    <item
         android:id="@+id/menu_reader_more"
         android:title="@string/reader_menu_more"
         android:visible="false"

@@ -27,7 +27,6 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
-import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
@@ -174,9 +173,6 @@ class ReplaceEditActivity :
     }
 
     private fun initView() {
-        binding.ivHelp.setOnClickListener {
-            showHelp("regexHelp")
-        }
         binding.etPreviewOutput.apply {
             keyListener = null
             showSoftInputOnFocus = false
@@ -337,15 +333,10 @@ class ReplaceEditActivity :
     }
 
     override fun helpActions(): List<SelectItem<String>> {
-        return arrayListOf(
-            SelectItem("正则教程", "regexHelp")
-        )
+        return emptyList()
     }
 
     override fun onHelpActionSelect(action: String) {
-        when (action) {
-            "regexHelp" -> showHelp("regexHelp")
-        }
     }
 
     override fun sendText(text: String) {

@@ -54,7 +54,7 @@ class ReadAloudSentenceStartTest {
         val service = projectFile("src/main/java/io/legado/app/service/BaseReadAloudService.kt")
         val select = projectFile("src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
         val onClick = activity.substringAfter("override fun onClickReadAloud()")
-            .substringBefore("override fun showHelp()")
+            .substringBefore("override fun onImageLongPress")
         val readFromHere = activity.substringAfter("llReadFromHere.setOnClickListener")
             .substringBefore("}")
         val rewind = service.substringAfter("if (shouldRewindReadAloudToSentenceStart(")

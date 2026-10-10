@@ -36,28 +36,10 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
         }
 
     var privacyPolicyOk: Boolean
-        get() = getBoolean("privacyPolicyOk")
+        get() = getBoolean("privacyPolicyOk", true)
         set(value) {
             putBoolean("privacyPolicyOk", value)
         }
-
-    val readHelpVersionIsLast: Boolean
-        get() = isLastVersion(1, "readHelpVersion", "firstRead")
-
-    val backupHelpVersionIsLast: Boolean
-        get() = isLastVersion(1, "backupHelpVersion", "firstBackup")
-
-    val readMenuHelpVersionIsLast: Boolean
-        get() = isLastVersion(1, "readMenuHelpVersion", "firstReadMenu")
-
-    val bookSourcesHelpVersionIsLast: Boolean
-        get() = isLastVersion(1, "bookSourceHelpVersion", "firstOpenBookSources")
-
-    val webDavBookHelpVersionIsLast: Boolean
-        get() = isLastVersion(1, "webDavBookHelpVersion", "firstOpenWebDavBook")
-
-    val ruleHelpVersionIsLast: Boolean
-        get() = isLastVersion(1, "ruleHelpVersion")
 
     val needUpHttpTTS: Boolean
         get() = !isLastVersion(6, "httpTtsVersion")

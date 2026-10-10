@@ -11,8 +11,8 @@ class UpdateDialogLifecycleTest {
     fun `update callbacks skip dialogs after fragment state is saved`() {
         val main = functionBody(
             "src/main/java/io/legado/app/ui/main/MainActivity.kt",
-            "private suspend fun upVersion()",
-            "private suspend fun setLocalPassword()"
+            "private fun upVersion()",
+            "private fun notifyAppCrash()"
         )
         val shared = projectFile(
             "src/main/java/io/legado/app/ui/about/CheckAppUpdate.kt"

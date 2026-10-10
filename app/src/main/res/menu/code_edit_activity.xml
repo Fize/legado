@@ -17,13 +17,6 @@
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/menu_debug_source"
-        android:icon="@drawable/ic_bug_report"
-        android:title="@string/debug_source"
-        android:visible="false"
-        app:showAsAction="always" />
-
-    <item
         android:id="@+id/menu_login"
         android:title="@string/login"
         android:visible="false"

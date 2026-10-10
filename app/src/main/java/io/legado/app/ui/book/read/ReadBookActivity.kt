@@ -154,7 +154,6 @@ import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.sysScreenOffTime
@@ -957,8 +956,6 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_effective_replaces -> showDialogFragment<EffectiveReplacesDialog>()
-
-            R.id.menu_help -> showHelp()
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -2464,10 +2461,6 @@ class ReadBookActivity : BaseReadBookActivity(),
 
             else -> ReadAloud.pause(this)
         }
-    }
-
-    override fun showHelp() {
-        showHelp("readMenuHelp")
     }
 
     /**

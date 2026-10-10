@@ -224,23 +224,6 @@ object Backup {
             enabledContentKeys.remove(BackupConfig.cookieContentKey)
             enabledContentKeys.remove(BackupConfig.runtimeSourceCacheContentKey)
         }
-        val password = LocalConfig.password
-        if (password.isNullOrBlank()) {
-            when {
-                BackupConfig.cookieContentKey in enabledContentKeys -> {
-                    throw NoStackTraceException(
-                        appCtx.getString(R.string.cookie_backup_password_required)
-                    )
-                }
-
-                BackupConfig.runtimeSourceCacheContentKey in enabledContentKeys -> {
-                    throw NoStackTraceException(
-                        appCtx.getString(R.string.source_variables_backup_password_required)
-                    )
-                }
-            }
-        }
-        val aes = BackupAES(password)
         FileUtils.delete(backupPath)
         val backupPersistedCovers = BackupConfig.persistedCoverContentKey in enabledContentKeys
         val backupOtherCovers = BackupConfig.otherCoverContentKey in enabledContentKeys
@@ -300,26 +283,18 @@ object Backup {
         writeListToJson(appDb.httpTTSDao.all, "httpTTS.json", backupPath)
         writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", backupPath)
         writeListToJson(appDb.dictRuleDao.all, "dictRule.json", backupPath)
-        GSON.toJson(appDb.serverDao.all).let { json ->
-            aes.runCatching {
-                encryptBase64(json)
-            }.getOrDefault(json).let {
-                FileUtils.createFileIfNotExist(backupPath + File.separator + "servers.json")
-                    .writeText(it)
-            }
-        }
+        FileUtils.createFileIfNotExist(backupPath + File.separator + "servers.json")
+            .writeText(GSON.toJson(appDb.serverDao.all))
         if (BackupConfig.cookieContentKey in enabledContentKeys) {
-            val encryptedCookies = aes.encryptBase64(GSON.toJson(appDb.cookieDao.all))
             FileUtils.createFileIfNotExist(
                 backupPath + File.separator + BackupConfig.cookieFileName
-            ).writeText(encryptedCookies)
+            ).writeText(GSON.toJson(appDb.cookieDao.all))
         }
         if (BackupConfig.runtimeSourceCacheContentKey in enabledContentKeys) {
             val runtimeCaches = appDb.cacheDao.getRuntimeSourceCaches(System.currentTimeMillis())
-            val encryptedRuntimeCaches = aes.encryptBase64(GSON.toJson(runtimeCaches))
             FileUtils.createFileIfNotExist(
                 backupPath + File.separator + BackupConfig.runtimeSourceCacheFileName
-            ).writeText(encryptedRuntimeCaches)
+            ).writeText(GSON.toJson(runtimeCaches))
         }
         currentCoroutineContext().ensureActive()
         GSON.toJson(readConfigSnapshot).let {
@@ -353,23 +328,15 @@ object Backup {
                 if (BackupConfig.keyIsNotIgnore(key) &&
                     (!lanTransfer || key !in lanTransferIgnoredPrefKeys)
                 ) {
-                    when (key) {
-                        PreferKey.webDavPassword -> {
-                            putString(key, aes.runCatching {
-                                encryptBase64(value.toString())
-                            }.getOrDefault(value.toString()))
-                        }
-
-                        else -> when (value) {
-                            is Int -> putInt(key, value)
-                            is Boolean -> putBoolean(key, value)
-                            is Long -> putLong(key, value)
-                            is Float -> putFloat(key, value)
-                            is String -> putString(key, value)
-                            is Set<*> -> {
-                                @Suppress("UNCHECKED_CAST")
-                                putStringSet(key, value as Set<String>)
-                            }
+                    when (value) {
+                        is Int -> putInt(key, value)
+                        is Boolean -> putBoolean(key, value)
+                        is Long -> putLong(key, value)
+                        is Float -> putFloat(key, value)
+                        is String -> putString(key, value)
+                        is Set<*> -> {
+                            @Suppress("UNCHECKED_CAST")
+                            putStringSet(key, value as Set<String>)
                         }
                     }
                 }

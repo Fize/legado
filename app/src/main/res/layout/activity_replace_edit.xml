@@ -79,14 +79,6 @@
                     android:text="@string/use_regex"
                     tools:ignore="TouchTargetSizeCheck" />
 
-                <ImageView
-                    android:id="@+id/iv_help"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_help"
-                    app:tint="@color/primaryText"
-                    android:contentDescription="@string/help" />
-
             </LinearLayout>
 
             <io.legado.app.ui.widget.text.TextInputLayout

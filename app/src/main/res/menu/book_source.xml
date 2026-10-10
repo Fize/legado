@@ -109,18 +109,6 @@
     </item>
 
     <item
-        android:id="@+id/menu_add_book_source"
-        android:icon="@drawable/ic_add"
-        android:title="@string/add_book_source"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/menu_add_js_source"
-        android:icon="@drawable/ic_add"
-        android:title="@string/js_source_new"
-        app:showAsAction="never" />
-
-    <item
         android:id="@+id/menu_import_local"
         android:icon="@drawable/ic_import"
         android:title="@string/import_local"
@@ -157,12 +145,6 @@
         android:checkable="true"
         android:icon="@drawable/ic_block"
         android:title="@string/block_source_navigation"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/menu_help"
-        android:icon="@drawable/ic_help"
-        android:title="@string/help"
         app:showAsAction="never" />
 
 </menu>
