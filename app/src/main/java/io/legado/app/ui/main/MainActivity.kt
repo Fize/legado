@@ -93,7 +93,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private val idBookshelf1 = 11
     private val idBookshelf2 = 12
     private val idExplore = 1
-    private val idMy = 3
+    private val idMy = 2
     private var exitTime: Long = 0
     private var bookshelfReselected: Long = 0
     private var exploreReselected: Long = 0
@@ -229,7 +229,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 if (System.currentTimeMillis() - exploreReselected > 300) {
                     exploreReselected = System.currentTimeMillis()
                 } else {
-                    (fragmentMap[1] as? ExploreFragment)?.compressExplore()
+                    (fragmentMap[idExplore] as? ExploreFragment)?.compressExplore()
                 }
             }
         }
@@ -585,7 +585,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             "explore" -> if (AppConfig.showDiscovery) {
                 binding.viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
             }
-
+            "my" -> binding.viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
         }
     }
 
@@ -653,11 +653,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     }
 
-    override fun openImportUi(type:Int, source: String) {
+    override fun openImportUi(type: Int, source: String) {
         when (type) {
             0 -> showDialogFragment(
                 ImportBookSourceDialog(source)
-            )            2 -> showDialogFragment(
+            )
+            2 -> showDialogFragment(
                 ImportReplaceRuleDialog(source)
             )
         }
