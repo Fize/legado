@@ -12,7 +12,6 @@ import io.legado.app.constant.AppConst.androidId
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
-import io.legado.app.data.entities.AutoTaskRule
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookHighlight
@@ -50,7 +49,6 @@ import io.legado.app.lib.theme.WallpaperTheme
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
 import io.legado.app.model.localBook.LocalBook
-import io.legado.app.service.AutoTaskScheduler
 import io.legado.app.ui.font.installFontFile
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
@@ -258,7 +256,6 @@ object Restore {
         } else {
             null
         }
-        val restoredAutoTasks = fileToListT<AutoTaskRule>(path, "autoTask.json")
         val restoredBookUrls = hashSetOf<String>()
         fileToListT<Book>(path, "bookshelf.json")?.let {
             it.forEach { book ->
@@ -610,10 +607,6 @@ object Restore {
         coverRestoreResult.getOrThrow()
         restoreBackupMediaDirectory(File(path), appCtx.externalFiles, readRecordCoverDirectory).getOrThrow()
         backgroundRestoreResult?.getOrThrow()
-        if (!restoredAutoTasks.isNullOrEmpty()) {
-            appDb.autoTaskRuleDao.upsert(*restoredAutoTasks.toTypedArray())
-        }
-        AutoTaskScheduler.refresh(appCtx)
         appCtx.toastOnUi(R.string.restore_success)
         withContext(Main) {
             delay(100)

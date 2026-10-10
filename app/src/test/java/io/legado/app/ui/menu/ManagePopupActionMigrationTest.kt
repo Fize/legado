@@ -168,13 +168,6 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `management menu actions keep their current callbacks and side effects`() {
-        assertActions(
-            AUTO_TASK,
-            "\"log\" -> callback.showLog(task)",
-            "\"moveUp\" -> callback.move(task, -1)",
-            "\"moveDown\" -> callback.move(task, 1)",
-            "\"delete\" -> callback.delete(task)"
-        )
         assertActions(RULE_SUB, "callBack.delSubscription(source)")
         assertActions(
             REPLACE_RULE,
@@ -194,13 +187,6 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `management menu labels keep their previous order`() {
-        assertOrdered(
-            AUTO_TASK,
-            "item(context.getString(R.string.auto_task_log), \"log\")",
-            "item(context.getString(R.string.auto_task_move_up), \"moveUp\")",
-            "item(context.getString(R.string.auto_task_move_down), \"moveDown\")",
-            "item(context.getString(R.string.delete), \"delete\")"
-        )
         listOf(REPLACE_RULE, TXT_TOC_RULE).forEach { path ->
             assertOrdered(
                 path,
@@ -241,10 +227,9 @@ class ManagePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val AUTO_TASK = "src/main/java/io/legado/app/ui/autoTask/AutoTaskAdapter.kt"
         const val RULE_SUB = "src/main/java/io/legado/app/ui/rulesub/RuleSubAdapter.kt"
         const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
         const val TXT_TOC_RULE = "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt"
-        val adapterFiles = listOf(AUTO_TASK, RULE_SUB, REPLACE_RULE, TXT_TOC_RULE)
+        val adapterFiles = listOf(RULE_SUB, REPLACE_RULE, TXT_TOC_RULE)
     }
 }

@@ -53,7 +53,7 @@ class MyPageCustomizationTest {
         LocalConfig.edit().putBoolean("privacyPolicyOk", true)
             .putLong("appVersionCode", appInfo.versionCode).putString("password", "").commit()
         scenario = ActivityScenario.launch(MainActivity::class.java)
-        awaitMain { it.isResumed && it.findPreference<Preference>("autoTaskManage")?.isVisible == true }
+        awaitMain { it.isResumed && it.findPreference<Preference>("txtTocRuleManage")?.isVisible == true }
     }
 
     @After fun cleanUp() {
@@ -64,26 +64,22 @@ class MyPageCustomizationTest {
     }
 
     @Test fun actualPickerMovesOnlySelectedItemsAndMoreKeepsExistingActions() {
-        val scheduled = prefs.getBoolean(PreferKey.autoTaskService, false)
         openPicker()
-        choose("autoTaskManage")
+        choose("txtTocRuleManage")
         onView(withText(android.R.string.cancel)).inRoot(isDialog()).perform(click())
-        awaitMain { it.findPreference<Preference>("autoTaskManage")!!.isVisible }
+        awaitMain { it.findPreference<Preference>("txtTocRuleManage")!!.isVisible }
         assertEquals(defaults, prefs.getStringSet(PreferKey.myMoreItems, emptySet()))
 
         openPicker()
-        for (key in listOf("autoTaskManage", PreferKey.autoTaskService, 
-             "txtTocRuleManage", "replaceManage", "dictRuleManage", "check_update")) choose(key)
+        for (key in listOf("txtTocRuleManage", "replaceManage", "dictRuleManage", "check_update")) choose(key)
         screenshot("my-customization-picker")
         scenario!!.recreate()
         // The real native dialog must retain its unsaved checked items across recreation.
         onView(withText(android.R.string.ok)).inRoot(isDialog()).perform(click())
-        val selected = setOf("autoTaskManage", PreferKey.autoTaskService, 
-             "txtTocRuleManage", "replaceManage", "dictRuleManage", "check_beta_update")
+        val selected = setOf("txtTocRuleManage", "replaceManage", "dictRuleManage", "check_beta_update")
         assertEquals(selected, prefs.getStringSet(PreferKey.myMoreItems, emptySet()))
-        awaitMain { !it.findPreference<Preference>("autoTaskManage")!!.isVisible &&
+        awaitMain { !it.findPreference<Preference>("txtTocRuleManage")!!.isVisible &&
             it.findPreference<Preference>("check_update")!!.isVisible }
-        assertEquals(scheduled, prefs.getBoolean(PreferKey.autoTaskService, false))
         screenshot("my-customization-main")
         val monitor = instrumentation.addMonitor(ConfigActivity::class.java.name, null, false)
         try {
@@ -108,26 +104,26 @@ class MyPageCustomizationTest {
         } finally { instrumentation.removeMonitor(monitor) }
         awaitMain { it.findPreference<Preference>("check_update")!!.isVisible }
         scenario!!.recreate()
-        awaitMain { !it.findPreference<Preference>("autoTaskManage")!!.isVisible }
+        awaitMain { !it.findPreference<Preference>("txtTocRuleManage")!!.isVisible }
     }
 
     @Test fun realConfigRestoreAndLegacyBackupRestoreTheVisiblePage() {
         val directory = File(context.cacheDir, "my-page-backup-${UUID.randomUUID()}").apply { mkdirs() }
-        val selected = setOf("autoTaskManage")
+        val selected = setOf("txtTocRuleManage")
         try {
             writePreferenceSnapshot(context, directory.absolutePath, "config") {
                 putStringSet(PreferKey.myMoreItems, selected)
             }
             runBlocking(Dispatchers.IO) { Restore.restoreLocked(directory.absolutePath) }
-            awaitMain { !it.findPreference<Preference>("autoTaskManage")!!.isVisible &&
+            awaitMain { !it.findPreference<Preference>("txtTocRuleManage")!!.isVisible &&
                 it.findPreference<Preference>("check_beta_update")!!.isVisible }
             assertEquals(selected, prefs.getStringSet(PreferKey.myMoreItems, emptySet()))
             writePreferenceSnapshot(context, directory.absolutePath, "config") { putBoolean("enableReadRecord", true) }
             runBlocking(Dispatchers.IO) { Restore.restoreLocked(directory.absolutePath) }
-            awaitMain { it.findPreference<Preference>("autoTaskManage")!!.isVisible &&
+            awaitMain { it.findPreference<Preference>("txtTocRuleManage")!!.isVisible &&
                 !it.findPreference<Preference>("check_beta_update")!!.isVisible }
             scenario!!.recreate()
-            awaitMain { it.findPreference<Preference>("autoTaskManage")!!.isVisible }
+            awaitMain { it.findPreference<Preference>("txtTocRuleManage")!!.isVisible }
         } finally { directory.deleteRecursively() }
     }
 

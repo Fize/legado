@@ -14,7 +14,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
-import io.legado.app.ui.autoTask.ImportAutoTaskDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.isContentScheme
@@ -87,7 +86,6 @@ class FileAssociationActivity :
                 "theme" -> showDialogFragment(ImportThemeDialog(it.second, true))
                 "txtRule" -> showDialogFragment(ImportTxtTocRuleDialog(it.second, true))
                 "dictRule" -> showDialogFragment(ImportDictRuleDialog(it.second, true))
-                "autoTask" -> showDialogFragment(ImportAutoTaskDialog(it.second, true))
                 "bookshelf", "backup" -> showDialogFragment(ImportDataDialog(it.first, it.second))
             }
         }

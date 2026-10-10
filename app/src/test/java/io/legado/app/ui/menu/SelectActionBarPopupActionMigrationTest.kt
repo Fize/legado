@@ -119,8 +119,7 @@ class SelectActionBarPopupActionMigrationTest {
                 "@+id/menu_restore_network_covers",
                 "@+id/menu_restore_source_covers",
                 "@+id/menu_check_selected_interval",
-                "@+id/menu_update_toc",
-                "@+id/menu_create_book_update_tasks"
+                "@+id/menu_update_toc"
             ),
             "book_source_sel.xml" to listOf(
                 "@+id/menu_enable_selection",

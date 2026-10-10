@@ -17,7 +17,6 @@ import io.legado.app.data.dao.BookHighlightDao
 import io.legado.app.data.dao.BookMemoDao
 import io.legado.app.data.dao.BookSourceDao
 import io.legado.app.data.dao.BookmarkDao
-import io.legado.app.data.dao.AutoTaskRuleDao
 import io.legado.app.data.dao.CacheDao
 import io.legado.app.data.dao.CookieDao
 import io.legado.app.data.dao.DictRuleDao
@@ -40,7 +39,6 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourceCheckState
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.data.entities.AutoTaskRule
 import io.legado.app.data.entities.Cache
 import io.legado.app.data.entities.Cookie
 import io.legado.app.data.entities.DictRule
@@ -69,19 +67,18 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 112,
+    version = 113,
     exportSchema = false,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
         Bookmark::class, TxtTocRule::class, ReadRecord::class, HttpTTS::class, Cache::class,
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
-        AutoTaskRule::class, BookHighlight::class, HighlightRule::class, BookSourceCheckState::class,
+        BookHighlight::class, HighlightRule::class, BookSourceCheckState::class,
         BookMemo::class],
     views = [BookSourcePart::class],
 )
 abstract class AppDatabase : RoomDatabase() {
 
-    abstract val autoTaskRuleDao: AutoTaskRuleDao
     abstract val bookDao: BookDao
     abstract val bookGroupDao: BookGroupDao
     abstract val bookHighlightDao: BookHighlightDao

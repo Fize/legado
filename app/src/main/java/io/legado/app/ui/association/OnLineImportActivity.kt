@@ -9,7 +9,6 @@ import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityTranslucenceBinding
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.ui.autoTask.ImportAutoTaskDialog
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -46,9 +45,6 @@ class OnLineImportActivity :
                 )
                 "dictRule" -> showDialogFragment(
                     ImportDictRuleDialog(it.second, true)
-                )
-                "autoTask" -> showDialogFragment(
-                    ImportAutoTaskDialog(it.second, true)
                 )
                 "bookshelf" -> {
                     startActivity(Intent(this, FileAssociationActivity::class.java)
@@ -92,9 +88,6 @@ class OnLineImportActivity :
                 )
                 "/theme" -> showDialogFragment(
                     ImportThemeDialog(url, true)
-                )
-                "/autoTask" -> showDialogFragment(
-                    ImportAutoTaskDialog(url, true)
                 )
                 "/auto" -> viewModel.determineType(url)
                 "/readConfig" -> viewModel.getReadConfig(url)

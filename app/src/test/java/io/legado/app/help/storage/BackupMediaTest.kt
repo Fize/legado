@@ -66,7 +66,6 @@ class BackupMediaTest {
                 "httpTTS.json",
                 "keyboardAssists.json",
                 "dictRule.json",
-                "autoTask.json",
                 "servers.json",
                 "directLinkUploadRule.json",
                 "coverRule.json",
