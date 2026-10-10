@@ -21,9 +21,9 @@ if (!version) {
             commandLine 'git', 'describe', '--tags', '--match', 'v*', '--abbrev=0'
             ignoreExitValue = true
         }.standardOutput.asText.get().trim()
-        version = latestTag ? latestTag.replaceFirst('^v', '') : "1.0.0"
+        version = latestTag ? latestTag.replaceFirst('^v', '') : "3.0.0"
     } catch (ignored) {
-        version = "1.0.0"
+        version = "3.0.0"
     }
 }
 
@@ -39,6 +39,9 @@ try {
 } catch (ignored) {
 }
 
+def defaultKeystore = rootProject.file(".github/workflows/legado.jks")
+def hasSigningKey = project.hasProperty("RELEASE_STORE_FILE") || defaultKeystore.exists()
+
 android {
     compileSdk = compile_sdk_version
     namespace = 'io.legado.app'
@@ -49,12 +52,12 @@ android {
     }
 
     signingConfigs {
-        if (project.hasProperty("RELEASE_STORE_FILE")) {
+        if (hasSigningKey) {
             myConfig {
-                storeFile file(RELEASE_STORE_FILE)
-                storePassword RELEASE_STORE_PASSWORD
-                keyAlias RELEASE_KEY_ALIAS
-                keyPassword RELEASE_KEY_PASSWORD
+                storeFile project.hasProperty("RELEASE_STORE_FILE") ? file(RELEASE_STORE_FILE) : defaultKeystore
+                storePassword project.hasProperty("RELEASE_STORE_PASSWORD") ? RELEASE_STORE_PASSWORD : "gedoor_legado"
+                keyAlias project.hasProperty("RELEASE_KEY_ALIAS") ? RELEASE_KEY_ALIAS : "legado"
+                keyPassword project.hasProperty("RELEASE_KEY_PASSWORD") ? RELEASE_KEY_PASSWORD : "gedoor_legado"
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -111,7 +114,7 @@ android {
     }
     buildTypes {
         release {
-            if (project.hasProperty("RELEASE_STORE_FILE")) {
+            if (hasSigningKey) {
                 signingConfig = signingConfigs.myConfig
             }
             applicationIdSuffix '.release'
@@ -126,7 +129,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
         debug {
-            if (project.hasProperty("RELEASE_STORE_FILE")) {
+            if (hasSigningKey) {
                 signingConfig = signingConfigs.myConfig
             }
             manifestPlaceholders.put("app_name", "@string/app_name")

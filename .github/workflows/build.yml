@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version name (optional, e.g. 1.0.0)'
+        description: 'Version name (optional, e.g. 3.0.0)'
         required: false
         type: string
 
@@ -41,7 +41,7 @@ jobs:
             raw_ver="${REF_NAME#v}"
             tag_name="$REF_NAME"
           else
-            latest_tag=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v1.0.0")
+            latest_tag=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v3.0.0")
             raw_ver="${latest_tag#v}"
             tag_name="$latest_tag"
           fi
