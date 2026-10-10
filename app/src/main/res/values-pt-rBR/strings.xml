@@ -643,7 +643,6 @@
     <string name="go_back">Voltar</string>
     <string name="tone_colour">Tom de voz online</string>
     <string name="select_count">(%1$d/%2$d)</string>
-    <string name="show_rss">Exibir assinatura</string>
     <string name="service_stop">Serviço parou</string>
     <string name="service_start">Iniciando o serviço\nVerificando a barra de notificações para detalhes</string>
     <string name="default_path">Pasta padrão</string>

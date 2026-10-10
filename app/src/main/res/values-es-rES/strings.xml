@@ -641,7 +641,6 @@
     <string name="go_back">Atrás</string>
     <string name="tone_colour">Tono de voz en línea</string>
     <string name="select_count">(%1$d/%2$d)</string>
-    <string name="show_rss">Mostrar suscripción</string>
     <string name="service_stop">Servicio detenido</string>
     <string name="service_start">Iniciando el servicio\nComprobando la barra de notificaciones para más detalles</string>
     <string name="default_path">Carpeta predeterminada</string>
