@@ -41,7 +41,6 @@ class PredictiveBackTest {
             """onBackPressedDispatcher\.addCallback\(this\)\s*\{[^}]*\bfinish\(\)"""
         )
         listOf(
-            "src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditActivity.kt",
             "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
             "src/main/java/io/legado/app/ui/code/CodeEditActivity.kt",
             "src/main/java/io/legado/app/ui/autoTask/AutoTaskEditActivity.kt",

@@ -3,7 +3,6 @@ package io.legado.app
 import com.script.rhino.RhinoScriptEngine
 import com.script.rhino.RhinoWrapFactory
 import io.legado.app.data.entities.HttpTTS
-import io.legado.app.data.entities.RssSource
 import io.legado.app.help.rhino.NativeBaseSource
 import io.legado.app.help.parseJsRequestHeaders
 import io.legado.app.help.http.TRANSPARENT_ACCEPT_ENCODING
@@ -139,40 +138,6 @@ class SourceCompatibilityTest {
         )
 
         assertEquals("function:true:function:true", value)
-    }
-
-    @Test
-    fun rssSourceCryptoMethodsRemainCallableThroughNestedEval() {
-        RhinoWrapFactory.register(RssSource::class.java, NativeBaseSource.factory)
-        val source = RssSource(
-            sourceUrl = "https://example.com",
-            sourceName = "compatibility-test",
-        )
-        val value = RhinoScriptEngine.eval(
-            """
-            const nested = (function() {
-                with (java) {
-                    return eval("eval(\"var crypto = createSymmetricCrypto; " +
-                        "[typeof createSymmetricCrypto, typeof crypto, " +
-                        "crypto('AES/CBC/PKCS5Padding', '0123456789abcdef', " +
-                        "'abcdef0123456789') != null].join(':')\")");
-                }
-            })();
-            const method = java['create' + 'SymmetricCrypto'];
-            const dynamic = [typeof method, method.call(
-                java,
-                'AES/CBC/PKCS5Padding',
-                '0123456789abcdef',
-                'abcdef0123456789'
-            ) != null].join(':');
-            nested + '|' + dynamic;
-            """.trimIndent(),
-            com.script.ScriptBindings().apply {
-                this["java"] = source
-            },
-        )
-
-        assertEquals("function:function:true|function:true", value)
     }
 
     @Test

@@ -96,9 +96,6 @@
     <string name="import_books_count">%s text file(s) in total</string>
     <string name="is_loading">Loading…</string>
     <string name="retry">Retry</string>
-    <string name="mcp_service_token_required">Configure the Web and MCP access token before starting MCP</string>
-    <string name="mcp_service_token_invalid">MCP access token is missing or incorrect</string>
-    <string name="mcp_service_start_failed">MCP service failed to start</string>
     <string name="offline_cache">Offline cache</string>
     <string name="offline_cache_t">Offline cache</string>
     <string name="offline_cache_s">cache the selected chapter(s) to Storage</string>
@@ -295,8 +292,6 @@
     <string name="download_live_update_completed">Install</string>
     <string name="download_live_canceled">Canceled</string>
     <string name="download_live_failed">Download failed</string>
-    <string name="mcp_service_live_started">MCP service started</string>
-    <string name="mcp_service_live_stopped">MCP service stopped</string>
     <string name="no_download">No download</string>
     <string name="download_count">Downloaded %1$d/%2$d</string>
     <string name="import_select_book">Import selected book(s)</string>

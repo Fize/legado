@@ -11,10 +11,6 @@ class NoGroupDaoFilterContractTest {
         normalizedSource("src/main/java/io/legado/app/data/dao/BookSourceDao.kt")
     }
 
-    private val rssSourceDao by lazy {
-        normalizedSource("src/main/java/io/legado/app/data/dao/RssSourceDao.kt")
-    }
-
     private val replaceRuleDao by lazy {
         normalizedSource("src/main/java/io/legado/app/data/dao/ReplaceRuleDao.kt")
     }
@@ -31,14 +27,6 @@ class NoGroupDaoFilterContractTest {
         assertNoGroupFilter(
             constantBefore(bookSourceDao, "BOOK_SOURCE_NO_GROUP_FILTER"),
             "bookSourceGroup"
-        )
-
-        val rssQuery = queryBefore(rssSourceDao, "fun flowNoGroup(): Flow<List<RssSource>>")
-        assertTrue(rssQuery.contains("+ RSS_SOURCE_NO_GROUP_FILTER"))
-        assertFalse(rssQuery.contains("like '%未分组%'", ignoreCase = true))
-        assertNoGroupFilter(
-            constantBefore(rssSourceDao, "RSS_SOURCE_NO_GROUP_FILTER"),
-            "sourceGroup"
         )
 
         val replaceQuery = queryBefore(

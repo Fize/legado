@@ -11,7 +11,7 @@ class RuleSubOrderContractTest {
     fun `new subscriptions append after the highest order`() {
         val dao = projectFile("src/main/java/io/legado/app/data/dao/RuleSubDao.kt").readText()
         val activity = projectFile(
-            "src/main/java/io/legado/app/ui/rss/subscription/RuleSubActivity.kt"
+            "src/main/java/io/legado/app/ui/rulesub/RuleSubActivity.kt"
         ).readText()
 
         assertTrue(dao.contains("SELECT COALESCE(MAX(customOrder), 0) FROM ruleSubs"))

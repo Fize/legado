@@ -3,7 +3,6 @@ package io.legado.app.api
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -17,11 +16,6 @@ class ReaderProviderRoutesTest {
             "bookSources/delete" to ReaderProviderRequestCode.DeleteBookSources,
             "bookSource/query" to ReaderProviderRequestCode.GetBookSource,
             "bookSources/query" to ReaderProviderRequestCode.GetBookSources,
-            "rssSource/insert" to ReaderProviderRequestCode.SaveRssSource,
-            "rssSources/insert" to ReaderProviderRequestCode.SaveRssSources,
-            "rssSources/delete" to ReaderProviderRequestCode.DeleteRssSources,
-            "rssSource/query" to ReaderProviderRequestCode.GetRssSource,
-            "rssSources/query" to ReaderProviderRequestCode.GetRssSources,
             "book/insert" to ReaderProviderRequestCode.SaveBook,
             "books/query" to ReaderProviderRequestCode.GetBookshelf,
             "book/refreshToc/query" to ReaderProviderRequestCode.RefreshToc,
@@ -51,53 +45,34 @@ class ReaderProviderRoutesTest {
     }
 
     @Test
-    fun `rss delete dispatches only to rss controller`() {
-        var bookSelection: String? = null
-        var rssSelection: String? = null
-
-        dispatchReaderProviderDelete(
-            ReaderProviderRequestCode.DeleteRssSources,
-            "rss-payload",
-            deleteBookSources = { bookSelection = it },
-            deleteRssSources = { rssSelection = it },
-        )
-
-        assertNull(bookSelection)
-        assertEquals("rss-payload", rssSelection)
-    }
-
-    @Test
     fun `book delete dispatch remains unchanged`() {
         var bookSelection: String? = null
-        var rssSelection: String? = null
 
         dispatchReaderProviderDelete(
             ReaderProviderRequestCode.DeleteBookSources,
             "book-payload",
             deleteBookSources = { bookSelection = it },
-            deleteRssSources = { rssSelection = it },
         )
 
         assertEquals("book-payload", bookSelection)
-        assertNull(rssSelection)
     }
 
     @Test
-    fun `rss insert dispatches only to rss handlers`() = runBlocking {
+    fun `book insert dispatches only to book handlers`() = runBlocking {
         val calls = mutableListOf<String>()
 
         dispatchReaderProviderInsert(
-            ReaderProviderRequestCode.SaveRssSource,
-            "single-rss",
-            saveRssSource = { calls.add("single:$it") },
+            ReaderProviderRequestCode.SaveBookSource,
+            "single-book",
+            saveBookSource = { calls.add("single:$it") },
         )
         dispatchReaderProviderInsert(
-            ReaderProviderRequestCode.SaveRssSources,
-            "multiple-rss",
-            saveRssSources = { calls.add("multiple:$it") },
+            ReaderProviderRequestCode.SaveBookSources,
+            "multiple-book",
+            saveBookSources = { calls.add("multiple:$it") },
         )
 
-        assertEquals(listOf("single:single-rss", "multiple:multiple-rss"), calls)
+        assertEquals(listOf("single:single-book", "multiple:multiple-book"), calls)
     }
 
     @Test
@@ -105,10 +80,10 @@ class ReaderProviderRoutesTest {
         var called = false
 
         dispatchReaderProviderInsert(
-            ReaderProviderRequestCode.SaveRssSource,
+            ReaderProviderRequestCode.SaveBookSource,
             null,
             valuesPresent = false,
-            saveRssSource = { called = true },
+            saveBookSource = { called = true },
         )
 
         assertFalse(called)
@@ -119,7 +94,7 @@ class ReaderProviderRoutesTest {
         assertThrows(IllegalStateException::class.java) {
             runBlocking {
                 dispatchReaderProviderInsert(
-                    ReaderProviderRequestCode.GetRssSources,
+                    ReaderProviderRequestCode.GetBookSources,
                     null,
                     valuesPresent = false,
                 )
@@ -128,24 +103,24 @@ class ReaderProviderRoutesTest {
     }
 
     @Test
-    fun `rss query dispatches only to rss handlers`() {
-        val parameters = mapOf("url" to listOf("rss-url"))
+    fun `book query dispatches only to book handlers`() {
+        val parameters = mapOf("url" to listOf("book-url"))
 
         val source = dispatchReaderProviderQuery(
-            ReaderProviderRequestCode.GetRssSource,
+            ReaderProviderRequestCode.GetBookSource,
             parameters,
-            getRssSource = {
+            getBookSource = {
                 assertEquals(parameters, it)
-                "single-rss"
+                "single-book"
             },
         )
         val sources = dispatchReaderProviderQuery(
-            ReaderProviderRequestCode.GetRssSources,
+            ReaderProviderRequestCode.GetBookSources,
             parameters,
-            getRssSources = { "multiple-rss" },
+            getBookSources = { "multiple-book" },
         )
 
-        assertEquals("single-rss", source)
-        assertEquals("multiple-rss", sources)
+        assertEquals("single-book", source)
+        assertEquals("multiple-book", sources)
     }
 }

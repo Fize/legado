@@ -4,7 +4,6 @@ import androidx.collection.LruCache
 import com.script.ScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.RssSource
 import io.legado.app.help.source.clearSharedGlobalState
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -405,24 +404,16 @@ class CryptoJsCompatibilityTest {
             bookSourceName = "Book cleanup",
             jsLib = jsLib,
         )
-        val rssSource = RssSource(
-            sourceUrl = sourceKey,
-            sourceName = "RSS cleanup",
-            jsLib = jsLib,
-        )
 
         bookSource.evalJS("globalThis.sourceKind = 'book';")
-        rssSource.evalJS("globalThis.sourceKind = 'rss';")
         bookSource.clearSharedGlobalState()
 
         assertEquals("undefined", bookSource.evalJS("typeof globalThis.sourceKind"))
-        assertEquals("rss", rssSource.evalJS("globalThis.sourceKind"))
 
         bookSource.evalJS("globalThis.sourceKind = 'book-again';")
         SharedJsScope.remove(jsLib)
 
         assertEquals("undefined", bookSource.evalJS("typeof globalThis.sourceKind"))
-        assertEquals("undefined", rssSource.evalJS("typeof globalThis.sourceKind"))
     }
 
     @Test

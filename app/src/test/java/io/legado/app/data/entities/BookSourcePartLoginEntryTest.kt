@@ -32,6 +32,5 @@ class BookSourcePartLoginEntryTest {
             ?.get(1)
             ?.toInt()
         assertTrue(requireNotNull(databaseVersion) >= 95)
-        assertTrue(databaseSource.contains("AutoMigration(from = 94, to = 95)"))
     }
 }

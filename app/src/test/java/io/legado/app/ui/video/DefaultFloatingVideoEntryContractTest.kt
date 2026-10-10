@@ -73,7 +73,6 @@ class DefaultFloatingVideoEntryContractTest {
             .substringBefore("fun initSource(")
         assertTrue(stopVideoLoading.indexOf("cancelChildren()") in
                 0 until stopVideoLoading.indexOf("isLoading = false"))
-        assertTrue(videoPlay.contains("videoTitle = rssArticle.title"))
         assertTrue(videoPlay.contains("videoTitle = chapter.title"))
         val saveRead = videoPlay.substringAfter("fun saveRead(durPos: Int? = null)")
             .substringBefore("fun getDisplayCover()")

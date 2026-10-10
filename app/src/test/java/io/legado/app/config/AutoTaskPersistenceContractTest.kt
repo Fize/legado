@@ -27,7 +27,6 @@ class AutoTaskPersistenceContractTest {
             ?.get(1)
             ?.toInt()
         assertTrue(requireNotNull(databaseVersion) >= 94)
-        assertTrue(database.contains("AutoMigration(from = 93, to = 94)"))
         assertTrue(database.contains("AutoTaskRule::class"))
         assertTrue(dao.contains("ORDER BY customOrder"))
         assertTrue(dao.contains("@Upsert"))

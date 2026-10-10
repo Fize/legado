@@ -58,8 +58,6 @@ class BackupMediaTest {
                 "highlight.json",
                 "highlightRule.json",
                 "bookSource.json",
-                "rssSources.json",
-                "rssStar.json",
                 "sourceSub.json",
                 "cookies.json",
                 "runtimeSourceCache.json",

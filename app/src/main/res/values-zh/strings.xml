@@ -95,9 +95,6 @@
     <string name="import_books_count">共 %s 个文本文件</string>
     <string name="is_loading">加载中…</string>
     <string name="retry">重试</string>
-    <string name="mcp_service_token_required">请先配置 Web 与 MCP 访问令牌</string>
-    <string name="mcp_service_token_invalid">MCP 访问令牌未配置或不正确</string>
-    <string name="mcp_service_start_failed">MCP 服务启动失败</string>
     <string name="offline_cache">离线缓存</string>
     <string name="offline_cache_t">离线缓存</string>
     <string name="offline_cache_s">缓存选择的章节到本地</string>
@@ -293,8 +290,6 @@
     <string name="download_live_update_completed">待安装</string>
     <string name="download_live_canceled">已取消</string>
     <string name="download_live_failed">下载失败</string>
-    <string name="mcp_service_live_started">MCP已开启</string>
-    <string name="mcp_service_live_stopped">MCP已关闭</string>
     <string name="no_download">暂无任务</string>
     <string name="download_count">已下载 %1$d/%2$d</string>
     <string name="import_select_book">导入选择书籍</string>

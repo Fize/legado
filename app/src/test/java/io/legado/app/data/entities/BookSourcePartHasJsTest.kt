@@ -46,7 +46,6 @@ class BookSourcePartHasJsTest {
             ?.get(1)
             ?.toInt()
         assertTrue(requireNotNull(databaseVersion) >= 93)
-        assertTrue(databaseSource.contains("AutoMigration(from = 92, to = 93)"))
         assertTrue(schemaSource.contains("\"version\": 93"))
         assertTrue(
             schemaSource.contains("(mainJs is not null and trim(mainJs) <> '') hasJs")

@@ -18,7 +18,6 @@ class SourceImmersiveBackgroundTest {
 
         listOf(
             "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
-            "src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditActivity.kt",
         ).forEach { path ->
             val source = projectFile(path).readText()
             assertTrue(source.contains("transparentNavBar && !AppConfig.isEInkMode"))
@@ -89,7 +88,6 @@ class SourceImmersiveBackgroundTest {
     fun sourceDebugHelpPanelsHideLogsAndMatchTitleBarTransparency() {
         listOf(
             "src/main/java/io/legado/app/ui/book/source/debug/BookSourceDebugActivity.kt",
-            "src/main/java/io/legado/app/ui/rss/source/debug/RssSourceDebugActivity.kt",
         ).forEach { path ->
             val source = projectFile(path).readText()
             assertTrue(source.contains("transparentNavBar && !AppConfig.isEInkMode"))
@@ -113,7 +111,7 @@ class SourceImmersiveBackgroundTest {
 
     @Test
     fun debugHelpBackgroundBelongsToScrollablePanel() {
-        listOf("activity_source_debug.xml", "activity_rss_source_debug.xml").forEach { layout ->
+        listOf("activity_source_debug.xml").forEach { layout ->
             val help = viewById(layout, "help")
             assertEquals("@color/background", help.getAttribute("android:background"))
             val content = (0 until help.childNodes.length)

@@ -8,7 +8,7 @@ import java.io.File
 class Issue1008MenuContractTest {
 
     @Test
-    fun sourceIconsAndRssOverflowFollowReportedMenuContract() {
+    fun sourceIconsFollowReportedMenuContract() {
         assertItemIcon(
             "src/main/res/menu/source_login.xml",
             "menu_show_login_header",
@@ -18,25 +18,6 @@ class Issue1008MenuContractTest {
             "src/main/res/menu/book_source.xml",
             "menu_group_sources_by_domain",
             "ic_add_online"
-        )
-
-        val rssMenu = readProjectFile("src/main/res/menu/rss_read.xml")
-        val aloud = itemBlock(rssMenu, "menu_aloud")
-        assertFalse(aloud.contains("android:icon="))
-        assertContains("rss_read.xml", aloud, """app:showAsAction="never"""")
-
-        val rssActivity = readProjectFile(
-            "src/main/java/io/legado/app/ui/rss/read/ReadRssActivity.kt"
-        )
-        assertContains(
-            "ReadRssActivity.kt",
-            rssActivity,
-            "class ReadRssActivity :"
-        )
-        assertContains(
-            "ReadRssActivity.kt",
-            rssActivity,
-            "showOpenMenuIcon = false"
         )
     }
 

@@ -552,16 +552,6 @@
             android:name=".service.ExportBookService"
             android:foregroundServiceType="dataSync" />
         <service
-            android:name=".service.WebService"
-            android:foregroundServiceType="dataSync" />
-        <service
-            android:name=".service.McpService"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="local_network_book_source_development_service" />
-        </service>
-        <service
             android:name=".service.TTSReadAloudService"
             android:foregroundServiceType="mediaPlayback" />
         <service

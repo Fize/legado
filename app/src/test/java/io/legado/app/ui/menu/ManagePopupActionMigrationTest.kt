@@ -122,7 +122,6 @@ class ManagePopupActionMigrationTest {
         val menus = mapOf(
             "app_log.xml" to listOf("menu_clear", "menu_export"),
             "crash_log.xml" to listOf("menu_clear"),
-            "rss_read_record.xml" to listOf("menu_clear"),
             "source_login.xml" to listOf(
                 "menu_ok",
                 "menu_show_login_header",
@@ -151,15 +150,13 @@ class ManagePopupActionMigrationTest {
                 "toolBar.menu.applyTint(requireContext())",
             "src/main/java/io/legado/app/ui/about/CrashLogsDialog.kt" to
                 "binding.toolBar.menu.applyTint(requireContext())",
-            "src/main/java/io/legado/app/ui/rss/article/ReadRecordDialog.kt" to
-                "toolBar.menu.applyTint(requireContext())",
         ).forEach { (path, expected) ->
             assertContains(path, readProjectFile(path), expected)
         }
     }
 
     @Test
-    fun `five management adapters use the shared vertical menu`() {
+    fun `management adapters use the shared vertical menu`() {
         adapterFiles.forEach { path ->
             val source = readProjectFile(path)
             assertFalse("$path should not import PopupMenu", source.contains("import android.widget.PopupMenu"))
@@ -177,13 +174,6 @@ class ManagePopupActionMigrationTest {
             "\"moveUp\" -> callback.move(task, -1)",
             "\"moveDown\" -> callback.move(task, 1)",
             "\"delete\" -> callback.delete(task)"
-        )
-        assertActions(
-            RSS_SOURCE,
-            "\"top\" -> callBack.toTop(source)",
-            "\"bottom\" -> callBack.toBottom(source)",
-            "callBack.del(source)",
-            "selected.remove(source)"
         )
         assertActions(RULE_SUB, "callBack.delSubscription(source)")
         assertActions(
@@ -211,7 +201,7 @@ class ManagePopupActionMigrationTest {
             "item(context.getString(R.string.auto_task_move_down), \"moveDown\")",
             "item(context.getString(R.string.delete), \"delete\")"
         )
-        listOf(RSS_SOURCE, REPLACE_RULE, TXT_TOC_RULE).forEach { path ->
+        listOf(REPLACE_RULE, TXT_TOC_RULE).forEach { path ->
             assertOrdered(
                 path,
                 "item(context.getString(R.string.to_top), \"top\")",
@@ -252,10 +242,9 @@ class ManagePopupActionMigrationTest {
 
     private companion object {
         const val AUTO_TASK = "src/main/java/io/legado/app/ui/autoTask/AutoTaskAdapter.kt"
-        const val RSS_SOURCE = "src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt"
-        const val RULE_SUB = "src/main/java/io/legado/app/ui/rss/subscription/RuleSubAdapter.kt"
+        const val RULE_SUB = "src/main/java/io/legado/app/ui/rulesub/RuleSubAdapter.kt"
         const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
         const val TXT_TOC_RULE = "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt"
-        val adapterFiles = listOf(AUTO_TASK, RSS_SOURCE, RULE_SUB, REPLACE_RULE, TXT_TOC_RULE)
+        val adapterFiles = listOf(AUTO_TASK, RULE_SUB, REPLACE_RULE, TXT_TOC_RULE)
     }
 }

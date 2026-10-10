@@ -2,7 +2,6 @@ package io.legado.app.ui.association
 
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.data.entities.RssSource
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -28,28 +27,11 @@ class ManualSourceReplacementTest {
         assertTrue(cleared.single().effectiveRuleIds.isEmpty())
     }
 
-    @Test fun rssManualSelectionKeepsUnselectedCandidateAndEditsItsRawSource() {
-        val sources = listOf("one", "two").map {
-            prepareRssSourceImportCandidate(RssSource(sourceUrl = "https://example.invalid/$it", sourceName = "Seed"), emptyList())
-        }
-        val edited = sources[0].original.copy(sourceName = "Draft Seed")
-        val applied = refreshRssSourceImportCandidates(sources, 0, edited, rules, mapOf(0 to listOf(1L)))
-        assertEquals(listOf("Draft Seed+", "Seed"), applied.map { it.source(true).sourceName })
-        assertEquals(listOf(listOf(1L), emptyList<Long>()), applied.map { it.effectiveRuleIds })
-        val repeated = refreshRssSourceImportCandidates(applied, -1, null, rules, mapOf(0 to listOf(1L)))
-        assertEquals("Draft Seed+", repeated[0].source(true).sourceName)
-        assertEquals("Draft Seed", repeated[0].original.sourceName)
-    }
-
     @Test fun invalidReplacementStillIdentifiesTheRuleThatChangedIt() {
         val removeUrl = change.copy(pattern = "https://example.invalid/one", replacement = "")
         val book = prepareBookSourceImportCandidate(BookSource(bookSourceUrl = removeUrl.pattern), listOf(removeUrl))
-        val rss = prepareRssSourceImportCandidate(RssSource(sourceUrl = removeUrl.pattern), listOf(removeUrl))
         assertFalse(book.canImport(true))
-        assertFalse(rss.canImport(true))
         assertEquals(listOf(1L), book.effectiveRuleIds)
-        assertEquals(listOf(1L), rss.effectiveRuleIds)
         assertEquals(removeUrl.pattern, book.original.bookSourceUrl)
-        assertEquals(removeUrl.pattern, rss.original.sourceUrl)
     }
 }

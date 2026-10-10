@@ -48,8 +48,7 @@ class BundlePayloadContractTest {
             "io/legado/app/ui/dict/rule/DictRuleAdapter.kt",
             "io/legado/app/ui/main/bookshelf/style1/books/BaseBooksAdapter.kt",
             "io/legado/app/ui/main/bookshelf/style2/BaseBooksAdapter.kt",
-            "io/legado/app/ui/replace/ReplaceRuleAdapter.kt",
-            "io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt",
+            "io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
         )
     }
 }

@@ -123,37 +123,6 @@ class LiveUpdateNotificationTest {
     }
 
     @Test
-    fun `web and MCP services reuse one live notification through stop`() {
-        val web = source("app/src/main/java/io/legado/app/service/WebService.kt")
-        val mcp = source("app/src/main/java/io/legado/app/service/McpService.kt")
-        val updateLog = source("app/src/main/assets/updateLog.md")
-
-        assertTrue(web.contains("applyPromotedProgress("))
-        assertTrue(web.contains("eligible = terminal || httpServer?.isAlive == true"))
-        assertTrue(web.contains("terminal = terminal"))
-        assertTrue(web.contains("startForeground(NotificationId.WebService"))
-        assertTrue(web.contains("IntentAction.stop -> stopServiceWithNotification()"))
-        assertTrue(web.contains("setTimeoutAfter(TERMINAL_NOTIFICATION_DURATION)"))
-        assertTrue(web.contains("terminalStopJob"))
-        assertTrue(web.contains("notificationManager.cancel(NotificationId.WebService)"))
-        assertTrue(web.contains("if (isRun)"))
-        assertTrue(web.contains("createNotification(terminal = stopping)"))
-
-        assertTrue(mcp.contains("applyPromotedProgress("))
-        assertTrue(mcp.contains("eligible = terminal || isRun"))
-        assertTrue(mcp.contains("terminal = terminal"))
-        assertTrue(mcp.contains("startForeground(NotificationId.McpService"))
-        assertTrue(mcp.contains("IntentAction.stop -> stopServiceWithNotification()"))
-        assertTrue(mcp.contains("setTimeoutAfter(TERMINAL_NOTIFICATION_DURATION)"))
-        assertTrue(mcp.contains("terminalStopJob"))
-        assertTrue(mcp.contains("notificationManager.cancel(NotificationId.McpService)"))
-        assertTrue(mcp.contains("if (isRun)"))
-        assertTrue(mcp.contains("createNotification(terminal = stopping)"))
-
-        assertTrue(updateLog.contains("Web 与 MCP 服务支持 Android 16 实时更新通知"))
-    }
-
-    @Test
     fun `terminal copy keeps only successful and failed ordinary results`() {
         val service = source("app/src/main/java/io/legado/app/service/DownloadService.kt")
         val strings = source("app/src/main/res/values-zh/strings.xml")

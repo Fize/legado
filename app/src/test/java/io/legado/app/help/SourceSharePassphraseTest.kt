@@ -16,8 +16,6 @@ class SourceSharePassphraseTest {
         val fixtures = mapOf(
             SourceSharePassphrase.Type.BOOK_SOURCE to
                 "复制口令到阅读导入#L:example店🛜1刚path钢file店串?key=🕓拜2F五！sy©1800000¥Sigma^",
-            SourceSharePassphrase.Type.RSS_SOURCE to
-                "复制口令到阅读导入#L:example店🛜1刚path钢file店串?key=🕓拜2F五！dy©1800000¥Sigma^",
             SourceSharePassphrase.Type.DICT_RULE to
                 "复制口令到阅读导入#L:example店🛜1刚path钢file店串?key=🕓拜2F五！zd©1800000¥Sigma^",
             SourceSharePassphrase.Type.REPLACE_RULE to
@@ -90,8 +88,8 @@ class SourceSharePassphraseTest {
     fun expiredPassphraseIsRejected() {
         val createdAt = 1_700_000_000_000L
         val passphrase = SourceSharePassphrase.encode(
-            url = "https://example.com/rss.json",
-            type = SourceSharePassphrase.Type.RSS_SOURCE,
+            url = "https://example.com/bookSource.json",
+            type = SourceSharePassphrase.Type.BOOK_SOURCE,
             expiryDays = 1,
             time = createdAt,
         )

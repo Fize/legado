@@ -104,7 +104,7 @@ class BookSourceEditLayoutTest {
 
     @Test
     fun `edit adapters replay current safety state after holder reuse`() {
-        listOf(BOOK_SOURCE_ADAPTER_PATH, RSS_SOURCE_ADAPTER_PATH).forEach { path ->
+        listOf(BOOK_SOURCE_ADAPTER_PATH).forEach { path ->
             val source = File(repositoryRoot, path).readText()
             val bind = source.section(
                 "fun bind(editEntity: EditEntity)",
@@ -196,8 +196,7 @@ class BookSourceEditLayoutTest {
     @Test
     fun `source and auto task editors share main field tab navigation`() {
         listOf(
-            LAYOUT_PATH to ACTIVITY_PATH,
-            RSS_LAYOUT_PATH to RSS_ACTIVITY_PATH
+            LAYOUT_PATH to ACTIVITY_PATH
         ).forEach { (layoutPath, activityPath) ->
             val navigation = parse(layoutPath).elementById("field_nav")
             val activity = File(repositoryRoot, activityPath).readText()
@@ -272,16 +271,11 @@ class BookSourceEditLayoutTest {
             "app/src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt"
         const val BOOK_SOURCE_ADAPTER_PATH =
             "app/src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditAdapter.kt"
-        const val RSS_SOURCE_ADAPTER_PATH =
-            "app/src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditAdapter.kt"
         const val CARD_VIEW = "androidx.cardview.widget.CardView"
         const val FLEXBOX = "com.google.android.flexbox.FlexboxLayout"
         const val TAB_LAYOUT = "com.google.android.material.tabs.TabLayout"
         const val TEXT_INPUT_LAYOUT = "io.legado.app.ui.widget.text.TextInputLayout"
         const val THEME_CHECK_BOX = "io.legado.app.lib.theme.view.ThemeCheckBox"
-        const val RSS_LAYOUT_PATH = "app/src/main/res/layout/activity_rss_source_edit.xml"
-        const val RSS_ACTIVITY_PATH =
-            "app/src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditActivity.kt"
         const val AUTO_TASK_LAYOUT_PATH = "app/src/main/res/layout/activity_auto_task_edit.xml"
         const val AUTO_TASK_ACTIVITY_PATH =
             "app/src/main/java/io/legado/app/ui/autoTask/AutoTaskEditActivity.kt"

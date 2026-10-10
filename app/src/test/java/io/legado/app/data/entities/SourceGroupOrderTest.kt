@@ -21,13 +21,6 @@ class SourceGroupOrderTest {
         bookSourcePart.removeGroup("B")
         assertEquals("C,A", bookSourcePart.bookSourceGroup)
 
-        val rssSource = RssSource(sourceGroup = "B,A")
-        rssSource.addGroup("A，C")
-        assertEquals("B,A,C", rssSource.sourceGroup)
-        rssSource.sourceGroup = "C,B,A"
-        rssSource.removeGroup("B")
-        assertEquals("C,A", rssSource.sourceGroup)
-
         val replaceRule = ReplaceRule(group = "B,A")
         replaceRule.addGroup("A；C")
         assertEquals("B,A,C", replaceRule.group)

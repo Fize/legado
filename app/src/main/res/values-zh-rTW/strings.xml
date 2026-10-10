@@ -86,9 +86,6 @@
     <string name="import_books_count">共%s個Text文件</string>
     <string name="is_loading">載入中…</string>
     <string name="retry">重試</string>
-    <string name="mcp_service_token_required">請先設定 Web 與 MCP 存取權杖</string>
-    <string name="mcp_service_token_invalid">MCP 存取權杖未設定或不正確</string>
-    <string name="mcp_service_start_failed">MCP 服務啟動失敗</string>
     <string name="offline_cache">離線快取</string>
     <string name="offline_cache_t">離線快取</string>
     <string name="offline_cache_s">快取選擇的章節到本機</string>
