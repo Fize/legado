@@ -72,9 +72,9 @@ open class Preference(context: Context, attrs: AttributeSet) :
                 iconView.setColorFilter(context.accentColor)
             }
 
+            val lay = viewHolder.findViewById(R.id.preference_widget) as? FrameLayout
             if (weightLayoutRes != null && weightLayoutRes != 0 && viewId != null && viewId != 0) {
-                val lay = viewHolder.findViewById(R.id.preference_widget)
-                if (lay is FrameLayout) {
+                if (lay != null) {
                     var needRequestLayout = false
                     var v = viewHolder.itemView.findViewById<T>(viewId)
                     if (v == null) {
@@ -84,8 +84,10 @@ open class Preference(context: Context, attrs: AttributeSet) :
                         lay.addView(childView)
                         lay.isVisible = true
                         v = lay.findViewById(viewId)
-                    } else
+                    } else {
+                        lay.isVisible = true
                         needRequestLayout = true
+                    }
 
                     if (weightWidth > 0 || weightHeight > 0) {
                         val lp = lay.layoutParams
@@ -96,11 +98,14 @@ open class Preference(context: Context, attrs: AttributeSet) :
                             lp.width =
                                 (context.resources.displayMetrics.density * weightWidth).roundToInt()
                         lay.layoutParams = lp
-                    } else if (needRequestLayout)
-                        v.requestLayout()
+                    } else if (needRequestLayout) {
+                        viewHolder.itemView.requestLayout()
+                    }
 
                     return v
                 }
+            } else {
+                lay?.isGone = true
             }
 
             return null

@@ -13,7 +13,10 @@ import io.legado.app.lib.prefs.EditTextPreferenceDialog
 import io.legado.app.lib.prefs.ListPreferenceDialog
 import io.legado.app.lib.prefs.MultiSelectListPreferenceDialog
 import io.legado.app.utils.applyNavigationBarPadding
+import android.content.res.Configuration
 import io.legado.app.utils.dpToPx
+import io.legado.app.utils.resolveTabletContentPadding
+import io.legado.app.utils.useTwoPaneLayout
 
 abstract class PreferenceFragment : PreferenceFragmentCompat() {
 
@@ -23,15 +26,36 @@ abstract class PreferenceFragment : PreferenceFragmentCompat() {
         super.onViewCreated(view, savedInstanceState)
         listView.clipToPadding = false
         listView.applyNavigationBarPadding()
-        listView.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
-            val w = right - left
-            if (w != oldRight - oldLeft && w > 0) {
-                val maxContentPx = 680.dpToPx()
-                val hPad = if (w > maxContentPx) (w - maxContentPx) / 2 else 0
-                if (v.paddingLeft != hPad || v.paddingRight != hPad) {
-                    v.setPadding(hPad, v.paddingTop, hPad, v.paddingBottom)
-                }
-            }
+        updateContentPadding()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (view != null) {
+            updateContentPadding()
+        }
+    }
+
+    fun updateContentPadding() {
+        val rv = view?.findViewById< androidx.recyclerview.widget.RecyclerView >(androidx.preference.R.id.recycler_view)
+            ?: return
+        val ctx = context ?: return
+        val screenWidthDp = resources.configuration.screenWidthDp
+        val isDialog = parentFragment is DialogFragment
+        val hPad = if (isDialog || ctx.useTwoPaneLayout) {
+            0
+        } else {
+            resolveTabletContentPadding(
+                containerWidthPx = screenWidthDp.dpToPx(),
+                screenWidthDp = screenWidthDp,
+                maxContentWidthPx = 680.dpToPx(),
+                minTabletPaddingPx = 24.dpToPx(),
+            )
+        }
+        if (rv.paddingLeft != hPad || rv.paddingRight != hPad) {
+            rv.setPadding(hPad, rv.paddingTop, hPad, rv.paddingBottom)
+            rv.adapter?.notifyDataSetChanged()
+            rv.requestLayout()
         }
     }
 

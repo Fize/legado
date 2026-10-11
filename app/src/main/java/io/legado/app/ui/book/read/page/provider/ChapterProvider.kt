@@ -740,7 +740,7 @@ object ChapterProvider {
         viewWidth = width
         viewHeight = height
         upLayout()
-        postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+        postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
     }
 
     /**
@@ -767,12 +767,13 @@ object ChapterProvider {
 
         val basePaddingLeft = ReadBookConfig.paddingLeft.dpToPx()
         val basePaddingRight = ReadBookConfig.paddingRight.dpToPx()
+        val singleColumnMaxWidth = if (viewWidth > viewHeight) 800.dpToPx() else 640.dpToPx()
         val (resolvedLeft, resolvedRight) = io.legado.app.utils.resolveAdaptiveReaderPadding(
             viewWidth = viewWidth,
             configuredLeft = basePaddingLeft,
             configuredRight = basePaddingRight,
             isDoublePage = doublePage,
-            maxSingleColumnWidth = 600.dpToPx(),
+            maxSingleColumnWidth = singleColumnMaxWidth,
             maxDoubleColumnWidth = 500.dpToPx(),
         )
         paddingLeft = resolvedLeft

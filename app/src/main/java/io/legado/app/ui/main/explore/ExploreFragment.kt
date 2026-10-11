@@ -126,23 +126,27 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             val hasDetail = childFragmentManager.findFragmentById(R.id.detail_container) != null
             binding.tvDetailEmpty.isGone = hasDetail
         }
+        val screenWidthDp = resources.configuration.screenWidthDp
         val hPadding = if (!twoPane) {
             io.legado.app.utils.resolveTabletContentPadding(
-                containerWidthPx = resources.displayMetrics.widthPixels,
-                screenWidthDp = resources.configuration.screenWidthDp,
+                containerWidthPx = screenWidthDp.dpToPx(),
+                screenWidthDp = screenWidthDp,
                 maxContentWidthPx = 720.dpToPx(),
                 minTabletPaddingPx = 24.dpToPx(),
             )
         } else {
             0
         }
-        binding.rvFind.setPadding(
-            hPadding,
-            binding.rvFind.paddingTop,
-            hPadding,
-            binding.rvFind.paddingBottom,
-        )
         binding.rvFind.clipToPadding = false
+        if (binding.rvFind.paddingLeft != hPadding || binding.rvFind.paddingRight != hPadding) {
+            binding.rvFind.setPadding(
+                hPadding,
+                binding.rvFind.paddingTop,
+                hPadding,
+                binding.rvFind.paddingBottom,
+            )
+            binding.rvFind.requestLayout()
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

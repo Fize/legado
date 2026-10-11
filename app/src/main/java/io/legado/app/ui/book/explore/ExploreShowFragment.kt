@@ -253,9 +253,18 @@ class ExploreShowFragment : VMBaseFragment<ExploreShowViewModel>(R.layout.fragme
         }
     }
 
+    private fun resolveDetailWidthDp(config: android.content.res.Configuration = resources.configuration): Int {
+        val isTwoPane = io.legado.app.utils.shouldUseTwoPane(config.screenWidthDp, config.screenHeightDp)
+        return if (isTwoPane) {
+            (config.screenWidthDp - 420).coerceAtLeast(320)
+        } else {
+            config.screenWidthDp
+        }
+    }
+
     private fun initRecyclerView() {
         val spanCount = io.legado.app.utils.resolveBookListSpanCount(
-            resources.configuration.screenWidthDp
+            resolveDetailWidthDp()
         )
         val gridLayoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), spanCount)
         gridLayoutManager.spanSizeLookup = object : androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup() {
@@ -297,7 +306,7 @@ class ExploreShowFragment : VMBaseFragment<ExploreShowViewModel>(R.layout.fragme
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         (binding.recyclerView.layoutManager as? androidx.recyclerview.widget.GridLayoutManager)?.spanCount =
-            io.legado.app.utils.resolveBookListSpanCount(newConfig.screenWidthDp)
+            io.legado.app.utils.resolveBookListSpanCount(resolveDetailWidthDp(newConfig))
     }
 
     private fun scrollToBottom(forceLoad: Boolean = false) {

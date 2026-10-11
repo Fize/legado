@@ -165,10 +165,13 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
         isLoaded: Boolean,
     ) {
         val dm = context.resources.displayMetrics
+        val parentView = itemView.parent as? View
+        val containerWidth = parentView?.width?.takeIf { it > 0 } ?: dm.widthPixels
+        val containerHeight = parentView?.height?.takeIf { it > 0 } ?: dm.heightPixels
         if (!isHorizontal) {
             val columnWidth = resolveMangaColumnWidth(
-                containerWidthPx = dm.widthPixels,
-                containerHeightPx = dm.heightPixels,
+                containerWidthPx = containerWidth,
+                containerHeightPx = containerHeight,
                 isHorizontalScroll = false,
                 maxVerticalColumnWidthPx = 680.dpToPx(),
             )
@@ -193,7 +196,7 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
             itemView.minimumHeight = if (isLastImage && isLoaded) minHeight else 0
             mImage.scaleType = ImageView.ScaleType.FIT_XY
         } else if (spreadSlot != MangaSpreadSlot.SINGLE) {
-            val halfWidth = (dm.widthPixels / 2).coerceAtLeast(1)
+            val halfWidth = (containerWidth / 2).coerceAtLeast(1)
             itemView.updateLayoutParams<ViewGroup.LayoutParams> {
                 width = halfWidth
                 height = ViewGroup.LayoutParams.MATCH_PARENT

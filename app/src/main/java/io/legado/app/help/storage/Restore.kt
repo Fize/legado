@@ -493,6 +493,12 @@ object Restore {
                             }
                         }
 
+                        PreferKey.doublePageHorizontal -> {
+                            val raw = value.toString()
+                            edit.putString(key, if (raw == "0") "2" else raw)
+                            edit.putBoolean("doublePageHorizontalMigrated_v310", true)
+                        }
+
                         else -> when (value) {
                             is Int -> edit.putInt(key, value)
                             is Boolean -> edit.putBoolean(key, value)

@@ -85,6 +85,8 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                 updateDetailTitle(currentDetailTag)
             }
         }
+        (childFragmentManager.findFragmentByTag("prefFragment") as? PreferenceFragment)?.updateContentPadding()
+        (childFragmentManager.findFragmentById(R.id.detail_fragment_container) as? PreferenceFragment)?.updateContentPadding()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

@@ -82,8 +82,18 @@ fun DialogFragment.setLayout(width: Int, heightMix: Float) {
 
 fun Dialog.setLayout(width: Int, heightMix: Float) {
     val dm = context.windowManager.windowSize
+    val screenWidthDp = context.resources.configuration.screenWidthDp
+    val gravity = window?.attributes?.gravity ?: android.view.Gravity.NO_GRAVITY
+    val isEdgeSheet = (gravity and android.view.Gravity.VERTICAL_GRAVITY_MASK).let {
+        it == android.view.Gravity.BOTTOM || it == android.view.Gravity.TOP
+    }
+    val resolvedWidth = if (width == android.view.ViewGroup.LayoutParams.MATCH_PARENT && !isEdgeSheet && screenWidthDp >= 600) {
+        resolveDialogWidth(dm.widthPixels, 0.9f, screenWidthDp, 640.dpToPx())
+    } else {
+        width
+    }
     window?.setLayout(
-        width,
+        resolvedWidth,
         (dm.heightPixels * heightMix).toInt()
     )
 }
@@ -107,7 +117,19 @@ fun DialogFragment.setLayout(width: Int, height: Int) {
 }
 
 fun Dialog.setLayout(width: Int, height: Int) {
-    window?.setLayout(width, height)
+    val dm = context.windowManager.windowSize
+    val screenWidthDp = context.resources.configuration.screenWidthDp
+    val gravity = window?.attributes?.gravity ?: android.view.Gravity.NO_GRAVITY
+    val isEdgeSheet = (gravity and android.view.Gravity.VERTICAL_GRAVITY_MASK).let {
+        it == android.view.Gravity.BOTTOM || it == android.view.Gravity.TOP
+    }
+    val isFullScreen = height == android.view.ViewGroup.LayoutParams.MATCH_PARENT
+    val resolvedWidth = if (width == android.view.ViewGroup.LayoutParams.MATCH_PARENT && !isFullScreen && !isEdgeSheet && screenWidthDp >= 600) {
+        resolveDialogWidth(dm.widthPixels, 0.9f, screenWidthDp, 640.dpToPx())
+    } else {
+        width
+    }
+    window?.setLayout(resolvedWidth, height)
 }
 
 fun Dialog.toggleSystemBar(show: Boolean) {

@@ -148,7 +148,7 @@ class MoreConfigDialog : BasePrefDialogFragment() {
 
                 PreferKey.doublePageHorizontal -> {
                     ChapterProvider.upLayout()
-                    ReadBook.loadContent(false)
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
                 }
 
                 PreferKey.showReadTitleAddition,

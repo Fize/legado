@@ -184,18 +184,28 @@ class PageView(context: Context) : FrameLayout(context) {
             tvFooterRight.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
         } else {
             ReadBookConfig.let {
+                val extraLeft = (ChapterProvider.paddingLeft - it.paddingLeft.dpToPx()).coerceAtLeast(0)
+                val extraRight = (ChapterProvider.paddingRight - it.paddingRight.dpToPx()).coerceAtLeast(0)
                 llHeader.setPadding(
-                    it.headerPaddingLeft.dpToPx(),
+                    it.headerPaddingLeft.dpToPx() + extraLeft,
                     it.headerPaddingTop.dpToPx(),
-                    it.headerPaddingRight.dpToPx(),
+                    it.headerPaddingRight.dpToPx() + extraRight,
                     it.headerPaddingBottom.dpToPx()
                 )
                 llFooter.setPadding(
-                    it.footerPaddingLeft.dpToPx(),
+                    it.footerPaddingLeft.dpToPx() + extraLeft,
                     it.footerPaddingTop.dpToPx(),
-                    it.footerPaddingRight.dpToPx(),
+                    it.footerPaddingRight.dpToPx() + extraRight,
                     it.footerPaddingBottom.dpToPx()
                 )
+                vwTopDivider.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                    leftMargin = extraLeft
+                    rightMargin = extraRight
+                }
+                vwBottomDivider.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                    leftMargin = extraLeft
+                    rightMargin = extraRight
+                }
                 vwTopDivider.gone(llHeader.isGone || !it.showHeaderLine)
                 vwBottomDivider.gone(llFooter.isGone || !it.showFooterLine)
             }

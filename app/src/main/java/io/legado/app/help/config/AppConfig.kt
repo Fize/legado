@@ -789,7 +789,15 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     val doublePageHorizontal: String?
-        get() = appCtx.getPrefString(PreferKey.doublePageHorizontal, "2")
+        get() {
+            if (!appCtx.getPrefBoolean("doublePageHorizontalMigrated_v310", false)) {
+                appCtx.putPrefBoolean("doublePageHorizontalMigrated_v310", true)
+                if (appCtx.getPrefString(PreferKey.doublePageHorizontal) == "0") {
+                    appCtx.putPrefString(PreferKey.doublePageHorizontal, "2")
+                }
+            }
+            return appCtx.getPrefString(PreferKey.doublePageHorizontal, "2")
+        }
 
     val progressBarBehavior: String?
         get() = appCtx.getPrefString(PreferKey.progressBarBehavior, "page")
