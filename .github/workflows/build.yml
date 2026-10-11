@@ -128,5 +128,5 @@ jobs:
           removeArtifacts: true
           replacesArtifacts: true
           generateReleaseNotes: true
-          prerelease: false
+          prerelease: ${{ contains(steps.set-ver.outputs.tag, '-') }}
           token: ${{ secrets.GITHUB_TOKEN }}

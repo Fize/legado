@@ -773,12 +773,20 @@ object ChapterProvider {
             configuredRight = basePaddingRight,
             isDoublePage = doublePage,
             maxSingleColumnWidth = 600.dpToPx(),
-            maxDoubleColumnWidth = 520.dpToPx(),
+            maxDoubleColumnWidth = 500.dpToPx(),
         )
         paddingLeft = resolvedLeft
-        paddingTop = ReadBookConfig.paddingTop.dpToPx()
+        paddingTop = if (doublePage) {
+            maxOf(ReadBookConfig.paddingTop.dpToPx(), 16.dpToPx())
+        } else {
+            ReadBookConfig.paddingTop.dpToPx()
+        }
         paddingRight = resolvedRight
-        paddingBottom = ReadBookConfig.paddingBottom.dpToPx()
+        paddingBottom = if (doublePage) {
+            maxOf(ReadBookConfig.paddingBottom.dpToPx(), 16.dpToPx())
+        } else {
+            ReadBookConfig.paddingBottom.dpToPx()
+        }
         visibleWidth = if (doublePage) {
             viewWidth / 2 - paddingLeft - paddingRight
         } else {

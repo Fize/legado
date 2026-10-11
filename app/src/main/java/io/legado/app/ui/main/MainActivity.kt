@@ -255,9 +255,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun upNavigationMode() = binding.run {
-        val expanded = isExpandedScreen
-        navigationRailView.isVisible = expanded
-        bottomNavigationView.isVisible = !expanded
+        val useRail = io.legado.app.utils.shouldUseTwoPane(
+            resources.configuration.screenWidthDp,
+            resources.configuration.screenHeightDp,
+        )
+        navigationRailView.isVisible = useRail
+        bottomNavigationView.isVisible = !useRail
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {

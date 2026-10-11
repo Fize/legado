@@ -1,13 +1,16 @@
 package io.legado.app.ui.book.manga.recyclerview
 
 import android.content.Context
+import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.util.SparseArray
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.annotation.IntRange
+import androidx.core.graphics.ColorUtils
 import androidx.core.util.size
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.AsyncListDiffer
@@ -30,7 +33,9 @@ import io.legado.app.ui.book.manga.entities.EpaperTransformation
 import io.legado.app.ui.book.manga.entities.GrayscaleTransformation
 import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.entities.ReaderLoading
+import io.legado.app.utils. applyMangaColorFilterToBgColor
 import io.legado.app.utils.dpToPx
+import io.legado.app.utils.resolveMangaSpreadSlot
 
 
 class MangaAdapter(private val context: Context) :
@@ -41,12 +46,23 @@ class MangaAdapter(private val context: Context) :
     private var mTransformation: BitmapTransformation? = null
     private var currentMangaEInkThreshold = 0
 
+    var lastResolvedBgColor: Int = Color.WHITE
+        private set
+    var onPageBackgroundColorChanged: ((Int) -> Unit)? = null
+
+    private fun transformBgColor(rawColor: Int): Int {
+        if (!::mConfig.isInitialized) return rawColor
+        return applyMangaColorFilterToBgColor(rawColor, mConfig.r, mConfig.g, mConfig.b)
+    }
+
     companion object {
         private const val LOADING_VIEW = 0
         private const val CONTENT_VIEW = 1
     }
 
     var isHorizontal = false
+    var isDoublePage = false
+    var rightToLeft = false
 
     private val mDiffCallback: DiffUtil.ItemCallback<Any> = object : DiffUtil.ItemCallback<Any>() {
         override fun areItemsTheSame(oldItem: Any, newItem: Any): Boolean {
@@ -93,12 +109,27 @@ class MangaAdapter(private val context: Context) :
                 binding.flProgress
             )
             binding.retry.setOnClickListener {
-                val item = mDiffer.currentList[layoutPosition]
+                val item = mDiffer.currentList.getOrNull(layoutPosition)
                 if (item is MangaPage) {
                     val isLastImage = item.imageCount > 0 && item.index == item.imageCount - 1
-                    loadImageWithRetry(
-                        item.mImageUrl, isHorizontal, isLastImage, mTransformation
+                    val slot = resolveMangaSpreadSlot(
+                        pageIndex = item.index,
+                        imageCount = item.imageCount,
+                        isDoublePage = isHorizontal && isDoublePage,
+                        rightToLeft = rightToLeft,
                     )
+                    loadImageWithRetry(
+                        imageUrl = item.mImageUrl,
+                        isHorizontal = isHorizontal,
+                        isLastImage = isLastImage,
+                        transformation = mTransformation,
+                        spreadSlot = slot,
+                        fallbackBgColor = lastResolvedBgColor,
+                        colorTransform = ::transformBgColor,
+                    ) { resolvedColor ->
+                        lastResolvedBgColor = resolvedColor
+                        onPageBackgroundColorChanged?.invoke(resolvedColor)
+                    }
                 }
             }
         }
@@ -106,7 +137,24 @@ class MangaAdapter(private val context: Context) :
         fun onBind(item: MangaPage) {
             setImageColorFilter()
             val isLastImage = item.imageCount > 0 && item.index == item.imageCount - 1
-            loadImageWithRetry(item.mImageUrl, isHorizontal, isLastImage, mTransformation)
+            val slot = resolveMangaSpreadSlot(
+                pageIndex = item.index,
+                imageCount = item.imageCount,
+                isDoublePage = isHorizontal && isDoublePage,
+                rightToLeft = rightToLeft,
+            )
+            loadImageWithRetry(
+                imageUrl = item.mImageUrl,
+                isHorizontal = isHorizontal,
+                isLastImage = isLastImage,
+                transformation = mTransformation,
+                spreadSlot = slot,
+                fallbackBgColor = lastResolvedBgColor,
+                colorTransform = ::transformBgColor,
+            ) { resolvedColor ->
+                lastResolvedBgColor = resolvedColor
+                onPageBackgroundColorChanged?.invoke(resolvedColor)
+            }
         }
 
         fun setImageColorFilter() {
@@ -133,12 +181,30 @@ class MangaAdapter(private val context: Context) :
         fun onBind(item: ReaderLoading) {
             val message = item.mMessage
             binding.text.text = message
+            val bgColor = lastResolvedBgColor
+            binding.root.setBackgroundColor(bgColor)
+            val isLight = ColorUtils.calculateLuminance(bgColor) > 0.5
+            binding.text.setTextColor(if (isLight) 0xFF333333.toInt() else Color.WHITE)
             itemView.updateLayoutParams {
-                height = if (item.isVolume) {
+                width = MATCH_PARENT
+                height = if (isHorizontal || item.isVolume) {
                     MATCH_PARENT
                 } else {
                     96.dpToPx()
                 }
+            }
+        }
+    }
+
+    override fun onViewAttachedToWindow(holder: RecyclerView.ViewHolder) {
+        super.onViewAttachedToWindow(holder)
+        if (holder is PageViewHolder) {
+            val bgColor = holder.resolvedPageBgColor
+            lastResolvedBgColor = bgColor
+            onPageBackgroundColorChanged?.invoke(bgColor)
+            (holder.itemView.parent as? View)?.let { rv ->
+                rv.setBackgroundColor(bgColor)
+                (rv.parent as? WebtoonFrame)?.setPageBackgroundColor(bgColor)
             }
         }
     }

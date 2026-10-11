@@ -231,6 +231,22 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     }
 
     private fun initRecyclerView() {
+        val spanCount = io.legado.app.utils.resolveBookListSpanCount(
+            resources.configuration.screenWidthDp
+        )
+        val gridLayoutManager = androidx.recyclerview.widget.GridLayoutManager(this, spanCount)
+        gridLayoutManager.spanSizeLookup = object : androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int {
+                val headerCount = adapter.getHeaderCount()
+                val actualCount = adapter.getActualItemCount()
+                return if (position < headerCount || position >= headerCount + actualCount) {
+                    gridLayoutManager.spanCount
+                } else {
+                    1
+                }
+            }
+        }
+        binding.recyclerView.layoutManager = gridLayoutManager
         binding.recyclerView.addItemDecoration(VerticalDivider(this))
         binding.recyclerView.adapter = adapter
         binding.recyclerView.applyNavigationBarPadding()
@@ -253,6 +269,12 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
                 }
             }
         })
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        (binding.recyclerView.layoutManager as? androidx.recyclerview.widget.GridLayoutManager)?.spanCount =
+            io.legado.app.utils.resolveBookListSpanCount(newConfig.screenWidthDp)
     }
 
     private fun scrollToBottom(forceLoad: Boolean = false) {

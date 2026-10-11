@@ -62,6 +62,7 @@ class PageView(context: Context) : FrameLayout(context) {
     private var readerInfoViews = emptyArray<ReaderInfoView>()
     private var isMainView = false
     private var bookmarkIndicatorVisible = false
+    private var progressTextPage: TextPage? = null
     var isScroll = false
     internal val contentViewTop: Float
         get() = binding.vwRoot.top + binding.contentTextView.top.toFloat()
@@ -111,13 +112,121 @@ class PageView(context: Context) : FrameLayout(context) {
         upBg()
     }
 
+    private val isDoublePageSpread: Boolean
+        get() = (textPage.doublePage || ChapterProvider.doublePage) && !isScroll
+
+    private fun applyDoublePageBarLayout() = binding.run {
+        val isDouble = isDoublePageSpread
+        val textColor = ReadBookConfig.textColor
+        val tipColor = with(ReadTipConfig) {
+            if (tipColor == 0) {
+                if (isDouble) io.legado.app.utils.ColorUtils.withAlpha(textColor, 0.48f) else textColor
+            } else {
+                tipColor
+            }
+        }
+        tvHeaderLeft.setColor(tipColor)
+        tvHeaderMiddle.setColor(tipColor)
+        tvHeaderRight.setColor(tipColor)
+        tvFooterLeft.setColor(tipColor)
+        tvFooterMiddle.setColor(tipColor)
+        tvFooterRight.setColor(tipColor)
+
+        if (isDouble) {
+            llHeader.isGone = ReadTipConfig.headerMode == 2
+            llFooter.isGone = ReadTipConfig.footerMode == 1
+            vwTopDivider.isGone = true
+            vwBottomDivider.isGone = true
+            val colPadLeft = ChapterProvider.paddingLeft.takeIf { it > 0 } ?: 64.dpToPx()
+            val colPadRight = ChapterProvider.paddingRight.takeIf { it > 0 } ?: 64.dpToPx()
+            llHeader.setPadding(
+                0,
+                maxOf(ReadBookConfig.headerPaddingTop, 8).dpToPx(),
+                0,
+                maxOf(ReadBookConfig.headerPaddingBottom, 4).dpToPx(),
+            )
+            llFooter.setPadding(
+                0,
+                maxOf(ReadBookConfig.footerPaddingTop, 4).dpToPx(),
+                0,
+                maxOf(ReadBookConfig.footerPaddingBottom, 10).dpToPx(),
+            )
+            tvHeaderLeft.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                width = 0
+                horizontalWeight = 1f
+            }
+            tvHeaderLeft.setPadding(colPadLeft, 0, colPadRight, 0)
+            tvHeaderLeft.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+
+            tvHeaderRight.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                width = 0
+                horizontalWeight = 1f
+                leftToRight = tvHeaderLeft.id
+                leftMargin = 0
+            }
+            tvHeaderRight.setPadding(colPadLeft, 0, colPadRight, 0)
+            tvHeaderRight.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+
+            tvFooterLeft.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                width = 0
+                horizontalWeight = 1f
+            }
+            tvFooterLeft.setPadding(colPadLeft, 0, colPadRight, 0)
+            tvFooterLeft.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+
+            tvFooterRight.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                width = 0
+                horizontalWeight = 1f
+                leftToRight = tvFooterLeft.id
+                leftMargin = 0
+            }
+            tvFooterRight.setPadding(colPadLeft, 0, colPadRight, 0)
+            tvFooterRight.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+        } else {
+            ReadBookConfig.let {
+                llHeader.setPadding(
+                    it.headerPaddingLeft.dpToPx(),
+                    it.headerPaddingTop.dpToPx(),
+                    it.headerPaddingRight.dpToPx(),
+                    it.headerPaddingBottom.dpToPx()
+                )
+                llFooter.setPadding(
+                    it.footerPaddingLeft.dpToPx(),
+                    it.footerPaddingTop.dpToPx(),
+                    it.footerPaddingRight.dpToPx(),
+                    it.footerPaddingBottom.dpToPx()
+                )
+                vwTopDivider.gone(llHeader.isGone || !it.showHeaderLine)
+                vwBottomDivider.gone(llFooter.isGone || !it.showFooterLine)
+            }
+            tvHeaderLeft.setPadding(0, 0, 0, 0)
+            tvHeaderLeft.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            tvHeaderRight.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                width = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                horizontalWeight = 0f
+                leftToRight = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+                leftMargin = 3.dpToPx()
+            }
+            tvHeaderRight.setPadding(0, 0, 0, 0)
+            tvHeaderRight.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+
+            tvFooterLeft.setPadding(0, 0, 0, 0)
+            tvFooterLeft.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            tvFooterRight.updateLayoutParams<androidx.constraintlayout.widget.ConstraintLayout.LayoutParams> {
+                width = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                horizontalWeight = 0f
+                leftToRight = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+                leftMargin = 3.dpToPx()
+            }
+            tvFooterRight.setPadding(0, 0, 0, 0)
+            tvFooterRight.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+        }
+    }
+
     fun upStyle() = binding.run {
         upTipStyle()
         ReadBookConfig.let {
             val textColor = it.textColor
-            val tipColor = with(ReadTipConfig) {
-                if (tipColor == 0) textColor else tipColor
-            }
             val tipDividerColor = with(ReadTipConfig) {
                 when (tipDividerColor) {
                     -1 -> ContextCompat.getColor(context, R.color.divider)
@@ -125,32 +234,13 @@ class PageView(context: Context) : FrameLayout(context) {
                     else -> tipDividerColor
                 }
             }
-            tvHeaderLeft.setColor(tipColor)
-            tvHeaderMiddle.setColor(tipColor)
-            tvHeaderRight.setColor(tipColor)
-            tvFooterLeft.setColor(tipColor)
-            tvFooterMiddle.setColor(tipColor)
-            tvFooterRight.setColor(tipColor)
             vwTopDivider.backgroundColor = tipDividerColor
             vwBottomDivider.backgroundColor = tipDividerColor
             upStatusBar()
             upNavigationBar()
             upPaddingDisplayCutouts()
-            llHeader.setPadding(
-                it.headerPaddingLeft.dpToPx(),
-                it.headerPaddingTop.dpToPx(),
-                it.headerPaddingRight.dpToPx(),
-                it.headerPaddingBottom.dpToPx()
-            )
-            llFooter.setPadding(
-                it.footerPaddingLeft.dpToPx(),
-                it.footerPaddingTop.dpToPx(),
-                it.footerPaddingRight.dpToPx(),
-                it.footerPaddingBottom.dpToPx()
-            )
-            vwTopDivider.gone(llHeader.isGone || !it.showHeaderLine)
-            vwBottomDivider.gone(llFooter.isGone || !it.showFooterLine)
         }
+        applyDoublePageBarLayout()
         readerInfoValues = readerInfoValues.copy(
             time = timeFormat.format(Date(System.currentTimeMillis())),
             battery = battery,
@@ -202,7 +292,7 @@ class PageView(context: Context) : FrameLayout(context) {
         llHeader.isGone = when (ReadTipConfig.headerMode) {
             1 -> false
             2 -> true
-            else -> !ReadBookConfig.hideStatusBar
+            else -> if (isDoublePageSpread) false else !ReadBookConfig.hideStatusBar
         }
         llFooter.isGone = when (ReadTipConfig.footerMode) {
             1 -> true
@@ -246,6 +336,38 @@ class PageView(context: Context) : FrameLayout(context) {
     }
 
     private fun renderReaderInfo() {
+        applyDoublePageBarLayout()
+        if (isDoublePageSpread) {
+            val headerText = readerInfoValues.chapterTitle.ifEmpty { readerInfoValues.bookName }
+            binding.tvHeaderMiddle.isGone = true
+            binding.tvHeaderLeft.isGone = headerText.isEmpty()
+            binding.tvHeaderRight.isGone = headerText.isEmpty()
+            binding.tvHeaderLeft.setTextIfNotEqual(headerText)
+            binding.tvHeaderRight.setTextIfNotEqual(headerText)
+            binding.tvHeaderRight.contentDescription = if (bookmarkIndicatorVisible) {
+                context.getString(R.string.bookmark)
+            } else {
+                null
+            }
+
+            val activePage = progressTextPage ?: textPage
+            val curIdx = activePage.index.coerceAtLeast(0)
+            val rawPageSize = activePage.pageSize
+            val leftNum = curIdx * 2 + 1
+            val rightNum = curIdx * 2 + 2
+            val doubleTotal = when {
+                rawPageSize <= 0 -> "-"
+                activePage.textChapter.isCompleted -> (rawPageSize * 2).toString()
+                else -> "~${rawPageSize * 2}"
+            }
+            binding.tvFooterMiddle.isGone = true
+            binding.tvFooterLeft.isInvisible = false
+            binding.tvFooterLeft.isGone = false
+            binding.tvFooterRight.isGone = false
+            binding.tvFooterLeft.setTextIfNotEqual("$leftNum / $doubleTotal")
+            binding.tvFooterRight.setTextIfNotEqual("$rightNum / $doubleTotal")
+            return
+        }
         readerInfoViews.forEach { readerInfoView ->
             val view = readerInfoView.view
             val template = readerInfoView.template
@@ -414,6 +536,7 @@ class PageView(context: Context) : FrameLayout(context) {
      * 设置进度
      */
     fun setProgress(textPage: TextPage) = textPage.apply {
+        progressTextPage = textPage
         val readProgress = readProgress
         val totalPages = if (textChapter.isCompleted) {
             pageSize.toString()

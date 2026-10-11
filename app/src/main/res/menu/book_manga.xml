@@ -84,6 +84,13 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_enable_manga_double_page"
+        android:checkable="true"
+        android:checked="true"
+        android:title="@string/enable_manga_double_page"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_manga_right_to_left"
         android:checkable="true"
         android:checked="false"

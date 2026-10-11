@@ -246,6 +246,7 @@ object PreferKey {
     const val disableMangaScale = "disableMangaScale"
     const val mangaLongClickSaveImage = "mangaLongClickSaveImage"
     const val disableMangaPageAnim = "disableMangaPageAnim"
+    const val enableMangaDoublePage = "enableMangaDoublePage"
     const val paddingDisplayCutouts = "paddingDisplayCutouts"
     const val autoCheckNewBackup = "autoCheckNewBackup"
     const val autoBackup = "autoBackup"

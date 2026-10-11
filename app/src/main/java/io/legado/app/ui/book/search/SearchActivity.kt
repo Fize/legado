@@ -242,7 +242,10 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         binding.rvHistoryKey.layoutManager = FlexboxLayoutManager(this)
         binding.rvHistoryKey.adapter = historyKeyAdapter
         binding.rvHistoryKey.applyNavigationBarMargin()
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
+        val spanCount = io.legado.app.utils.resolveBookListSpanCount(
+            resources.configuration.screenWidthDp
+        )
+        binding.recyclerView.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, spanCount)
         binding.recyclerView.adapter = adapter
         binding.recyclerView.itemAnimator = null
         binding.recyclerView.applyNavigationBarPadding()
@@ -283,6 +286,12 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                 }
             }
         })
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        (binding.recyclerView.layoutManager as? androidx.recyclerview.widget.GridLayoutManager)?.spanCount =
+            io.legado.app.utils.resolveBookListSpanCount(newConfig.screenWidthDp)
     }
 
     private fun initOtherView() {

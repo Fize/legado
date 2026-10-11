@@ -43,6 +43,8 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     var tapListener: ((MotionEvent) -> Unit)? = null
     var longTapListener: ((MotionEvent) -> Boolean)? = null
     var disableMangaScale = false
+    val isZoomed: Boolean
+        get() = currentScale > 1.01f
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
         halfWidth = MeasureSpec.getSize(widthSpec) / 2
@@ -74,8 +76,20 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     }
 
     fun currentPagePosition(): Int {
+        val lm = layoutManager as? LinearLayoutManager
+        if (lm?.orientation == HORIZONTAL && childCount >= 2) {
+            val firstChild = getChildAt(0)
+            if (firstChild != null && firstChild.width in 1..(width * 3 / 4)) {
+                val probeX = if (lm.reverseLayout) width * 3f / 4f else width / 4f
+                val spreadStartChild = findChildViewUnder(probeX, height / 2f)
+                if (spreadStartChild != null) {
+                    val pos = getChildAdapterPosition(spreadStartChild)
+                    if (pos != NO_POSITION) return pos
+                }
+            }
+        }
         val center = findCenterViewPosition()
-        if (center != NO_POSITION || (layoutManager as? LinearLayoutManager)?.orientation != HORIZONTAL) {
+        if (center != NO_POSITION || lm?.orientation != HORIZONTAL) {
             return center
         }
         // Chapter separators are shorter than the viewport but still occupy one horizontal page.

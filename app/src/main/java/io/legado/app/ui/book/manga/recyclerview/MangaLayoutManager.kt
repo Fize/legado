@@ -4,14 +4,21 @@ import android.content.Context
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
-class MangaLayoutManager(context: Context) :
+class MangaLayoutManager(private val context: Context) :
     LinearLayoutManager(context) {
 
-    private val extraLayoutSpace = context.resources.displayMetrics.heightPixels * 3 / 4
-
-    @Deprecated("Deprecated in Java")
-    override fun getExtraLayoutSpace(state: RecyclerView.State?): Int {
-        return extraLayoutSpace
+    override fun calculateExtraLayoutSpace(
+        state: RecyclerView.State,
+        extraLayoutSpace: IntArray,
+    ) {
+        val dm = context.resources.displayMetrics
+        val space = if (orientation == HORIZONTAL) {
+            maxOf(width, dm.widthPixels)
+        } else {
+            maxOf(height * 3 / 4, dm.heightPixels * 3 / 4)
+        }
+        extraLayoutSpace[0] = space
+        extraLayoutSpace[1] = space
     }
 
 }

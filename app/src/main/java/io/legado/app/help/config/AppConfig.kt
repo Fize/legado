@@ -986,6 +986,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.enableMangaHorizontalScroll, value)
         }
 
+    //漫画横屏双页并排翻页（默认开启）
+    var enableMangaDoublePage: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.enableMangaDoublePage, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.enableMangaDoublePage, value)
+        }
+
     var mangaRightToLeft
         get() = appCtx.getPrefBoolean(PreferKey.mangaRightToLeft, false)
         set(value) {

@@ -40,6 +40,7 @@ import io.legado.app.utils.isExpandedScreen
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.transaction
+import io.legado.app.utils.useTwoPaneLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
@@ -115,22 +116,40 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     }
 
     private fun upTwoPaneLayout() {
-        val expanded = requireContext().isExpandedScreen
+        val twoPane = requireContext().useTwoPaneLayout
         binding.masterContainer.layoutParams = binding.masterContainer.layoutParams.apply {
-            width = if (expanded) 340.dpToPx() else ViewGroup.LayoutParams.MATCH_PARENT
+            width = if (twoPane) 340.dpToPx() else ViewGroup.LayoutParams.MATCH_PARENT
         }
-        binding.paneDivider.isVisible = expanded
-        binding.detailContainer.isVisible = expanded
-        if (expanded) {
+        binding.paneDivider.isVisible = twoPane
+        binding.detailContainer.isVisible = twoPane
+        if (twoPane) {
             val hasDetail = childFragmentManager.findFragmentById(R.id.detail_container) != null
             binding.tvDetailEmpty.isGone = hasDetail
         }
+        val hPadding = if (!twoPane) {
+            io.legado.app.utils.resolveTabletContentPadding(
+                containerWidthPx = resources.displayMetrics.widthPixels,
+                screenWidthDp = resources.configuration.screenWidthDp,
+                maxContentWidthPx = 720.dpToPx(),
+                minTabletPaddingPx = 24.dpToPx(),
+            )
+        } else {
+            0
+        }
+        binding.rvFind.setPadding(
+            hPadding,
+            binding.rvFind.paddingTop,
+            hPadding,
+            binding.rvFind.paddingBottom,
+        )
+        binding.rvFind.clipToPadding = false
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (view != null) {
             upTwoPaneLayout()
+            adapter.notifyDataSetChanged()
         }
     }
 
@@ -321,7 +340,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     override fun openExplore(sourceUrl: String, title: String, exploreUrl: String?) {
         if (exploreUrl.isNullOrBlank()) return
-        if (requireContext().isExpandedScreen) {
+        if (requireContext().useTwoPaneLayout) {
             binding.tvDetailEmpty.isGone = true
             val detailFragment = ExploreShowFragment.newInstance(sourceUrl, title, exploreUrl)
             childFragmentManager.beginTransaction()

@@ -30,7 +30,13 @@ data class FlexChildStyle(
         lp.flexGrow = layout_flexGrow
         lp.flexShrink = layout_flexShrink
         lp.alignSelf = alignSelf()
-        lp.flexBasisPercent = layout_flexBasisPercent
+        val cfg = view.context.resources.configuration
+        val isTwoPane = io.legado.app.utils.shouldUseTwoPane(cfg.screenWidthDp, cfg.screenHeightDp)
+        lp.flexBasisPercent = io.legado.app.utils.resolveExploreFlexBasisPercent(
+            configuredBasis = layout_flexBasisPercent,
+            screenWidthDp = cfg.screenWidthDp,
+            isTwoPane = isTwoPane,
+        )
         lp.isWrapBefore = layout_wrapBefore
     }
 

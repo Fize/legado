@@ -37,9 +37,9 @@ import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.isExpandedScreen
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.useTwoPaneLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInterface {
@@ -72,13 +72,13 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
     }
 
     private fun upTwoPaneLayout() {
-        val expanded = requireContext().isExpandedScreen
+        val twoPane = requireContext().useTwoPaneLayout
         binding.preFragment.layoutParams = binding.preFragment.layoutParams.apply {
-            width = if (expanded) 360.dpToPx() else ViewGroup.LayoutParams.MATCH_PARENT
+            width = if (twoPane) 360.dpToPx() else ViewGroup.LayoutParams.MATCH_PARENT
         }
-        binding.paneDivider.isVisible = expanded
-        binding.detailContainer.isVisible = expanded
-        if (expanded) {
+        binding.paneDivider.isVisible = twoPane
+        binding.detailContainer.isVisible = twoPane
+        if (twoPane) {
             if (childFragmentManager.findFragmentById(R.id.detail_fragment_container) == null) {
                 openConfigDetail(currentDetailTag)
             } else {
@@ -95,7 +95,7 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
     }
 
     fun openConfigDetail(configTag: String): Boolean {
-        if (!requireContext().isExpandedScreen) return false
+        if (!requireContext().useTwoPaneLayout) return false
         currentDetailTag = configTag
         updateDetailTitle(configTag)
         val existing = childFragmentManager.findFragmentByTag("detail:$configTag")
