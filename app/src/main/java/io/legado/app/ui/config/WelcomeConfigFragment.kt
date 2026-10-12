@@ -1,42 +1,59 @@
 package io.legado.app.ui.config
 
-import android.annotation.SuppressLint
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.Preference
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
-import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.addHeaders
 import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.prefs.SwitchPreference
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.BookCover
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.ui.compose.prefs.PreferenceCategoryHeader
+import io.legado.app.ui.compose.prefs.PreferenceItem
+import io.legado.app.ui.compose.prefs.SeekBarPreferenceItem
+import io.legado.app.ui.compose.prefs.SwitchPreferenceItem
+import io.legado.app.ui.compose.prefs.rememberPrefString
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.readUri
 import io.legado.app.utils.removePref
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
 import splitties.init.appCtx
 import java.io.File
 import java.io.FileOutputStream
-class WelcomeConfigFragment : PreferenceFragment(),
+
+class WelcomeConfigFragment : Fragment(),
     SharedPreferences.OnSharedPreferenceChangeListener {
 
+    private var refreshTick by mutableIntStateOf(0)
     private val requestWelcomeImage = 221
     private val requestWelcomeImageDark = 222
     private val selectImage = registerForActivityResult(HandleFileContract()) {
@@ -48,72 +65,44 @@ class WelcomeConfigFragment : PreferenceFragment(),
         }
     }
 
-    // 虽然启动页文字和图标都不显示不太好看，但仍然应该吧权力交给用户，故注释相关代码
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        addPreferencesFromResource(R.xml.pref_config_welcome)
-        val welcomeImage = AppConfig.welcomeImage
-        val welcomeImageDark = AppConfig.welcomeImageDark
-        upPreferenceSummary(PreferKey.welcomeImage, welcomeImage)
-        upPreferenceSummary(PreferKey.welcomeImageDark, welcomeImageDark)
-//        findPreference<SwitchPreference>(PreferKey.welcomeShowText)?.let {
-//            it.isEnabled = !welcomeImage.isNullOrEmpty()
-//        }
-//        findPreference<SwitchPreference>(PreferKey.welcomeShowIcon)?.let {
-//            it.isEnabled = !welcomeImage.isNullOrEmpty()
-//        }
-//        findPreference<SwitchPreference>(PreferKey.welcomeShowTextDark)?.let {
-//            it.isEnabled = !welcomeImageDark.isNullOrEmpty()
-//        }
-//        findPreference<SwitchPreference>(PreferKey.welcomeShowIconDark)?.let {
-//            it.isEnabled = !welcomeImageDark.isNullOrEmpty()
-//        }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        requireContext().defaultSharedPreferences.registerOnSharedPreferenceChangeListener(this)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        requireContext().defaultSharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    WelcomeConfigScreen(refreshTick = refreshTick)
+                }
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         activity?.setTitle(R.string.welcome_style)
-        listView.setEdgeEffectColor(primaryColor)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         sharedPreferences ?: return
-        when (key) {
-            PreferKey.welcomeImage -> {
-                val welcomeImage = getPrefString(key)
-                upPreferenceSummary(key, welcomeImage)
-//                findPreference<SwitchPreference>(PreferKey.welcomeShowText)?.let {
-//                    it.isEnabled = !welcomeImage.isNullOrEmpty()
-//                }
-//                findPreference<SwitchPreference>(PreferKey.welcomeShowIcon)?.let {
-//                    it.isEnabled = !welcomeImage.isNullOrEmpty()
-//                }
-            }
-
-            PreferKey.welcomeImageDark -> {
-                val welcomeImageDark = getPrefString(key)
-                upPreferenceSummary(key, welcomeImageDark)
-//                findPreference<SwitchPreference>(PreferKey.welcomeShowTextDark)?.let {
-//                    it.isEnabled = !welcomeImageDark.isNullOrEmpty()
-//                }
-//                findPreference<SwitchPreference>(PreferKey.welcomeShowIconDark)?.let {
-//                    it.isEnabled = !welcomeImageDark.isNullOrEmpty()
-//                }
-            }
-        }
+        refreshTick++
     }
 
-    @SuppressLint("PrivateResource")
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
+    private data class PreferenceKeyHolder(val key: String)
+
+    private fun onWelcomePreferenceClick(preference: PreferenceKeyHolder) {
         when (preference.key) {
             PreferKey.welcomeImage ->
                 if (getPrefString(preference.key).isNullOrEmpty()) {
@@ -131,15 +120,8 @@ class WelcomeConfigFragment : PreferenceFragment(),
                         if (i == 0) {
                             deleteStoredImage(getPrefString(preference.key))
                             removePref(preference.key)
-//                            AppConfig.welcomeShowText = true
-//                            AppConfig.welcomeShowIcon = true
-//                            findPreference<SwitchPreference>(PreferKey.welcomeShowText)?.let {
-//                                it.isChecked = true
-//                            }
-//                            findPreference<SwitchPreference>(PreferKey.welcomeShowIcon)?.let {
-//                                it.isChecked = true
-//                            }
                             BookCover.upDefaultCover()
+                            refreshTick++
                         } else {
                             selectImage.launch {
                                 requestCode = requestWelcomeImage
@@ -165,15 +147,8 @@ class WelcomeConfigFragment : PreferenceFragment(),
                         if (i == 0) {
                             deleteStoredImage(getPrefString(preference.key))
                             removePref(preference.key)
-//                            AppConfig.welcomeShowTextDark = true
-//                            AppConfig.welcomeShowIconDark = true
-//                            findPreference<SwitchPreference>(PreferKey.welcomeShowTextDark)?.let {
-//                                it.isChecked = true
-//                            }
-//                            findPreference<SwitchPreference>(PreferKey.welcomeShowIconDark)?.let {
-//                                it.isChecked = true
-//                            }
                             BookCover.upDefaultCover()
+                            refreshTick++
                         } else {
                             selectImage.launch {
                                 requestCode = requestWelcomeImageDark
@@ -183,20 +158,89 @@ class WelcomeConfigFragment : PreferenceFragment(),
                     }
                 }
         }
-        return super.onPreferenceTreeClick(preference)
     }
 
-    private fun upPreferenceSummary(preferenceKey: String, value: String?) {
-        val preference = findPreference<Preference>(preferenceKey) ?: return
-        when (preferenceKey) {
-            PreferKey.welcomeImage,
-            PreferKey.welcomeImageDark -> preference.summary = if (value.isNullOrBlank()) {
-                getString(R.string.select_image)
-            } else {
-                value
+    @Composable
+    private fun WelcomeConfigScreen(@Suppress("UNUSED_PARAMETER") refreshTick: Int) {
+        val welcomeImage by rememberPrefString(PreferKey.welcomeImage, "")
+        val welcomeImageDark by rememberPrefString(PreferKey.welcomeImageDark, "")
+        val selectImageLabel = stringResource(R.string.select_image)
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp),
+        ) {
+            item(key = "welcomeShowTime") {
+                SeekBarPreferenceItem(
+                    key = "welcomeShowTime",
+                    default = 500,
+                    min = 0,
+                    max = 800,
+                    title = stringResource(R.string.welcome_show_time),
+                    summary = stringResource(R.string.welcome_show_time_summary),
+                )
+            }
+            item(key = PreferKey.customWelcome) {
+                SwitchPreferenceItem(
+                    key = PreferKey.customWelcome,
+                    default = false,
+                    title = stringResource(R.string.custom_welcome),
+                    summary = stringResource(R.string.custom_welcome_summary),
+                )
+            }
+            item(key = "dayThemeCategory") {
+                PreferenceCategoryHeader(title = stringResource(R.string.day))
+            }
+            item(key = PreferKey.welcomeImage) {
+                PreferenceItem(
+                    title = stringResource(R.string.background_image),
+                    summary = welcomeImage.ifBlank { selectImageLabel },
+                    onClick = { onWelcomePreferenceClick(PreferenceKeyHolder(PreferKey.welcomeImage)) },
+                )
+            }
+            item(key = PreferKey.welcomeShowText) {
+                SwitchPreferenceItem(
+                    key = PreferKey.welcomeShowText,
+                    default = true,
+                    title = stringResource(R.string.show_welcome_text),
+                    summary = stringResource(R.string.welcome_text),
+                )
+            }
+            item(key = PreferKey.welcomeShowIcon) {
+                SwitchPreferenceItem(
+                    key = PreferKey.welcomeShowIcon,
+                    default = true,
+                    title = stringResource(R.string.show_icon),
+                    summary = stringResource(R.string.show_default_book_icon),
+                )
             }
 
-            else -> preference.summary = value
+            item(key = "nightThemeCategory") {
+                PreferenceCategoryHeader(title = stringResource(R.string.night))
+            }
+            item(key = PreferKey.welcomeImageDark) {
+                PreferenceItem(
+                    title = stringResource(R.string.background_image),
+                    summary = welcomeImageDark.ifBlank { selectImageLabel },
+                    onClick = { onWelcomePreferenceClick(PreferenceKeyHolder(PreferKey.welcomeImageDark)) },
+                )
+            }
+            item(key = PreferKey.welcomeShowTextDark) {
+                SwitchPreferenceItem(
+                    key = PreferKey.welcomeShowTextDark,
+                    default = true,
+                    title = stringResource(R.string.show_welcome_text),
+                    summary = stringResource(R.string.welcome_text),
+                )
+            }
+            item(key = PreferKey.welcomeShowIconDark) {
+                SwitchPreferenceItem(
+                    key = PreferKey.welcomeShowIconDark,
+                    default = true,
+                    title = stringResource(R.string.show_icon),
+                    summary = stringResource(R.string.show_default_book_icon),
+                )
+            }
         }
     }
 
@@ -234,6 +278,7 @@ class WelcomeConfigFragment : PreferenceFragment(),
                     val oldPath = getPrefString(preferenceKey)
                     putPrefString(preferenceKey, file.absolutePath)
                     if (oldPath != file.absolutePath) deleteStoredImage(oldPath)
+                    refreshTick++
                 }.onSuccess {
                     appCtx.toastOnUi("设定成功")
                 }.onFailure {
@@ -260,6 +305,7 @@ class WelcomeConfigFragment : PreferenceFragment(),
                 val oldPath = getPrefString(preferenceKey)
                 putPrefString(preferenceKey, file.absolutePath)
                 if (oldPath != file.absolutePath) deleteStoredImage(oldPath)
+                refreshTick++
             }.onFailure {
                 appCtx.toastOnUi(it.localizedMessage)
             }
@@ -275,5 +321,4 @@ class WelcomeConfigFragment : PreferenceFragment(),
         }.getOrDefault(false)
         if (isStoredImage) FileUtils.delete(file)
     }
-
 }

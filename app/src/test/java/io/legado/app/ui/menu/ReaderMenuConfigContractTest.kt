@@ -56,11 +56,11 @@ class ReaderMenuConfigContractTest {
     @Test
     fun menuAndPreferenceExposeConfigurationEntry() {
         val menu = read("src/main/res/menu/book_read.xml")
-        val preference = read("src/main/res/xml/pref_config_read.xml")
+        val preference = read("src/main/java/io/legado/app/ui/book/read/config/MoreConfigDialog.kt")
         val backupConfig = read("src/main/java/io/legado/app/help/storage/BackupConfig.kt")
         assertTrue(menu.contains("@+id/menu_reader_more"))
         assertTrue(menu.contains("@+id/menu_reader_all_features"))
-        assertTrue(preference.contains("android:key=\"customReaderMenu\""))
+        assertTrue(preference.contains("\"customReaderMenu\""))
         assertTrue(backupConfig.contains("PreferKey.readerMenuConfig"))
     }
 

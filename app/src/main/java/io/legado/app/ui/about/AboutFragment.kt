@@ -3,16 +3,29 @@ package io.legado.app.ui.about
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.StringRes
-import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.fragment.app.Fragment
 import io.legado.app.R
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.AppLog
 import io.legado.app.help.CrashHandler
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.ui.compose.prefs.PreferenceCategoryHeader
+import io.legado.app.ui.compose.prefs.PreferenceItem
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.compress.ZipUtils
@@ -33,21 +46,96 @@ import kotlinx.coroutines.delay
 import splitties.init.appCtx
 import java.io.File
 
-class AboutFragment : PreferenceFragmentCompat() {
+class AboutFragment : Fragment() {
 
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        addPreferencesFromResource(R.xml.about)
-        findPreference<Preference>("update_log")?.summary =
-            "${getString(R.string.version)} ${appInfo.versionName}"
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    AboutScreen()
+                }
+            }
+        }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        listView.overScrollMode = View.OVER_SCROLL_NEVER
+    @Composable
+    private fun AboutScreen() {
+        val versionSummary = "${stringResource(R.string.version)} ${appInfo.versionName}"
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp),
+        ) {
+            item(key = "contributors") {
+                PreferenceItem(
+                    title = stringResource(R.string.contributors),
+                    summary = stringResource(R.string.contributors_summary),
+                    onClick = { onAboutItemClick("contributors") },
+                )
+            }
+            item(key = "update_log") {
+                PreferenceItem(
+                    title = stringResource(R.string.update_log),
+                    summary = versionSummary,
+                    onClick = { onAboutItemClick("update_log") },
+                )
+            }
+            item(key = "check_update") {
+                PreferenceItem(
+                    title = stringResource(R.string.check_update),
+                    onClick = { onAboutItemClick("check_update") },
+                )
+            }
+            item(key = "check_beta_update") {
+                PreferenceItem(
+                    title = stringResource(R.string.check_beta_update),
+                    onClick = { onAboutItemClick("check_beta_update") },
+                )
+            }
+
+            item(key = "otherCategory") {
+                PreferenceCategoryHeader(title = stringResource(R.string.other))
+            }
+            item(key = "crashLog") {
+                PreferenceItem(
+                    title = stringResource(R.string.crash_log),
+                    onClick = { onAboutItemClick("crashLog") },
+                )
+            }
+            item(key = "saveLog") {
+                PreferenceItem(
+                    title = stringResource(R.string.save_log),
+                    onClick = { onAboutItemClick("saveLog") },
+                )
+            }
+            item(key = "createHeapDump") {
+                PreferenceItem(
+                    title = stringResource(R.string.create_heap_dump),
+                    onClick = { onAboutItemClick("createHeapDump") },
+                )
+            }
+            item(key = "license") {
+                PreferenceItem(
+                    title = stringResource(R.string.license),
+                    onClick = { onAboutItemClick("license") },
+                )
+            }
+            item(key = "disclaimer") {
+                PreferenceItem(
+                    title = stringResource(R.string.disclaimer),
+                    onClick = { onAboutItemClick("disclaimer") },
+                )
+            }
+        }
     }
 
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
-        when (preference.key) {
+    private fun onAboutItemClick(key: String) {
+        when (key) {
             "contributors" -> openUrl(R.string.contributors_url)
             "check_update" -> checkAppUpdate()
             "check_beta_update" -> checkAppUpdate(beta = true)
@@ -59,7 +147,6 @@ class AboutFragment : PreferenceFragmentCompat() {
             "saveLog" -> saveLog()
             "createHeapDump" -> createHeapDump()
         }
-        return super.onPreferenceTreeClick(preference)
     }
 
     @Suppress("SameParameterValue")
@@ -78,12 +165,11 @@ class AboutFragment : PreferenceFragmentCompat() {
     /**
      * 加入qq群
      */
+    @Suppress("unused")
     private fun joinQQGroup(key: String): Boolean {
         val intent = Intent()
         intent.data =
             Uri.parse("mqqopensdkapi://bizAgent/qm/qr?url=http%3A%2F%2Fqm.qq.com%2Fcgi-bin%2Fqm%2Fqr%3Ffrom%3Dapp%26p%3Dandroid%26k%3D$key")
-        // 此Flag可根据具体产品需要自定义，如设置，则在加群界面按返回，返回手Q主界面，不设置，按返回会返回到呼起产品界面
-        // intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         kotlin.runCatching {
             startActivity(intent)
             return true
@@ -182,5 +268,4 @@ class AboutFragment : PreferenceFragmentCompat() {
             AppLog.put("保存Logcat失败\n$e", e)
         }
     }
-
 }

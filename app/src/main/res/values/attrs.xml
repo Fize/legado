@@ -90,12 +90,6 @@
         <attr name="color_unchecked_stroke" format="color" />
     </declare-styleable>
 
-    <declare-styleable name="NumberPickerPreference">
-        <attr name="MinValue" format="integer" />
-        <attr name="MaxValue" format="integer" />
-        <attr name="android:summary" />
-    </declare-styleable>
-
     <declare-styleable name="RefreshLayout">
         <attr name="layout_refresh_empty" format="reference" />
         <attr name="layout_refresh_error" format="reference" />
@@ -118,10 +112,6 @@
         <attr name="right_top_radius" format="dimension" />
         <attr name="right_bottom_radius" format="dimension" />
         <attr name="left_bottom_radius" format="dimension" />
-    </declare-styleable>
-
-    <declare-styleable name="IconListPreference">
-        <attr name="icons" format="reference" />
     </declare-styleable>
 
     <declare-styleable name="RotateLoading">
@@ -197,10 +187,6 @@
     </declare-styleable>
 
     <declare-styleable name="ThemeRadioNoButton">
-        <attr name="isBottomBackground" />
-    </declare-styleable>
-
-    <declare-styleable name="Preference">
         <attr name="isBottomBackground" />
     </declare-styleable>
 

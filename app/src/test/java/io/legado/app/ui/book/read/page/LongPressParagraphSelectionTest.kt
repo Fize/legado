@@ -36,7 +36,7 @@ class LongPressParagraphSelectionTest {
         val preferKey = source("app/src/main/java/io/legado/app/constant/PreferKey.kt")
         val appConfig = source("app/src/main/java/io/legado/app/help/config/AppConfig.kt")
         val readView = source("app/src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
-        val preferences = source("app/src/main/res/xml/pref_config_read.xml")
+        val preferences = source("app/src/main/java/io/legado/app/ui/book/read/config/MoreConfigDialog.kt")
 
         assertTrue(preferKey.contains("const val longPressSelectParagraph"))
         assertTrue(
@@ -44,8 +44,8 @@ class LongPressParagraphSelectionTest {
                 "getPrefBoolean(PreferKey.longPressSelectParagraph, false)"
             )
         )
-        assertTrue(preferences.contains("android:key=\"longPressSelectParagraph\""))
-        assertTrue(preferences.contains("android:defaultValue=\"false\""))
+        assertTrue(preferences.contains("PreferKey.longPressSelectParagraph"))
+        assertTrue(preferences.contains("default = false"))
         assertTrue(readView.contains("if (AppConfig.longPressSelectParagraph)"))
         assertTrue(readView.contains("visibleParagraphRange("))
         assertTrue(readView.contains("selectableParagraphRange("))

@@ -34,7 +34,6 @@ import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
-import androidx.preference.PreferenceManager
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
 import io.legado.app.constant.AppConst
@@ -175,7 +174,7 @@ internal fun Throwable.isForegroundServiceStartDenied(): Boolean {
 }
 
 val Context.defaultSharedPreferences: SharedPreferences
-    get() = PreferenceManager.getDefaultSharedPreferences(this)
+    get() = getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
 
 fun Context.getPrefBoolean(key: String, defValue: Boolean = false) =
     defaultSharedPreferences.getBooleanCompat(key, defValue)

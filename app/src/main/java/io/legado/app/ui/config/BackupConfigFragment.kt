@@ -4,27 +4,54 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
-import android.text.InputType
 import android.text.format.Formatter
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
+import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog as ComposeAlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.core.view.MenuProvider
-import androidx.core.widget.doAfterTextChanged
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.EditTextPreference
-import androidx.preference.ListPreference
-import androidx.preference.Preference
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogAutoBackupBinding
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogLanBackupSendBinding
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.config.AppConfig
@@ -40,24 +67,29 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.compose.component.LegadoTextInputDialog
+import io.legado.app.ui.compose.component.combinedClickableCompat
+import io.legado.app.ui.compose.prefs.EditTextPreferenceItem
+import io.legado.app.ui.compose.prefs.PreferenceCategoryHeader
+import io.legado.app.ui.compose.prefs.PreferenceItem
+import io.legado.app.ui.compose.prefs.SwitchPreferenceItem
+import io.legado.app.ui.compose.prefs.rememberPrefBoolean
+import io.legado.app.ui.compose.prefs.rememberPrefString
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.QRCodeUtils
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.defaultSharedPreferences
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.toEditable
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -68,12 +100,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
-class BackupConfigFragment : PreferenceFragment(),
-    SharedPreferences.OnSharedPreferenceChangeListener,
-    MenuProvider {
+class BackupConfigFragment : Fragment(),
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val viewModel by activityViewModels<ConfigViewModel>()
     private val waitDialog by lazy { WaitDialog(requireContext()) }
+    private var refreshTick by mutableIntStateOf(0)
+    private var showAutoBackupDialog by mutableStateOf(false)
+    private var showLocalPasswordDialog by mutableStateOf(false)
     private var backupJob: Job? = null
     private var manualBackupUploadWebDav = true
     private var restoreJob: Job? = null
@@ -88,6 +122,7 @@ class BackupConfigFragment : PreferenceFragment(),
             } else {
                 AppConfig.backupPath = uri.path
             }
+            refreshTick++
         }
     }
     private val backupDir = registerForActivityResult(HandleFileContract()) { result ->
@@ -101,6 +136,7 @@ class BackupConfigFragment : PreferenceFragment(),
                     backup(path, manualBackupUploadWebDav)
                 }
             }
+            refreshTick++
         }
     }
     private val restoreDoc = registerForActivityResult(HandleFileContract()) {
@@ -126,40 +162,10 @@ class BackupConfigFragment : PreferenceFragment(),
         it?.let(::confirmLanBackupReceive)
     }
 
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         manualBackupUploadWebDav = savedInstanceState?.getBoolean("manualBackupUploadWebDav", true) ?: true
-        addPreferencesFromResource(R.xml.pref_config_backup)
-        findPreference<EditTextPreference>(PreferKey.webDavPassword)?.let {
-            it.setOnBindEditTextListener { editText ->
-                editText.inputType =
-                    InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_CLASS_TEXT
-                editText.setSelection(editText.text.length)
-            }
-        }
-        findPreference<EditTextPreference>(PreferKey.webDavDir)?.let {
-            it.setOnBindEditTextListener { editText ->
-                editText.text = AppConfig.webDavDir?.toEditable()
-                editText.setSelection(editText.text.length)
-            }
-        }
-        findPreference<EditTextPreference>(PreferKey.webDavDeviceName)?.let {
-            it.setOnBindEditTextListener { editText ->
-                editText.text = AppConfig.webDavDeviceName?.toEditable()
-                editText.setSelection(editText.text.length)
-            }
-        }
-        upPreferenceSummary(PreferKey.webDavUrl, getPrefString(PreferKey.webDavUrl))
-        upPreferenceSummary(PreferKey.webDavAccount, getPrefString(PreferKey.webDavAccount))
-        upPreferenceSummary(PreferKey.webDavPassword, getPrefString(PreferKey.webDavPassword))
-        upPreferenceSummary(PreferKey.webDavDir, AppConfig.webDavDir)
-        upPreferenceSummary(PreferKey.webDavDeviceName, AppConfig.webDavDeviceName)
-        upPreferenceSummary(PreferKey.backupPath, getPrefString(PreferKey.backupPath))
-        updateAutoBackupSummary()
-        findPreference<io.legado.app.lib.prefs.Preference>("web_dav_restore")
-            ?.onLongClick {
-                restoreFromLocal()
-                true
-            }
+        requireContext().defaultSharedPreferences.registerOnSharedPreferenceChangeListener(this)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -167,44 +173,48 @@ class BackupConfigFragment : PreferenceFragment(),
         outState.putBoolean("manualBackupUploadWebDav", manualBackupUploadWebDav)
     }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    BackupConfigScreen()
+                }
+            }
+        }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         activity?.setTitle(R.string.backup_restore)
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-        listView.setEdgeEffectColor(primaryColor)
-        activity?.addMenuProvider(this, viewLifecycleOwner)
     }
 
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.backup_restore, menu)
-        menu.applyTint(requireContext())
+    fun launchImportOld() {
+        restoreOld.launch()
     }
 
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
-            R.id.menu_import_old -> {
-                restoreOld.launch()
-                return true
-            }
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return false
+    fun showAppLog() {
+        showDialogFragment<AppLogDialog>()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
+        requireContext().defaultSharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        refreshTick++
         when (key) {
             PreferKey.autoBackup, PreferKey.autoBackupWebDav, PreferKey.autoBackupIntervalDays -> updateAutoBackupSummary()
             PreferKey.backupPath -> upPreferenceSummary(key, getPrefString(key))
             PreferKey.webDavUrl,
             PreferKey.webDavAccount,
             PreferKey.webDavPassword,
-            PreferKey.webDavDir -> listView.post {
+            PreferKey.webDavDir -> {
                 upPreferenceSummary(key, appCtx.getPrefString(key))
                 viewModel.upWebDavConfig()
             }
@@ -213,51 +223,44 @@ class BackupConfigFragment : PreferenceFragment(),
         }
     }
 
-    private fun upPreferenceSummary(preferenceKey: String, value: String?) {
-        val preference = findPreference<Preference>(preferenceKey) ?: return
-        when (preferenceKey) {
-            PreferKey.backupPath -> preference.summary =
+    private fun upPreferenceSummary(preferenceKey: String, value: String?): String? {
+        return when (preferenceKey) {
+            PreferKey.backupPath ->
                 value?.takeIf { it.isNotBlank() } ?: defaultBackupPathSummary()
 
             PreferKey.webDavUrl ->
                 if (value.isNullOrBlank()) {
-                    preference.summary = getString(R.string.web_dav_url_s)
+                    getString(R.string.web_dav_url_s)
                 } else {
-                    preference.summary = value
+                    value
                 }
 
             PreferKey.webDavAccount ->
                 if (value.isNullOrBlank()) {
-                    preference.summary = getString(R.string.web_dav_account_s)
+                    getString(R.string.web_dav_account_s)
                 } else {
-                    preference.summary = value
+                    value
                 }
 
             PreferKey.webDavPassword ->
                 if (value.isNullOrEmpty()) {
-                    preference.summary = getString(R.string.web_dav_pw_s)
+                    getString(R.string.web_dav_pw_s)
                 } else {
-                    preference.summary = "*".repeat(value.length)
+                    "*".repeat(value.length)
                 }
 
-            PreferKey.webDavDir -> preference.summary = when (value) {
+            PreferKey.webDavDir -> when (value) {
                 null -> "legado"
                 else -> value
             }
 
-            else -> {
-                if (preference is ListPreference) {
-                    val index = preference.findIndexOfValue(value)
-                    // Set the summary to reflect the new value.
-                    preference.summary = if (index >= 0) preference.entries[index] else null
-                } else {
-                    preference.summary = value
-                }
-            }
+            else -> value
         }
     }
 
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
+    private data class PreferenceKeyRef(val key: String)
+
+    private fun onPreferenceTreeClick(preference: PreferenceKeyRef): Boolean {
         when (preference.key) {
             PreferKey.backupPath -> showBackupPathSelector()
             PreferKey.backupContent -> backupContent()
@@ -268,57 +271,306 @@ class BackupConfigFragment : PreferenceFragment(),
             "web_dav_restore" -> restore()
             "lan_backup_transfer" -> lanBackupTransfer()
         }
-        return super.onPreferenceTreeClick(preference)
+        return true
     }
 
     private fun defaultBackupPathSummary() =
         "${getString(R.string.default_path)}\n${requireContext().externalFiles.absolutePath}"
 
-    private fun updateAutoBackupSummary() {
-        findPreference<Preference>(PreferKey.autoBackup)?.summary = if (AppConfig.autoBackup) {
-            getString(R.string.auto_backup_destination_summary,
+    private fun updateAutoBackupSummary(): String {
+        return if (AppConfig.autoBackup) {
+            getString(
+                R.string.auto_backup_destination_summary,
                 getString(if (AppConfig.autoBackupWebDav) R.string.backup_local_webdav else R.string.backup_local_only),
-                AppConfig.autoBackupIntervalDays)
+                AppConfig.autoBackupIntervalDays
+            )
         } else getString(R.string.auto_backup_disabled)
     }
 
     private fun configureAutoBackup() {
-        val binding = DialogAutoBackupBinding.inflate(layoutInflater)
-        binding.enabled.isChecked = AppConfig.autoBackup
-        binding.destination.check(if (AppConfig.autoBackupWebDav) R.id.local_webdav else R.id.local_only)
-        binding.intervalDays.setText(AppConfig.autoBackupIntervalDays.toString())
-        binding.intervalDays.doAfterTextChanged { binding.intervalDays.error = null }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.auto_backup_t)
-            .setView(binding.root)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.ok, null)
-            .create().apply {
-                setOnShowListener {
-                    getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val days = binding.intervalDays.text.toString().toIntOrNull()
+        showAutoBackupDialog = true
+    }
+
+    @Composable
+    private fun BackupConfigScreen() {
+        val syncBookProgress by rememberPrefBoolean(PreferKey.syncBookProgress, true)
+        val webDavUrl by rememberPrefString(PreferKey.webDavUrl, "")
+        val webDavAccount by rememberPrefString(PreferKey.webDavAccount, "")
+        val webDavPassword by rememberPrefString(PreferKey.webDavPassword, "")
+        val webDavDir by rememberPrefString(PreferKey.webDavDir, AppConfig.webDavDir ?: "legado")
+        val webDavDeviceName by rememberPrefString(
+            PreferKey.webDavDeviceName,
+            AppConfig.webDavDeviceName.orEmpty()
+        )
+        val backupPath by rememberPrefString(PreferKey.backupPath, "")
+        val backupPathSummary = remember(refreshTick, backupPath) {
+            upPreferenceSummary(PreferKey.backupPath, backupPath)
+        }
+        val autoBackupSummary = remember(refreshTick) {
+            updateAutoBackupSummary()
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp),
+        ) {
+            item(key = "webDavCategory") {
+                PreferenceCategoryHeader(title = stringResource(R.string.web_dav_set))
+            }
+            item(key = PreferKey.webDavUrl) {
+                EditTextPreferenceItem(
+                    key = PreferKey.webDavUrl,
+                    title = stringResource(R.string.web_dav_url),
+                    summary = upPreferenceSummary(PreferKey.webDavUrl, webDavUrl),
+                )
+            }
+            item(key = PreferKey.webDavAccount) {
+                EditTextPreferenceItem(
+                    key = PreferKey.webDavAccount,
+                    title = stringResource(R.string.web_dav_account),
+                    summary = upPreferenceSummary(PreferKey.webDavAccount, webDavAccount),
+                )
+            }
+            item(key = PreferKey.webDavPassword) {
+                EditTextPreferenceItem(
+                    key = PreferKey.webDavPassword,
+                    title = stringResource(R.string.web_dav_pw),
+                    summary = upPreferenceSummary(PreferKey.webDavPassword, webDavPassword),
+                    isPassword = true,
+                )
+            }
+            item(key = PreferKey.webDavDir) {
+                EditTextPreferenceItem(
+                    key = PreferKey.webDavDir,
+                    default = AppConfig.webDavDir ?: "legado",
+                    title = stringResource(R.string.sub_dir),
+                    summary = upPreferenceSummary(PreferKey.webDavDir, webDavDir),
+                )
+            }
+            item(key = PreferKey.webDavDeviceName) {
+                EditTextPreferenceItem(
+                    key = PreferKey.webDavDeviceName,
+                    default = AppConfig.webDavDeviceName.orEmpty(),
+                    title = stringResource(R.string.webdav_device_name),
+                    summary = webDavDeviceName.ifBlank { AppConfig.webDavDeviceName.orEmpty() },
+                )
+            }
+            item(key = PreferKey.webDavBookAutoRestore) {
+                SwitchPreferenceItem(
+                    key = PreferKey.webDavBookAutoRestore,
+                    default = false,
+                    title = stringResource(R.string.webdav_book_auto_restore_t),
+                    summary = stringResource(R.string.webdav_book_auto_restore_s),
+                )
+            }
+            item(key = PreferKey.syncBookProgress) {
+                SwitchPreferenceItem(
+                    key = PreferKey.syncBookProgress,
+                    default = true,
+                    title = stringResource(R.string.sync_book_progress_t),
+                    summary = stringResource(R.string.sync_book_progress_s),
+                )
+            }
+            item(key = PreferKey.syncBookProgressPlus) {
+                SwitchPreferenceItem(
+                    key = PreferKey.syncBookProgressPlus,
+                    default = false,
+                    title = stringResource(R.string.sync_book_progress_plus_t),
+                    summary = stringResource(R.string.sync_book_progress_plus_s),
+                    enabled = syncBookProgress,
+                )
+            }
+
+            item(key = "backupRestoreCategory") {
+                PreferenceCategoryHeader(title = stringResource(R.string.backup_restore))
+            }
+            item(key = "localPassword") {
+                PreferenceItem(
+                    title = stringResource(R.string.set_local_password),
+                    summary = stringResource(R.string.set_local_password_summary),
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef("localPassword")) },
+                )
+            }
+            item(key = PreferKey.backupPath) {
+                PreferenceItem(
+                    title = stringResource(R.string.backup_path),
+                    summary = backupPathSummary,
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef(PreferKey.backupPath)) },
+                )
+            }
+            item(key = PreferKey.backupContent) {
+                PreferenceItem(
+                    title = stringResource(R.string.backup_content),
+                    summary = stringResource(R.string.backup_content_summary),
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef(PreferKey.backupContent)) },
+                )
+            }
+            item(key = "lan_backup_transfer") {
+                PreferenceItem(
+                    title = stringResource(R.string.lan_backup_transfer),
+                    summary = stringResource(R.string.lan_backup_transfer_summary),
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef("lan_backup_transfer")) },
+                )
+            }
+            item(key = "web_dav_backup") {
+                PreferenceItem(
+                    title = stringResource(R.string.backup),
+                    summary = stringResource(R.string.backup_destination_summary),
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef("web_dav_backup")) },
+                )
+            }
+            item(key = "web_dav_restore") {
+                PreferenceItem(
+                    title = stringResource(R.string.restore),
+                    summary = stringResource(R.string.restore_summary),
+                    onLongClick = { restoreFromLocal() },
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef("web_dav_restore")) },
+                )
+            }
+            item(key = PreferKey.restoreIgnore) {
+                PreferenceItem(
+                    title = stringResource(R.string.restore_ignore),
+                    summary = stringResource(R.string.restore_ignore_summary),
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef(PreferKey.restoreIgnore)) },
+                )
+            }
+            item(key = PreferKey.onlyLatestBackup) {
+                SwitchPreferenceItem(
+                    key = PreferKey.onlyLatestBackup,
+                    default = true,
+                    title = stringResource(R.string.only_latest_backup_t),
+                    summary = stringResource(R.string.only_latest_backup_s),
+                )
+            }
+            item(key = PreferKey.autoBackup) {
+                PreferenceItem(
+                    title = stringResource(R.string.auto_backup_t),
+                    summary = autoBackupSummary,
+                    onClick = { onPreferenceTreeClick(PreferenceKeyRef(PreferKey.autoBackup)) },
+                )
+            }
+            item(key = PreferKey.autoCheckNewBackup) {
+                SwitchPreferenceItem(
+                    key = PreferKey.autoCheckNewBackup,
+                    default = true,
+                    title = stringResource(R.string.auto_check_new_backup_t),
+                    summary = stringResource(R.string.auto_check_new_backup_s),
+                )
+            }
+        }
+
+        if (showAutoBackupDialog) {
+            var enabled by remember { mutableStateOf(AppConfig.autoBackup) }
+            var uploadWebDav by remember { mutableStateOf(AppConfig.autoBackupWebDav) }
+            var daysText by remember { mutableStateOf(AppConfig.autoBackupIntervalDays.toString()) }
+            var hasError by remember { mutableStateOf(false) }
+
+            ComposeAlertDialog(
+                onDismissRequest = { showAutoBackupDialog = false },
+                modifier = Modifier.widthIn(max = 480.dp),
+                title = { Text(stringResource(R.string.auto_backup_t)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickableCompat(onClick = { enabled = !enabled })
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.auto_backup_t),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Switch(checked = enabled, onCheckedChange = { enabled = it })
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickableCompat(onClick = { uploadWebDav = false })
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = !uploadWebDav, onClick = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(R.string.backup_local_only))
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickableCompat(onClick = { uploadWebDav = true })
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = uploadWebDav, onClick = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(R.string.backup_local_webdav))
+                        }
+
+                        OutlinedTextField(
+                            value = daysText,
+                            onValueChange = {
+                                daysText = it
+                                hasError = false
+                            },
+                            label = { Text(stringResource(R.string.auto_backup_interval_days)) },
+                            isError = hasError,
+                            supportingText = if (hasError) {
+                                { Text(stringResource(R.string.auto_backup_interval_invalid)) }
+                            } else null,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAutoBackupDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val days = daysText.toIntOrNull()
                         if (days == null || days < 1) {
-                            binding.intervalDays.error = getString(R.string.auto_backup_interval_invalid)
-                            return@setOnClickListener
+                            hasError = true
+                            return@TextButton
                         }
                         requireContext().defaultSharedPreferences.edit()
-                            .putBoolean(PreferKey.autoBackup, binding.enabled.isChecked)
-                            .putBoolean(PreferKey.autoBackupWebDav, binding.destination.checkedRadioButtonId == R.id.local_webdav)
-                            .putInt(PreferKey.autoBackupIntervalDays, days).apply()
-                        dismiss()
+                            .putBoolean(PreferKey.autoBackup, enabled)
+                            .putBoolean(PreferKey.autoBackupWebDav, uploadWebDav)
+                            .putInt(PreferKey.autoBackupIntervalDays, days)
+                            .apply()
+                        refreshTick++
+                        showAutoBackupDialog = false
+                    }) {
+                        Text(stringResource(R.string.ok))
                     }
                 }
-                show()
-            }
+            )
+        }
+
+        if (showLocalPasswordDialog) {
+            LegadoTextInputDialog(
+                title = stringResource(R.string.set_local_password),
+                message = stringResource(R.string.set_local_password_summary),
+                initialValue = LocalConfig.password ?: "",
+                hint = "password",
+                isPassword = true,
+                onDismiss = { showLocalPasswordDialog = false },
+                onConfirm = { value ->
+                    LocalConfig.password = value
+                    showLocalPasswordDialog = false
+                }
+            )
+        }
     }
 
     private fun alertLocalPassword() {
-        alert(R.string.set_local_password, R.string.set_local_password_summary) {
-            val binding = DialogEditTextBinding.inflate(layoutInflater).apply { editView.hint = "password" }
-            customView { binding.root }
-            okButton { LocalConfig.password = binding.editView.text.toString() }
-            cancelButton()
-        }
+        showLocalPasswordDialog = true
     }
 
     private fun showBackupPathSelector() {
@@ -333,6 +585,7 @@ class BackupConfigFragment : PreferenceFragment(),
                 0 -> AppConfig.backupPath = null
                 1 -> selectBackupPath.launch()
             }
+            refreshTick++
         }
     }
 
@@ -405,18 +658,40 @@ class BackupConfigFragment : PreferenceFragment(),
         lanBackupDialog?.dismiss()
         lanBackupSession?.close()
         lanBackupSession = session
-        val binding = DialogLanBackupSendBinding.inflate(layoutInflater).apply {
-            ivQrCode.setImageBitmap(qrCode)
+        val ctx = requireContext()
+        val rootLayout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(24.dpToPx(), 16.dpToPx(), 24.dpToPx(), 16.dpToPx())
+            addView(
+                ImageView(ctx).apply {
+                    contentDescription = getString(R.string.lan_backup_waiting)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setImageBitmap(qrCode)
+                },
+                LinearLayout.LayoutParams(240.dpToPx(), 240.dpToPx())
+            )
+            addView(
+                TextView(ctx).apply {
+                    gravity = Gravity.CENTER
+                    text = getString(R.string.lan_backup_waiting)
+                    textSize = 14f
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 12.dpToPx() }
+            )
         }
         lateinit var dialog: AlertDialog
         val expireTask = Runnable {
             if (lanBackupSession === session) dialog.dismiss()
         }
         dialog = alert(R.string.lan_backup_send) {
-            customView { binding.root }
+            customView { rootLayout }
             cancelButton()
             onDismiss {
-                binding.root.removeCallbacks(expireTask)
+                rootLayout.removeCallbacks(expireTask)
                 if (lanBackupSession === session) {
                     lanBackupSession = null
                     session.close()
@@ -427,7 +702,7 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
         lanBackupDialog = dialog
-        binding.root.postDelayed(
+        rootLayout.postDelayed(
             expireTask,
             (session.descriptor.expiresAt - System.currentTimeMillis()).coerceAtLeast(0L),
         )
@@ -515,7 +790,6 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
     }
-
 
     fun backup() {
         requireContext().selector(R.string.backup, listOf(
@@ -625,9 +899,7 @@ class BackupConfigFragment : PreferenceFragment(),
                     items = names
                 ) { _, index ->
                     if (index in 0 until names.size) {
-                        listView.post {
-                            restoreWebDav(names[index])
-                        }
+                        restoreWebDav(names[index])
                     }
                 }
             }
@@ -678,5 +950,4 @@ class BackupConfigFragment : PreferenceFragment(),
         lanBackupSession = null
         super.onStop()
     }
-
 }

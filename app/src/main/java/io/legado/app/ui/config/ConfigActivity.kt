@@ -1,70 +1,151 @@
 package io.legado.app.ui.config
 
 import android.os.Bundle
-import android.view.Menu
+import android.view.View
 import androidx.activity.viewModels
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.Fragment
-import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
-import androidx.preference.PreferenceGroup
-import io.legado.app.ui.main.my.MyFragment.MyPreferenceFragment
+import androidx.fragment.app.FragmentContainerView
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityConfigBinding
-import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.compose.component.LegadoDropdownMenuItem
+import io.legado.app.ui.compose.component.LegadoOverflowMenuButton
+import io.legado.app.ui.compose.component.LegadoTopAppBar
+import io.legado.app.ui.main.my.MyFragment.MyPreferenceFragment
 import io.legado.app.utils.observeEvent
-import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() {
+class ConfigActivity : BaseComposeActivity() {
 
-    override val binding by viewBinding(ActivityConfigBinding::inflate)
-    override val viewModel by viewModels<ConfigViewModel>()
+    val viewModel by viewModels<ConfigViewModel>()
+    private var titleResId by mutableIntStateOf(R.string.setting)
+    private var currentConfigTag by mutableStateOf("")
+    @PublishedApi
+    internal var containerViewId: Int = View.NO_ID
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        when (val configTag = intent.getStringExtra("configTag")) {
-            ConfigTag.MY_MORE -> replaceFragment<MyPreferenceFragment>(configTag)
-            ConfigTag.OTHER_CONFIG -> replaceFragment<OtherConfigFragment>(configTag)
-            ConfigTag.THEME_CONFIG -> replaceFragment<ThemeConfigFragment>(configTag)
-            ConfigTag.BACKUP_CONFIG -> replaceFragment<BackupConfigFragment>(configTag)
-            ConfigTag.COVER_CONFIG -> replaceFragment<CoverConfigFragment>(configTag)
-            ConfigTag.COVER_FONT_CONFIG -> replaceFragment<CoverFontConfigFragment>(configTag)
-            ConfigTag.WELCOME_CONFIG -> replaceFragment<WelcomeConfigFragment>(configTag)
-            else -> finish()
+        val configTag = intent.getStringExtra("configTag")
+        if (configTag.isNullOrBlank()) {
+            finish()
+            return
+        }
+        currentConfigTag = configTag
+        titleResId = when (configTag) {
+            ConfigTag.MY_MORE -> R.string.reader_menu_more
+            ConfigTag.OTHER_CONFIG -> R.string.other_setting
+            ConfigTag.THEME_CONFIG -> R.string.theme_setting
+            ConfigTag.BACKUP_CONFIG -> R.string.backup_restore
+            ConfigTag.COVER_CONFIG -> R.string.cover_config
+            ConfigTag.COVER_FONT_CONFIG -> R.string.cover_font_config
+            ConfigTag.WELCOME_CONFIG -> R.string.welcome_style
+            else -> R.string.setting
+        }
+    }
+
+    @Composable
+    override fun Content() {
+        val hostId = remember {
+            View.generateViewId().also { containerViewId = it }
+        }
+        val tag = currentConfigTag.ifBlank { intent.getStringExtra("configTag").orEmpty() }
+
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(titleResId),
+                    onNavigationClick = { finish() },
+                    actions = {
+                        when (tag) {
+                            ConfigTag.THEME_CONFIG -> {
+                                TextButton(
+                                    onClick = {
+                                        (supportFragmentManager.findFragmentByTag(tag)
+                                            as? ThemeConfigFragment)?.toggleThemeMode()
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.theme_mode))
+                                }
+                            }
+                            ConfigTag.BACKUP_CONFIG -> {
+                                LegadoOverflowMenuButton { dismiss ->
+                                    LegadoDropdownMenuItem(
+                                        text = stringResource(R.string.menu_import_old_version),
+                                        onClick = {
+                                            dismiss()
+                                            (supportFragmentManager.findFragmentByTag(tag)
+                                                as? BackupConfigFragment)?.launchImportOld()
+                                        }
+                                    )
+                                    LegadoDropdownMenuItem(
+                                        text = stringResource(R.string.log),
+                                        onClick = {
+                                            dismiss()
+                                            (supportFragmentManager.findFragmentByTag(tag)
+                                                as? BackupConfigFragment)?.showAppLog()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        FragmentContainerView(ctx).apply {
+                            id = hostId
+                            when (tag) {
+                                ConfigTag.MY_MORE -> replaceFragment<MyPreferenceFragment>(tag)
+                                ConfigTag.OTHER_CONFIG -> replaceFragment<OtherConfigFragment>(tag)
+                                ConfigTag.THEME_CONFIG -> replaceFragment<ThemeConfigFragment>(tag)
+                                ConfigTag.BACKUP_CONFIG -> replaceFragment<BackupConfigFragment>(tag)
+                                ConfigTag.COVER_CONFIG -> replaceFragment<CoverConfigFragment>(tag)
+                                ConfigTag.COVER_FONT_CONFIG -> replaceFragment<CoverFontConfigFragment>(tag)
+                                ConfigTag.WELCOME_CONFIG -> replaceFragment<WelcomeConfigFragment>(tag)
+                                else -> finish()
+                            }
+                        }
+                    }
+                )
+            }
         }
     }
 
     override fun setTitle(resId: Int) {
         super.setTitle(resId)
-        binding.titleBar.setTitle(resId)
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.search_view, menu)
-        (menu.findItem(R.id.menu_search).actionView as SearchView).apply {
-            queryHint = getString(R.string.search)
-            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String?): Boolean {
-                    showPreferenceSearchResults(query.orEmpty(), this@apply)
-                    return true
-                }
-
-                override fun onQueryTextChange(newText: String?): Boolean = false
-            })
-        }
-        return super.onCompatCreateOptionsMenu(menu)
+        titleResId = resId
     }
 
     inline fun <reified T : Fragment> replaceFragment(configTag: String) {
         intent.putExtra("configTag", configTag)
+        if (containerViewId == View.NO_ID) return
         @Suppress("DEPRECATION")
         val configFragment = supportFragmentManager.findFragmentByTag(configTag)
             ?: T::class.java.newInstance()
         supportFragmentManager.beginTransaction()
-            .replace(R.id.configFrameLayout, configFragment, configTag)
-            .commit()
+            .replace(containerViewId, configFragment, configTag)
+            .commitAllowingStateLoss()
     }
 
     override fun observeLiveBus() {
@@ -73,69 +154,6 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
             recreate()
         }
     }
-
-    private fun showPreferenceSearchResults(query: String, searchView: SearchView) {
-        val normalizedQuery = query.trim()
-        if (normalizedQuery.isEmpty()) return
-        val fragment = supportFragmentManager.findFragmentById(R.id.configFrameLayout)
-            as? PreferenceFragmentCompat ?: return
-        val results = findPreferenceSearchResults(fragment.preferenceScreen, normalizedQuery)
-        if (results.isEmpty()) {
-            toastOnUi(R.string.config_search_empty)
-            return
-        }
-        selector(R.string.search, results) { _, result, _ ->
-            searchView.setQuery("", false)
-            searchView.clearFocus()
-            searchView.isIconified = true
-            fragment.scrollToPreference(result.preference)
-        }
-    }
-
-    private fun findPreferenceSearchResults(
-        group: PreferenceGroup,
-        query: String,
-        categories: List<CharSequence> = emptyList(),
-    ): List<PreferenceSearchResult> {
-        val results = mutableListOf<PreferenceSearchResult>()
-        repeat(group.preferenceCount) { index ->
-            val preference = group.getPreference(index)
-            if (!preference.isVisible) return@repeat
-            if (preference is PreferenceGroup) {
-                val childCategories = preference.title
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { categories + it }
-                    ?: categories
-                results += findPreferenceSearchResults(preference, query, childCategories)
-                return@repeat
-            }
-            val matches = configPreferenceMatches(
-                query,
-                preference.title,
-                preference.summary,
-                categories,
-            )
-            if (!matches) {
-                return@repeat
-            }
-            val title = preference.title?.takeIf { it.isNotBlank() }
-                ?: preference.summary?.takeIf { it.isNotBlank() }
-                ?: return@repeat
-            results += PreferenceSearchResult(
-                label = (categories + title).joinToString(" > "),
-                preference = preference,
-            )
-        }
-        return results
-    }
-
-    private data class PreferenceSearchResult(
-        val label: String,
-        val preference: Preference,
-    ) {
-        override fun toString(): String = label
-    }
-
 }
 
 internal fun configPreferenceMatches(

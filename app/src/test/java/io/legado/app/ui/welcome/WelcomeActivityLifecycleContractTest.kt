@@ -43,9 +43,8 @@ class WelcomeActivityLifecycleContractTest {
 
         assertTrue(customBackground > 0)
         listOf(
-            "binding.tvLegado.visible(showText)",
-            "binding.ivBook.visible(showIcon)",
-            "binding.tvGzh.visible(showText)",
+            "showTextState =",
+            "showIconState =",
         ).forEach { visibilityCall ->
             assertTrue(background.indexOf(visibilityCall) in 0 until customBackground)
         }

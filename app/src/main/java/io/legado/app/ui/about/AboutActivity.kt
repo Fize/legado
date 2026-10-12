@@ -1,62 +1,141 @@
 package io.legado.app.ui.about
 
-import android.os.Bundle
-import android.text.Spannable
-import android.text.SpannableString
-import android.text.style.ForegroundColorSpan
-import android.view.Menu
-import android.view.MenuItem
+import android.view.View
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.fragment.app.FragmentContainerView
 import io.legado.app.R
-import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityAboutBinding
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.filletBackground
+import io.legado.app.base.BaseComposeActivity
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.share
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
+class AboutActivity : BaseComposeActivity() {
 
-class AboutActivity : BaseActivity<ActivityAboutBinding>() {
+    @Composable
+    override fun Content() {
+        val containerId = remember { View.generateViewId() }
+        val appSummary = stringResource(R.string.about_description)
+        val gzh = stringResource(R.string.legado_gzh)
+        val primaryColor = MaterialTheme.colorScheme.primary
+        val annotatedSummary = remember(appSummary, gzh, primaryColor) {
+            buildAnnotatedString {
+                append(appSummary)
+                val start = appSummary.indexOf(gzh)
+                if (start >= 0) {
+                    addStyle(
+                        style = SpanStyle(color = primaryColor),
+                        start = start,
+                        end = start + gzh.length
+                    )
+                }
+            }
+        }
 
-    override val binding by viewBinding(ActivityAboutBinding::inflate)
-
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.llAbout.background = filletBackground
-        val fTag = "aboutFragment"
-        var aboutFragment = supportFragmentManager.findFragmentByTag(fTag)
-        if (aboutFragment == null) aboutFragment = AboutFragment()
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fl_fragment, aboutFragment, fTag)
-            .commit()
-        binding.tvAppSummary.post {
-            kotlin.runCatching {
-                val span = ForegroundColorSpan(accentColor)
-                val spannableString = SpannableString(binding.tvAppSummary.text)
-                val gzh = getString(R.string.legado_gzh)
-                val start = spannableString.indexOf(gzh)
-                spannableString.setSpan(
-                    span, start, start + gzh.length,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.about),
+                    onNavigationClick = { finish() },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                share(
+                                    getString(R.string.app_share_description),
+                                    getString(R.string.app_name)
+                                )
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_share),
+                                contentDescription = stringResource(R.string.share)
+                            )
+                        }
+                        IconButton(
+                            onClick = { openUrl("market://details?id=$packageName") }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_scoring),
+                                contentDescription = stringResource(R.string.scoring)
+                            )
+                        }
+                    }
                 )
-                binding.tvAppSummary.text = spannableString
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(6.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
+                        Text(
+                            text = annotatedSummary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            FragmentContainerView(ctx).apply {
+                                id = containerId
+                                val fTag = "aboutFragment"
+                                val existing = supportFragmentManager.findFragmentByTag(fTag)
+                                val fragment = existing ?: AboutFragment()
+                                supportFragmentManager.beginTransaction()
+                                    .replace(containerId, fragment, fTag)
+                                    .commitAllowingStateLoss()
+                            }
+                        }
+                    )
+                }
             }
         }
     }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.about, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_scoring -> openUrl("market://details?id=$packageName")
-            R.id.menu_share_it -> share(
-                getString(R.string.app_share_description),
-                getString(R.string.app_name)
-            )
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
 }

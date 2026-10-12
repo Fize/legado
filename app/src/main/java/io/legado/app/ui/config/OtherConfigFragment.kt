@@ -7,14 +7,28 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
-import android.text.InputType
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.view.postDelayed
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.preference.EditTextPreference
-import androidx.preference.ListPreference
-import androidx.preference.Preference
+import androidx.lifecycle.lifecycleScope
 import com.jeremyliao.liveeventbus.LiveEventBus
 import io.legado.app.R
 import io.legado.app.constant.EventBus
@@ -27,16 +41,22 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.normalizeJsSourceApiToken
 import io.legado.app.help.http.Cronet
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.CheckSource
 import io.legado.app.model.ImageProvider
 import io.legado.app.receiver.SharedReceiverActivity
+import io.legado.app.ui.compose.component.LegadoTextInputDialog
+import io.legado.app.ui.compose.prefs.ListPreferenceItem
+import io.legado.app.ui.compose.prefs.PreferenceCategoryHeader
+import io.legado.app.ui.compose.prefs.PreferenceItem
+import io.legado.app.ui.compose.prefs.SwitchPreferenceItem
+import io.legado.app.ui.compose.prefs.rememberPrefBoolean
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.video.config.SettingsDialog
 import io.legado.app.ui.widget.code.addJsonPattern
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.LogUtils
+import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.isJsonObject
 import io.legado.app.utils.postEvent
@@ -44,16 +64,17 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.removePref
 import io.legado.app.utils.restart
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.supportsPromotedNotifications
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import splitties.init.appCtx
 
 /**
  * 其它设置
  */
-class OtherConfigFragment : PreferenceFragment(),
+class OtherConfigFragment : Fragment(),
     SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val viewModel by activityViewModels<ConfigViewModel>()
@@ -62,73 +83,48 @@ class OtherConfigFragment : PreferenceFragment(),
         appCtx,
         SharedReceiverActivity::class.java.name
     )
+    private var refreshTick by mutableIntStateOf(0)
+
     private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { treeUri ->
             AppConfig.defaultBookTreeUri = treeUri.toString()
+            refreshTick++
         }
     }
 
-    private var onlyUpdateReadPref: Preference? = null
-
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         putPrefBoolean(PreferKey.processText, isProcessTextEnabled())
-        addPreferencesFromResource(R.xml.pref_config_other)
-        upPreferenceSummary(PreferKey.userAgent, AppConfig.userAgent)
-        upPreferenceSummary(PreferKey.preDownloadNum, AppConfig.preDownloadNum.toString())
-        upPreferenceSummary(PreferKey.threadCount, AppConfig.threadCount.toString())
-        findPreference<EditTextPreference>(PreferKey.jsSourceApiToken)?.let {
-            it.isPersistent = false
-            it.text = AppConfig.jsSourceApiToken
-            it.setOnPreferenceChangeListener { _, newValue ->
-                val previousToken = AppConfig.jsSourceApiToken
-                val token = normalizeJsSourceApiToken(newValue?.toString())
-                AppConfig.jsSourceApiToken = token
-                upPreferenceSummary(PreferKey.jsSourceApiToken, token)
-                if (
-                    AppConfig.jsSourceApiTokenRequired &&
-                    previousToken != token
-                ) {
-                    if (token == null) {
-                    } else {
-                    }
+        requireContext().defaultSharedPreferences.registerOnSharedPreferenceChangeListener(this)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        requireContext().defaultSharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    OtherConfigScreen()
                 }
-                true
-            }
-            it.setOnBindEditTextListener { editText ->
-                editText.inputType =
-                    InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_CLASS_TEXT
-                editText.setSelection(editText.text.length)
             }
         }
-        upPreferenceSummary(PreferKey.jsSourceApiToken, AppConfig.jsSourceApiToken)
-        AppConfig.defaultBookTreeUri?.let {
-            upPreferenceSummary(PreferKey.defaultBookTreeUri, it)
-        }
-        upPreferenceSummary(PreferKey.checkSource, CheckSource.summary)
-        upPreferenceSummary(PreferKey.bitmapCacheSize, AppConfig.bitmapCacheSize.toString())
-        upPreferenceSummary(PreferKey.imageRetainNum, AppConfig.imageRetainNum.toString())
-        upPreferenceSummary(PreferKey.sourceEditMaxLine, AppConfig.sourceEditMaxLine.toString())
-        onlyUpdateReadPref = findPreference<Preference>(PreferKey.onlyUpdateRead)?.also {
-            it.isVisible = AppConfig.autoRefreshBook
-        }
-        findPreference<Preference>(PreferKey.liveUpdateNotifications)?.isVisible =
-            canConfigurePromotedNotifications()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         activity?.setTitle(R.string.other_setting)
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-        listView.setEdgeEffectColor(primaryColor)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
-    }
-
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
-        when (preference.key) {
+    private fun onOtherPreferenceClick(key: String) {
+        when (key) {
             PreferKey.userAgent -> showUserAgentDialog()
             PreferKey.customHosts -> showCustomHostsDialog()
             PreferKey.videoSetting -> showDialogFragment(SettingsDialog(requireActivity()))
@@ -144,6 +140,7 @@ class OtherConfigFragment : PreferenceFragment(),
                 .setValue(AppConfig.preDownloadNum)
                 .show {
                     AppConfig.preDownloadNum = it
+                    refreshTick++
                 }
 
             PreferKey.threadCount -> NumberPickerDialog(requireContext())
@@ -153,6 +150,7 @@ class OtherConfigFragment : PreferenceFragment(),
                 .setValue(AppConfig.threadCount)
                 .show {
                     AppConfig.threadCount = it
+                    refreshTick++
                 }
 
             PreferKey.cleanCache -> clearCache()
@@ -166,6 +164,7 @@ class OtherConfigFragment : PreferenceFragment(),
                     .show {
                         AppConfig.bitmapCacheSize = it
                         ImageProvider.bitmapLruCache.resize(ImageProvider.cacheSize)
+                        refreshTick++
                     }
             }
             PreferKey.imageRetainNum -> NumberPickerDialog(requireContext())
@@ -175,6 +174,7 @@ class OtherConfigFragment : PreferenceFragment(),
                 .setValue(AppConfig.imageRetainNum)
                 .show {
                     AppConfig.imageRetainNum = it
+                    refreshTick++
                 }
 
             PreferKey.sourceEditMaxLine -> {
@@ -185,29 +185,20 @@ class OtherConfigFragment : PreferenceFragment(),
                     .setValue(AppConfig.sourceEditMaxLine)
                     .show {
                         AppConfig.sourceEditMaxLine = it
+                        refreshTick++
                     }
             }
 
             PreferKey.clearWebViewData -> clearWebViewData()
             PreferKey.shrinkDatabase -> shrinkDatabase()
         }
-        return super.onPreferenceTreeClick(preference)
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        refreshTick++
         when (key) {
-            PreferKey.preDownloadNum -> {
-                upPreferenceSummary(key, AppConfig.preDownloadNum.toString())
-            }
-
             PreferKey.threadCount -> {
-                upPreferenceSummary(key, AppConfig.threadCount.toString())
                 postEvent(PreferKey.threadCount, "")
-            }
-
-
-            PreferKey.defaultBookTreeUri -> {
-                upPreferenceSummary(key, AppConfig.defaultBookTreeUri)
             }
 
             PreferKey.recordLog -> {
@@ -228,33 +219,9 @@ class OtherConfigFragment : PreferenceFragment(),
             }
 
             PreferKey.showDiscovery -> postEvent(EventBus.NOTIFY_MAIN, true)
-            PreferKey.language -> listView.postDelayed(1000) {
+            PreferKey.language -> viewLifecycleOwner.lifecycleScope.launch {
+                delay(1000)
                 appCtx.restart()
-            }
-
-            PreferKey.userAgent -> listView.post {
-                upPreferenceSummary(PreferKey.userAgent, AppConfig.userAgent)
-            }
-
-            PreferKey.checkSource -> listView.post {
-                upPreferenceSummary(PreferKey.checkSource, CheckSource.summary)
-            }
-
-            PreferKey.bitmapCacheSize -> {
-                upPreferenceSummary(key, AppConfig.bitmapCacheSize.toString())
-            }
-
-            PreferKey.imageRetainNum -> {
-                upPreferenceSummary(key, AppConfig.imageRetainNum.toString())
-            }
-
-            PreferKey.sourceEditMaxLine -> {
-                upPreferenceSummary(key, AppConfig.sourceEditMaxLine.toString())
-            }
-
-            PreferKey.autoRefresh -> {
-                val isEnabled = sharedPreferences?.getBoolean(key, false) ?: false
-                onlyUpdateReadPref?.isVisible = isEnabled
             }
 
             PreferKey.liveUpdateNotifications -> {
@@ -288,33 +255,359 @@ class OtherConfigFragment : PreferenceFragment(),
             putExtra(Settings.EXTRA_APP_PACKAGE, requireContext().packageName)
         }
 
-    private fun upPreferenceSummary(preferenceKey: String, value: String?) {
-        val preference = findPreference<Preference>(preferenceKey) ?: return
-        when (preferenceKey) {
-            PreferKey.preDownloadNum -> preference.summary =
-                getString(R.string.pre_download_s, value)
+    @Composable
+    private fun OtherConfigScreen() {
+        val autoRefresh by rememberPrefBoolean(PreferKey.autoRefresh, false)
+        var showTokenDialog by remember { mutableStateOf(false) }
 
-            PreferKey.threadCount -> preference.summary = getString(R.string.threads_num, value)
-            PreferKey.jsSourceApiToken -> preference.summary = if (value.isNullOrBlank()) {
+        val userAgentSummary = remember(refreshTick) { AppConfig.userAgent }
+        val defaultBookTreeSummary = remember(refreshTick) {
+            AppConfig.defaultBookTreeUri ?: getString(R.string.book_tree_uri_s)
+        }
+        val sourceEditMaxLineSummary = remember(refreshTick) {
+            getString(R.string.source_edit_max_line_summary, AppConfig.sourceEditMaxLine.toString())
+        }
+        val checkSourceSummary = remember(refreshTick) { CheckSource.summary }
+        val bitmapCacheSummary = remember(refreshTick) {
+            getString(R.string.bitmap_cache_size_summary, AppConfig.bitmapCacheSize.toString())
+        }
+        val imageRetainSummary = remember(refreshTick) {
+            getString(R.string.image_retain_number_summary, AppConfig.imageRetainNum.toString())
+        }
+        val preDownloadSummary = remember(refreshTick) {
+            getString(R.string.pre_download_s, AppConfig.preDownloadNum.toString())
+        }
+        val threadCountSummary = remember(refreshTick) {
+            getString(R.string.threads_num, AppConfig.threadCount.toString())
+        }
+        val tokenValue = remember(refreshTick) { AppConfig.jsSourceApiToken.orEmpty() }
+        val tokenSummary = remember(refreshTick, tokenValue) {
+            if (tokenValue.isBlank()) {
                 getString(R.string.js_source_api_token_summary)
             } else {
                 getString(R.string.js_source_api_token_configured)
             }
-            PreferKey.bitmapCacheSize -> preference.summary =
-                getString(R.string.bitmap_cache_size_summary, value)
-            PreferKey.imageRetainNum -> preference.summary =
-                getString(R.string.image_retain_number_summary, value)
+        }
+        val showLiveUpdate = remember { canConfigurePromotedNotifications() }
 
-            PreferKey.sourceEditMaxLine -> preference.summary =
-                getString(R.string.source_edit_max_line_summary, value)
-
-            else -> if (preference is ListPreference) {
-                val index = preference.findIndexOfValue(value)
-                // Set the summary to reflect the new value.
-                preference.summary = if (index >= 0) preference.entries[index] else null
-            } else {
-                preference.summary = value
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp),
+        ) {
+            item(key = PreferKey.language) {
+                ListPreferenceItem(
+                    key = PreferKey.language,
+                    default = "auto",
+                    title = stringResource(R.string.language),
+                    entries = stringArrayResource(R.array.language),
+                    entryValues = stringArrayResource(R.array.language_value),
+                )
             }
+
+            item(key = "mainActivityCategory") {
+                PreferenceCategoryHeader(title = stringResource(R.string.main_activity))
+            }
+            item(key = PreferKey.autoRefresh) {
+                SwitchPreferenceItem(
+                    key = PreferKey.autoRefresh,
+                    default = false,
+                    title = stringResource(R.string.pt_auto_refresh),
+                    summary = stringResource(R.string.ps_auto_refresh),
+                )
+            }
+            if (autoRefresh) {
+                item(key = PreferKey.onlyUpdateRead) {
+                    SwitchPreferenceItem(
+                        key = PreferKey.onlyUpdateRead,
+                        default = false,
+                        title = stringResource(R.string.only_update_read),
+                        summary = stringResource(R.string.ps_only_update_read),
+                    )
+                }
+            }
+            item(key = PreferKey.defaultToRead) {
+                SwitchPreferenceItem(
+                    key = PreferKey.defaultToRead,
+                    default = false,
+                    title = stringResource(R.string.pt_default_read),
+                    summary = stringResource(R.string.ps_default_read),
+                )
+            }
+            item(key = PreferKey.showDiscovery) {
+                SwitchPreferenceItem(
+                    key = PreferKey.showDiscovery,
+                    default = true,
+                    title = stringResource(R.string.show_discovery),
+                )
+            }
+            item(key = PreferKey.showDiscoveryFastScroller) {
+                SwitchPreferenceItem(
+                    key = PreferKey.showDiscoveryFastScroller,
+                    default = false,
+                    title = stringResource(R.string.show_discovery_fast_scroller),
+                )
+            }
+            item(key = PreferKey.defaultHomePage) {
+                ListPreferenceItem(
+                    key = PreferKey.defaultHomePage,
+                    default = "bookshelf",
+                    title = stringResource(R.string.default_home_page),
+                    entries = stringArrayResource(R.array.default_home_page),
+                    entryValues = stringArrayResource(R.array.default_home_page_value),
+                )
+            }
+
+            item(key = "otherSettingCategory") {
+                PreferenceCategoryHeader(title = stringResource(R.string.other_setting))
+            }
+            item(key = PreferKey.userAgent) {
+                PreferenceItem(
+                    title = stringResource(R.string.user_agent),
+                    summary = userAgentSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.userAgent) },
+                )
+            }
+            item(key = PreferKey.customHosts) {
+                PreferenceItem(
+                    title = stringResource(R.string.custom_hosts),
+                    summary = stringResource(R.string.custom_hosts_summary),
+                    onClick = { onOtherPreferenceClick(PreferKey.customHosts) },
+                )
+            }
+            item(key = PreferKey.defaultBookTreeUri) {
+                PreferenceItem(
+                    title = stringResource(R.string.book_tree_uri_t),
+                    summary = defaultBookTreeSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.defaultBookTreeUri) },
+                )
+            }
+            item(key = PreferKey.sourceEditMaxLine) {
+                PreferenceItem(
+                    title = stringResource(R.string.source_edit_text_max_line),
+                    summary = sourceEditMaxLineSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.sourceEditMaxLine) },
+                )
+            }
+            item(key = PreferKey.checkSource) {
+                PreferenceItem(
+                    title = stringResource(R.string.check_source_config),
+                    summary = checkSourceSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.checkSource) },
+                )
+            }
+            item(key = "uploadRule") {
+                PreferenceItem(
+                    title = stringResource(R.string.direct_link_upload_rule),
+                    summary = stringResource(R.string.direct_link_upload_rule_summary),
+                    onClick = { onOtherPreferenceClick("uploadRule") },
+                )
+            }
+            item(key = PreferKey.cronet) {
+                SwitchPreferenceItem(
+                    key = PreferKey.cronet,
+                    default = false,
+                    title = "Cronet",
+                    summary = stringResource(R.string.pref_cronet_summary),
+                )
+            }
+            item(key = PreferKey.antiAlias) {
+                SwitchPreferenceItem(
+                    key = PreferKey.antiAlias,
+                    default = false,
+                    title = stringResource(R.string.anti_alias),
+                    summary = stringResource(R.string.pref_anti_alias_summary),
+                )
+            }
+            item(key = PreferKey.bitmapCacheSize) {
+                PreferenceItem(
+                    title = stringResource(R.string.bitmap_cache_size),
+                    summary = bitmapCacheSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.bitmapCacheSize) },
+                )
+            }
+            item(key = PreferKey.imageRetainNum) {
+                PreferenceItem(
+                    title = stringResource(R.string.image_retain_number),
+                    summary = imageRetainSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.imageRetainNum) },
+                )
+            }
+            item(key = PreferKey.preDownloadNum) {
+                PreferenceItem(
+                    title = stringResource(R.string.pre_download),
+                    summary = preDownloadSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.preDownloadNum) },
+                )
+            }
+            item(key = PreferKey.replaceEnableDefault) {
+                SwitchPreferenceItem(
+                    key = PreferKey.replaceEnableDefault,
+                    default = true,
+                    title = stringResource(R.string.replace_enable_default_t),
+                    summary = stringResource(R.string.replace_enable_default_s),
+                )
+            }
+            item(key = "mediaButtonOnExit") {
+                SwitchPreferenceItem(
+                    key = "mediaButtonOnExit",
+                    default = true,
+                    title = stringResource(R.string.media_button_on_exit_title),
+                    summary = stringResource(R.string.media_button_on_exit_summary),
+                )
+            }
+            item(key = PreferKey.readAloudByMediaButton) {
+                SwitchPreferenceItem(
+                    key = PreferKey.readAloudByMediaButton,
+                    default = false,
+                    title = stringResource(R.string.read_aloud_by_media_button_title),
+                    summary = stringResource(R.string.read_aloud_by_media_button_summary),
+                )
+            }
+            item(key = PreferKey.ignoreAudioFocus) {
+                SwitchPreferenceItem(
+                    key = PreferKey.ignoreAudioFocus,
+                    default = false,
+                    title = stringResource(R.string.ignore_audio_focus_title),
+                    summary = stringResource(R.string.ignore_audio_focus_summary),
+                )
+            }
+            item(key = PreferKey.autoClearExpired) {
+                SwitchPreferenceItem(
+                    key = PreferKey.autoClearExpired,
+                    default = true,
+                    title = stringResource(R.string.auto_clear_expired),
+                    summary = stringResource(R.string.auto_clear_expired_summary),
+                )
+            }
+            item(key = PreferKey.showAddToShelfAlert) {
+                SwitchPreferenceItem(
+                    key = PreferKey.showAddToShelfAlert,
+                    default = true,
+                    title = stringResource(R.string.show_add_to_shelf_alert_title),
+                    summary = stringResource(R.string.show_add_to_shelf_alert_summary),
+                )
+            }
+            item(key = "autoUpdateVariant") {
+                SwitchPreferenceItem(
+                    key = "autoUpdateVariant",
+                    default = true,
+                    title = stringResource(R.string.auto_update),
+                    summary = stringResource(R.string.auto_update_summary),
+                )
+            }
+            if (showLiveUpdate) {
+                item(key = PreferKey.liveUpdateNotifications) {
+                    SwitchPreferenceItem(
+                        key = PreferKey.liveUpdateNotifications,
+                        default = false,
+                        title = stringResource(R.string.live_update_notifications),
+                        summary = stringResource(R.string.live_update_notifications_summary),
+                    )
+                }
+            }
+            item(key = PreferKey.showMangaUi) {
+                SwitchPreferenceItem(
+                    key = PreferKey.showMangaUi,
+                    default = true,
+                    title = stringResource(R.string.show_manga_ui),
+                )
+            }
+            item(key = PreferKey.videoSetting) {
+                PreferenceItem(
+                    title = stringResource(R.string.video_setting),
+                    summary = stringResource(R.string.video_setting_summary),
+                    onClick = { onOtherPreferenceClick(PreferKey.videoSetting) },
+                )
+            }
+            item(key = PreferKey.jsSourceApiTokenRequired) {
+                SwitchPreferenceItem(
+                    key = PreferKey.jsSourceApiTokenRequired,
+                    default = true,
+                    title = stringResource(R.string.js_source_api_token_required_title),
+                    summary = stringResource(R.string.js_source_api_token_required_summary),
+                )
+            }
+            item(key = PreferKey.jsSourceApiToken) {
+                PreferenceItem(
+                    title = stringResource(R.string.js_source_api_token_title),
+                    summary = tokenSummary,
+                    onClick = { showTokenDialog = true },
+                )
+            }
+            item(key = PreferKey.cleanCache) {
+                PreferenceItem(
+                    title = stringResource(R.string.clear_cache),
+                    summary = stringResource(R.string.clear_cache_summary),
+                    onClick = { onOtherPreferenceClick(PreferKey.cleanCache) },
+                )
+            }
+            item(key = PreferKey.clearWebViewData) {
+                PreferenceItem(
+                    title = stringResource(R.string.clear_webview_data),
+                    summary = stringResource(R.string.clear_webview_data_summary),
+                    onClick = { onOtherPreferenceClick(PreferKey.clearWebViewData) },
+                )
+            }
+            item(key = PreferKey.shrinkDatabase) {
+                PreferenceItem(
+                    title = stringResource(R.string.shrink_database),
+                    summary = stringResource(R.string.shrink_database_summary),
+                    onClick = { onOtherPreferenceClick(PreferKey.shrinkDatabase) },
+                )
+            }
+            item(key = PreferKey.threadCount) {
+                PreferenceItem(
+                    title = stringResource(R.string.threads_num_title),
+                    summary = threadCountSummary,
+                    onClick = { onOtherPreferenceClick(PreferKey.threadCount) },
+                )
+            }
+            item(key = PreferKey.processText) {
+                SwitchPreferenceItem(
+                    key = PreferKey.processText,
+                    default = true,
+                    title = stringResource(R.string.add_to_text_context_menu_t),
+                    summary = stringResource(R.string.add_to_text_context_menu_s),
+                )
+            }
+            item(key = PreferKey.recordLog) {
+                SwitchPreferenceItem(
+                    key = PreferKey.recordLog,
+                    default = false,
+                    title = stringResource(R.string.record_log),
+                    summary = stringResource(R.string.record_debug_log),
+                )
+            }
+            item(key = PreferKey.recordHttpLog) {
+                SwitchPreferenceItem(
+                    key = PreferKey.recordHttpLog,
+                    default = false,
+                    title = stringResource(R.string.record_http_log),
+                    summary = stringResource(R.string.record_http_log_summary),
+                )
+            }
+            item(key = PreferKey.recordHeapDump) {
+                SwitchPreferenceItem(
+                    key = PreferKey.recordHeapDump,
+                    default = false,
+                    title = stringResource(R.string.record_heap_dump_t),
+                    summary = stringResource(R.string.record_heap_dump_s),
+                )
+            }
+        }
+
+        if (showTokenDialog) {
+            LegadoTextInputDialog(
+                title = stringResource(R.string.js_source_api_token_title),
+                initialValue = tokenValue,
+                isPassword = true,
+                onDismiss = { showTokenDialog = false },
+                onConfirm = { newValue ->
+                    val token = normalizeJsSourceApiToken(newValue)
+                    AppConfig.jsSourceApiToken = token
+                    refreshTick++
+                }
+            )
         }
     }
 
@@ -333,6 +626,7 @@ class OtherConfigFragment : PreferenceFragment(),
                 } else {
                     putPrefString(PreferKey.userAgent, userAgent)
                 }
+                refreshTick++
             }
             cancelButton()
         }
@@ -354,6 +648,7 @@ class OtherConfigFragment : PreferenceFragment(),
                 } else {
                     removePref(PreferKey.customHosts)
                 }
+                refreshTick++
             }
             cancelButton()
         }
@@ -406,5 +701,4 @@ class OtherConfigFragment : PreferenceFragment(),
             )
         }
     }
-
 }

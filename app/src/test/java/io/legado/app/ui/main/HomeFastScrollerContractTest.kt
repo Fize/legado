@@ -94,13 +94,14 @@ class HomeFastScrollerContractTest {
             ),
         )
 
-        val preferences = parseProjectXml("src/main/res/xml/pref_config_other.xml")
-        val discoverySwitch = preferences.findElementByAndroidKey("showDiscoveryFastScroller")
-        assertEquals("false", discoverySwitch.androidAttribute("defaultValue"))
-        assertEquals(
-            "@string/show_discovery_fast_scroller",
-            discoverySwitch.androidAttribute("title"),
-        )
+        val otherConfig = projectFile(
+            "src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt",
+        ).readText()
+        val discoverySwitch = otherConfig
+            .substringAfterLast("key = PreferKey.showDiscoveryFastScroller")
+            .substringBefore("}")
+        assertTrue(discoverySwitch.contains("default = false"))
+        assertTrue(discoverySwitch.contains("R.string.show_discovery_fast_scroller"))
     }
 
     private fun assertFastScrollerLayout(
