@@ -63,8 +63,11 @@ class BookshelfGroupSwipeTest {
         val fragment = projectFile(
             "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
         ).readText().replace("\r\n", "\n")
-        assertTrue(fragment.contains("onHorizontalSwipe = ::switchBookGroup"))
-        assertTrue(fragment.contains("onHorizontalSwipe = null"))
+        assertTrue(fragment.contains("detectHorizontalDragGestures"))
+        assertTrue(fragment.contains("adjacentBookshelfGroupId(bookGroups, currentGroupId, -1)"))
+        assertTrue(fragment.contains("adjacentBookshelfGroupId(bookGroups, currentGroupId, 1)"))
+        assertTrue(fragment.contains("switchBookGroup(-1)"))
+        assertTrue(fragment.contains("switchBookGroup(1)"))
     }
 
     @Test
@@ -73,12 +76,9 @@ class BookshelfGroupSwipeTest {
             "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
         ).readText().replace("\r\n", "\n")
 
-        assertTrue(fragment.contains("setNavigationOnClickListener { back() }"))
-        assertTrue(fragment.contains("private fun initBooksData() {\n        upNavigationIcon()"))
-        assertTrue(fragment.contains("navigationIcon = if (groupId == BookGroup.IdRoot)"))
-        assertTrue(fragment.contains("abc_ic_ab_back_material"))
-        assertTrue(fragment.contains("navigationContentDescription = getString(R.string.back)"))
-        assertTrue(fragment.contains("transparentBar = binding.titleBar.usesTransparentForeground"))
+        assertTrue(fragment.contains("BookshelfTopBar("))
+        assertTrue(fragment.contains("onBackClick = if (currentGroupId != BookGroup.IdRoot) ({ back() }) else null"))
+        assertTrue(fragment.contains("private fun initBooksData() {\n        updateTitleAndRefresh()"))
     }
 
     private fun projectFile(pathInApp: String): File {

@@ -7,7 +7,7 @@ import java.io.File
 class BookshelfItemAnimatorTest {
 
     @Test
-    fun `bookshelf variants disable animations for frequent item updates`() {
+    fun `bookshelf variants use stable keys for frequent item updates`() {
         val bookshelfSources = listOf(
             "src/main/java/io/legado/app/ui/main/bookshelf/style1/books/BooksFragment.kt",
             "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt"
@@ -16,8 +16,8 @@ class BookshelfItemAnimatorTest {
         bookshelfSources.forEach { path ->
             val source = readProjectFile(path)
             assertTrue(
-                "$path should disable the RecyclerView item animator",
-                source.contains(Regex("rvBookshelf\\.itemAnimator\\s*=\\s*null"))
+                "$path should provide stable keys in LazyColumn/LazyVerticalGrid",
+                source.contains("key =")
             )
         }
     }

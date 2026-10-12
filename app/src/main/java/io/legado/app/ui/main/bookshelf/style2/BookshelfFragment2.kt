@@ -1,18 +1,45 @@
 package io.legado.app.ui.main.bookshelf.style2
 
-import android.annotation.SuppressLint
-import android.content.res.Configuration
-import android.graphics.Rect
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewConfiguration
-import androidx.appcompat.widget.SearchView
-import androidx.core.view.isGone
+import android.view.ViewGroup
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
@@ -20,26 +47,23 @@ import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.FragmentBookshelf2Binding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.info.BookInfoActivity
-import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
-import io.legado.app.utils.MenuExtensions
+import io.legado.app.ui.main.bookshelf.BookshelfBookGridItem
+import io.legado.app.ui.main.bookshelf.BookshelfBookListItem
+import io.legado.app.ui.main.bookshelf.BookshelfGroupGridItem
+import io.legado.app.ui.main.bookshelf.BookshelfGroupListItem
+import io.legado.app.ui.main.bookshelf.BookshelfTopBar
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChangeFirst
-import io.legado.app.utils.getCompatDrawable
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.resolveBookshelfSpanCount
-import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -53,11 +77,9 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 
 /**
- * 书架界面
+ * 书架界面 (样式2 - 文件夹网格/列表)
  */
-class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2),
-    SearchView.OnQueryTextListener,
-    BaseBooksAdapter.CallBack {
+class BookshelfFragment2() : BaseBookshelfFragment() {
 
     constructor(position: Int) : this() {
         val bundle = Bundle()
@@ -65,142 +87,261 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         arguments = bundle
     }
 
-    private val binding by viewBinding(FragmentBookshelf2Binding::bind)
     private val bookshelfLayout by lazy { AppConfig.bookshelfLayout }
-    private val currentSpanCount: Int
-        get() = resolveBookshelfSpanCount(
-            configuredLayout = bookshelfLayout,
-            screenWidthDp = resources.configuration.screenWidthDp
-        )
-    private val booksAdapter: BaseBooksAdapter<*> by lazy {
-        if (bookshelfLayout >= 2) {
-            BooksAdapterGrid(requireContext(), this)
-        } else {
-            BooksAdapterList(requireContext(), this)
-        }
-    }
     private var bookGroups: List<BookGroup> = emptyList()
     private val bookGroupsFlow = MutableStateFlow<List<BookGroup>>(emptyList())
-    private var groupItems: List<BookshelfGroupItem> = emptyList()
+    private var groupItems by mutableStateOf<List<BookshelfGroupItem>>(emptyList())
     private var booksFlowJob: Job? = null
-    override var groupId = BookGroup.IdRoot
-    override var books: List<Book> = emptyList()
-    private var enableRefresh = true
+    override var groupId by mutableLongStateOf(BookGroup.IdRoot)
+    override var books by mutableStateOf<List<Book>>(emptyList())
+    private var enableRefresh by mutableStateOf(true)
     override var onlyUpdateRead = false
     private val bookshelfMargin by lazy { AppConfig.bookshelfMargin }
-    private var itemCount = 0
-    private var totalRows = 0
+    private var refreshVersionState by mutableIntStateOf(0)
+    private var scrollToTopNonce by mutableLongStateOf(0L)
+    private var titleTextState by mutableStateOf("")
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    Bookshelf2Screen()
+                }
+            }
+        }
+    }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
-        binding.titleBar.setNavigationOnClickListener { back() }
-        bindShelfHeader(binding.shelfHeader)
-        initRecyclerView()
+        subscribeShelfHeaderRefresh()
         initBookGroupData()
         initBooksData()
     }
 
-    private fun initRecyclerView() {
-        binding.rvBookshelf.setEdgeEffectColor(primaryColor)
-        binding.rvBookshelf.canHandleHorizontalSwipe = { offset ->
-            adjacentBookshelfGroupId(bookGroups, groupId, offset) != null
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun Bookshelf2Screen() {
+        val config = LocalConfiguration.current
+        val spanCount = resolveBookshelfSpanCount(
+            configuredLayout = bookshelfLayout,
+            screenWidthDp = config.screenWidthDp,
+        )
+        @Suppress("UNUSED_VARIABLE")
+        val refreshVer = refreshVersionState
+        val currentGroupId = groupId
+        val items = remember(currentGroupId, groupItems, books, refreshVer) {
+            if (currentGroupId != BookGroup.IdRoot) {
+                books
+            } else {
+                groupItems + books
+            }
         }
-        binding.rvBookshelf.onHorizontalSwipe = ::switchBookGroup
-        binding.fastScroller.attachRecyclerView(binding.rvBookshelf)
-        upFastScrollerBar()
-        binding.refreshLayout.setColorSchemeColors(accentColor)
-        binding.refreshLayout.setOnRefreshListener {
-            binding.refreshLayout.isRefreshing = false
-            activityViewModel.upToc(books, onlyUpdateRead)
-        }
-        upLayoutManager()
-        binding.rvBookshelf.adapter = booksAdapter
-        /**
-         * 采用 layoutManager?.onRestoreInstanceState(layoutState)
-         * 恢复滚动位置
-         * **/
-        binding.rvBookshelf.itemAnimator = null
-        binding.rvBookshelf.addItemDecoration(object : RecyclerView.ItemDecoration() {
-            override fun getItemOffsets(
-                outRect: Rect,
-                view: View,
-                parent: RecyclerView,
-                state: RecyclerView.State
-            ) {
-                val position = parent.getChildAdapterPosition(view)
-                val spanCount = currentSpanCount
-                val hMargin = if (bookshelfLayout >= 2) bookshelfMargin else 0
+        val showUnread = AppConfig.showUnread
+        val showLastUpdateTime = AppConfig.showLastUpdateTime
+        val showBooknameMode = AppConfig.showBookname
+        val marginDp = (bookshelfMargin / 2).coerceAtLeast(2).dp
+
+        val listState = rememberLazyListState()
+        val gridState = rememberLazyGridState()
+
+        LaunchedEffect(scrollToTopNonce) {
+            if (scrollToTopNonce > 0L) {
                 if (spanCount >= 2) {
-                    val rowIndex = position / spanCount
-                    when (rowIndex) {
-                        0 -> { //第一行加额外上边距
-                            outRect.set(hMargin, bookshelfMargin + 24, hMargin, bookshelfMargin)
-                        }
-                        totalRows - 1 -> { //最后一行加额外下边距
-                            outRect.set(hMargin, bookshelfMargin, hMargin, bookshelfMargin + 24)
-                        }
-                        else -> {
-                            outRect.set(hMargin, bookshelfMargin, hMargin, bookshelfMargin)
-                        }
+                    if (AppConfig.isEInkMode) {
+                        gridState.scrollToItem(0)
+                    } else {
+                        gridState.animateScrollToItem(0)
                     }
                 } else {
-                    when (position) {
-                        0 -> {
-                            outRect.set(0, bookshelfMargin + 24, 0, bookshelfMargin)
+                    if (AppConfig.isEInkMode) {
+                        listState.scrollToItem(0)
+                    } else {
+                        listState.animateScrollToItem(0)
+                    }
+                }
+            }
+        }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            BookshelfTopBar(
+                title = titleTextState.ifBlank { stringResource(R.string.bookshelf) },
+                onMenuAction = ::handleBookshelfMenuAction,
+                onBackClick = if (currentGroupId != BookGroup.IdRoot) ({ back() }) else null,
+            )
+
+            ShelfHeaderComposable()
+
+            val bodyContent: @Composable () -> Unit = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(currentGroupId, bookGroups) {
+                            var totalDrag = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { totalDrag = 0f },
+                                onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                                onDragEnd = {
+                                    if (totalDrag > 96f && adjacentBookshelfGroupId(bookGroups, currentGroupId, -1) != null) {
+                                        switchBookGroup(-1)
+                                    } else if (totalDrag < -96f && adjacentBookshelfGroupId(bookGroups, currentGroupId, 1) != null) {
+                                        switchBookGroup(1)
+                                    }
+                                },
+                            )
+                        },
+                ) {
+                    if (items.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.bookshelf_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp),
+                        )
+                    } else if (spanCount >= 2) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(spanCount),
+                            state = gridState,
+                            contentPadding = PaddingValues(
+                                horizontal = 8.dp + marginDp,
+                                vertical = 8.dp + marginDp,
+                            ),
+                            horizontalArrangement = Arrangement.spacedBy(marginDp),
+                            verticalArrangement = Arrangement.spacedBy(marginDp),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            items(
+                                items = items,
+                                key = { item ->
+                                    when (item) {
+                                        is BookshelfGroupItem -> "group_${item.group.groupId}"
+                                        is Book -> "book_${item.name}_${item.author}_${item.bookUrl}"
+                                        else -> item.hashCode()
+                                    }
+                                },
+                            ) { item ->
+                                when (item) {
+                                    is BookshelfGroupItem -> {
+                                        if (bookshelfLayout < 2) {
+                                            BookshelfGroupListItem(
+                                                item = item,
+                                                compact = bookshelfLayout == 1,
+                                                onClick = { onItemClick(item.group) },
+                                                onLongClick = { onItemLongClick(item.group) },
+                                            )
+                                        } else {
+                                            BookshelfGroupGridItem(
+                                                item = item,
+                                                showBooknameMode = showBooknameMode,
+                                                onClick = { onItemClick(item.group) },
+                                                onLongClick = { onItemLongClick(item.group) },
+                                            )
+                                        }
+                                    }
+                                    is Book -> {
+                                        if (bookshelfLayout < 2) {
+                                            BookshelfBookListItem(
+                                                book = item,
+                                                compact = bookshelfLayout == 1,
+                                                isUpdating = isUpdate(item.bookUrl),
+                                                showUnread = showUnread,
+                                                showLastUpdateTime = showLastUpdateTime,
+                                                timeAgoVersion = refreshVer,
+                                                onClick = { onItemClick(item) },
+                                                onLongClick = { onItemLongClick(item) },
+                                            )
+                                        } else {
+                                            BookshelfBookGridItem(
+                                                book = item,
+                                                showBooknameMode = showBooknameMode,
+                                                isUpdating = isUpdate(item.bookUrl),
+                                                showUnread = showUnread,
+                                                onClick = { onItemClick(item) },
+                                                onLongClick = { onItemLongClick(item) },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        itemCount - 1 -> {
-                            outRect.set(0, bookshelfMargin, 0, bookshelfMargin + 24)
-                        }
-                        else -> {
-                            outRect.set(0, bookshelfMargin, 0, bookshelfMargin)
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            contentPadding = PaddingValues(
+                                horizontal = 8.dp,
+                                vertical = 8.dp + marginDp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(marginDp),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            items(
+                                items = items,
+                                key = { item ->
+                                    when (item) {
+                                        is BookshelfGroupItem -> "group_${item.group.groupId}"
+                                        is Book -> "book_${item.name}_${item.author}_${item.bookUrl}"
+                                        else -> item.hashCode()
+                                    }
+                                },
+                            ) { item ->
+                                when (item) {
+                                    is BookshelfGroupItem -> {
+                                        BookshelfGroupListItem(
+                                            item = item,
+                                            compact = bookshelfLayout == 1,
+                                            onClick = { onItemClick(item.group) },
+                                            onLongClick = { onItemLongClick(item.group) },
+                                        )
+                                    }
+                                    is Book -> {
+                                        BookshelfBookListItem(
+                                            book = item,
+                                            compact = bookshelfLayout == 1,
+                                            isUpdating = isUpdate(item.bookUrl),
+                                            showUnread = showUnread,
+                                            showLastUpdateTime = showLastUpdateTime,
+                                            timeAgoVersion = refreshVer,
+                                            onClick = { onItemClick(item) },
+                                            onLongClick = { onItemLongClick(item) },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-        })
-    }
 
-    private fun upLayoutManager() {
-        val spanCount = currentSpanCount
-        if (spanCount >= 2) {
-            totalRows = if (itemCount % spanCount == 0) itemCount / spanCount else itemCount / spanCount + 1
-            val currentLm = binding.rvBookshelf.layoutManager
-            if (currentLm is GridLayoutManager) {
-                currentLm.spanCount = spanCount
+            if (enableRefresh && items.isNotEmpty()) {
+                PullToRefreshBox(
+                    isRefreshing = false,
+                    onRefresh = { activityViewModel.upToc(books, onlyUpdateRead) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                ) {
+                    bodyContent()
+                }
             } else {
-                binding.rvBookshelf.layoutManager = GridLayoutManager(context, spanCount)
-            }
-        } else {
-            if (binding.rvBookshelf.layoutManager !is LinearLayoutManager ||
-                binding.rvBookshelf.layoutManager is GridLayoutManager
-            ) {
-                binding.rvBookshelf.layoutManager = LinearLayoutManager(context)
+                Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+                    bodyContent()
+                }
             }
         }
-    }
 
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        if (view != null) {
-            upLayoutManager()
-            binding.rvBookshelf.invalidateItemDecorations()
-        }
-    }
-
-    private fun upFastScrollerBar() {
-        val show = AppConfig.showBookshelfFastScroller
-        binding.fastScroller.isEnabled = show
-        binding.rvBookshelf.scrollBarSize = if (show) {
-            0
-        } else {
-            ViewConfiguration.get(requireContext()).scaledScrollBarSize
-        }
+        BookshelfDialogsComposable()
     }
 
     override fun upGroup(data: List<BookGroup>) {
         if (data != bookGroups) {
             bookGroups = data
             bookGroupsFlow.value = data
+            updateTitleAndRefresh()
         }
     }
 
@@ -208,24 +349,22 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         initBooksData()
     }
 
-    private fun initBooksData() {
-        upNavigationIcon()
+    private fun updateTitleAndRefresh() {
+        if (!isAdded) return
         if (groupId == BookGroup.IdRoot) {
-            if (isAdded) {
-                binding.titleBar.title = getString(R.string.bookshelf)
-                binding.refreshLayout.isEnabled = true
-                enableRefresh = true
-            }
+            titleTextState = getString(R.string.bookshelf)
+            enableRefresh = true
         } else {
-            bookGroups.firstOrNull {
-                groupId == it.groupId
-            }?.let {
-                binding.titleBar.title = "${getString(R.string.bookshelf)}(${it.groupName})"
-                binding.refreshLayout.isEnabled = it.enableRefresh
+            bookGroups.firstOrNull { groupId == it.groupId }?.let {
+                titleTextState = "${getString(R.string.bookshelf)}(${it.groupName})"
                 enableRefresh = it.enableRefresh
                 onlyUpdateRead = it.onlyUpdateRead
             }
         }
+    }
+
+    private fun initBooksData() {
+        updateTitleAndRefresh()
         booksFlowJob?.cancel()
         val currentGroupId = groupId
         booksFlowJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -264,33 +403,8 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
                 if (currentGroupId == BookGroup.IdRoot) {
                     groupItems = items
                 }
-                booksAdapter.updateItems(currentGroupId)
-                itemCount = getItemCount()
-                val spanCount = currentSpanCount
-                if (spanCount >= 2) {
-                    totalRows = if (itemCount % spanCount == 0) itemCount / spanCount else itemCount / spanCount + 1
-                }
-                binding.tvEmptyMsg.isGone = itemCount > 0
-                binding.refreshLayout.isEnabled = enableRefresh && itemCount > 0
                 delay(100)
             }
-        }
-    }
-
-    private fun upNavigationIcon() {
-        binding.titleBar.toolbar.apply {
-            navigationIcon = if (groupId == BookGroup.IdRoot) {
-                null
-            } else {
-                getCompatDrawable(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
-            }
-            navigationContentDescription = getString(R.string.back)
-            navigationIcon?.setTintMutate(
-                MenuExtensions.getMenuColor(
-                    requireContext(),
-                    transparentBar = binding.titleBar.usesTransparentForeground,
-                )
-            )
         }
     }
 
@@ -319,24 +433,11 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         return false
     }
 
-    override fun onQueryTextSubmit(query: String?): Boolean {
-        SearchActivity.start(requireContext(), query)
-        return false
-    }
-
-    override fun onQueryTextChange(newText: String?): Boolean {
-        return false
-    }
-
     override fun gotoTop() {
-        if (AppConfig.isEInkMode) {
-            binding.rvBookshelf.scrollToPosition(0)
-        } else {
-            binding.rvBookshelf.smoothScrollToPosition(0)
-        }
+        scrollToTopNonce++
     }
 
-    override fun onItemClick(item: Any) {
+    fun onItemClick(item: Any) {
         when (item) {
             is Book -> startActivityForBook(item)
 
@@ -347,7 +448,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         }
     }
 
-    override fun onItemLongClick(item: Any) {
+    fun onItemLongClick(item: Any) {
         when (item) {
             is Book -> startActivity<BookInfoActivity> {
                 putExtra("name", item.name)
@@ -358,7 +459,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         }
     }
 
-    override fun isUpdate(bookUrl: String): Boolean {
+    fun isUpdate(bookUrl: String): Boolean {
         return activityViewModel.isUpdate(bookUrl)
     }
 
@@ -370,30 +471,21 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         }
     }
 
-    override fun getItems(): List<Any> {
+    fun getItems(): List<Any> {
         if (groupId != BookGroup.IdRoot) {
             return books
         }
         return groupItems + books
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     override fun observeLiveBus() {
         super.observeLiveBus()
         observeEvent<String>(EventBus.UP_BOOKSHELF) {
-            booksAdapter.notification(it)
+            refreshVersionState++
         }
         observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
-            booksAdapter.notifyDataSetChanged()
-            upFastScrollerBar()
+            refreshVersionState++
         }
-    }
-
-    override fun onDestroyView() {
-        binding.rvBookshelf.canHandleHorizontalSwipe = null
-        binding.rvBookshelf.onHorizontalSwipe = null
-        binding.fastScroller.detachRecyclerView()
-        super.onDestroyView()
     }
 }
 

@@ -2,10 +2,11 @@ package io.legado.app.ui.main.bookshelf
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import androidx.core.view.indices
+import androidx.annotation.LayoutRes
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -19,11 +20,8 @@ import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.DialogBookshelfConfigBinding
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.ViewBookshelfHeaderBinding
 import io.legado.app.help.DirectLinkUpload
-import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.about.AppLogDialog
@@ -38,10 +36,7 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
 import io.legado.app.ui.widget.dialog.WaitDialog
-import io.legado.app.utils.checkByIndex
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChangeFirst
-import io.legado.app.utils.getCheckedIndex
-import io.legado.app.utils.gone
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.readText
@@ -57,9 +52,8 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
-abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfViewModel>(layoutId),
+abstract class BaseBookshelfFragment(@LayoutRes layoutId: Int = 0) : VMBaseFragment<BookshelfViewModel>(layoutId),
     MainFragmentInterface {
 
     override val position: Int? get() = arguments?.getInt("position")
@@ -105,47 +99,26 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         }
     }
 
-    private var shelfHeaderBinding: ViewBookshelfHeaderBinding? = null
-    private var continueBook: Book? = null
+    protected var continueBook by mutableStateOf<Book?>(null)
+    protected var showShelfStatsState by mutableStateOf(false)
+    protected var shelfStatsTextState by mutableStateOf("")
+    protected var showConfigDialogState by mutableStateOf(false)
     private var shelfHeaderFlowJob: Job? = null
 
     override fun onDestroyView() {
         shelfHeaderFlowJob?.cancel()
         shelfHeaderFlowJob = null
-        shelfHeaderBinding = null
         continueBook = null
         super.onDestroyView()
     }
 
-    fun bindShelfHeader(header: ViewBookshelfHeaderBinding) {
-        shelfHeaderBinding = header
-        header.continueReading.setOnClickListener {
-            continueBook?.let { startActivityForBook(it) }
-        }
-        header.continueReading.setOnLongClickListener {
-            continueBook?.let { book ->
-                startActivity(
-                    Intent(requireContext(), BookInfoActivity::class.java).apply {
-                        putExtra("name", book.name)
-                        putExtra("author", book.author)
-                    }
-                )
-                true
-            } ?: false
-        }
-        subscribeShelfHeaderRefresh()
-    }
-
-    private fun subscribeShelfHeaderRefresh() {
+    protected fun subscribeShelfHeaderRefresh() {
         shelfHeaderFlowJob?.cancel()
         shelfHeaderFlowJob = null
         continueBook = null
-        val header = shelfHeaderBinding ?: return
         val showRecentReading = AppConfig.showBookshelfRecentReading
         val showBookshelfStats = AppConfig.showBookshelfStats
-        header.tvShelfStats.visibility = if (showBookshelfStats) View.VISIBLE else View.GONE
-        header.continueReading.gone()
-        header.root.visibility = if (showBookshelfStats) View.VISIBLE else View.GONE
+        showShelfStatsState = showBookshelfStats
         if (!showRecentReading && !showBookshelfStats) return
 
         shelfHeaderFlowJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -159,7 +132,6 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                 .conflate()
                 .flowOn(Dispatchers.Default)
                 .collect { bookCount ->
-                    val currentHeader = shelfHeaderBinding ?: return@collect
                     val (book, readingCount) = withContext(Dispatchers.IO) {
                         val book = if (showRecentReading) {
                             appDb.bookDao.lastReadBookOnShelf
@@ -173,63 +145,83 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                         }
                         book to readingCount
                     }
-                    if (shelfHeaderBinding !== currentHeader) return@collect
                     continueBook = book
                     if (showBookshelfStats) {
-                        currentHeader.tvShelfStats.text =
+                        shelfStatsTextState =
                             getString(R.string.bookshelf_stats, bookCount, readingCount)
                     }
-                    currentHeader.root.visibility =
-                        if (showBookshelfStats || book != null) View.VISIBLE else View.GONE
-                    if (book == null) {
-                        currentHeader.continueReading.gone()
-                        return@collect
-                    }
-                    currentHeader.continueReading.visibility = View.VISIBLE
-                    currentHeader.tvContinueName.text = book.name
-                    currentHeader.tvContinueChapter.text = book.durChapterTitle
-                        .takeIf { it?.isNotBlank() == true }
-                        ?: getString(R.string.read_not_started)
-                    currentHeader.tvContinuePercent.text =
-                        "${((book.readProgress() ?: 0f) * 100).roundToInt().coerceIn(0, 100)}%"
                 }
+        }
+    }
+
+    @Composable
+    protected fun ShelfHeaderComposable() {
+        BookshelfHeaderSection(
+            showStats = showShelfStatsState,
+            statsText = shelfStatsTextState,
+            continueBook = continueBook,
+            onContinueClick = { startActivityForBook(it) },
+            onContinueLongClick = { book ->
+                startActivity(
+                    Intent(requireContext(), BookInfoActivity::class.java).apply {
+                        putExtra("name", book.name)
+                        putExtra("author", book.author)
+                    }
+                )
+            },
+        )
+    }
+
+    @Composable
+    protected fun BookshelfDialogsComposable() {
+        if (showConfigDialogState) {
+            BookshelfConfigDialog(
+                initialState = BookshelfConfigState(
+                    groupStyle = AppConfig.bookGroupStyle,
+                    readProgressMode = AppConfig.bookshelfReadProgressMode,
+                    showUnread = AppConfig.showUnread,
+                    showLastUpdateTime = AppConfig.showLastUpdateTime,
+                    showWaitUpBooks = AppConfig.showWaitUpCount,
+                    showFastScroller = AppConfig.showBookshelfFastScroller,
+                    showRecentReading = AppConfig.showBookshelfRecentReading,
+                    showBookshelfStats = AppConfig.showBookshelfStats,
+                    bookshelfLayout = AppConfig.bookshelfLayout,
+                    bookshelfSort = AppConfig.bookshelfSort,
+                    showBookname = AppConfig.showBookname,
+                    margin = AppConfig.bookshelfMargin,
+                ),
+                onDismiss = { showConfigDialogState = false },
+                onConfirm = ::applyBookshelfConfig,
+            )
         }
     }
 
     abstract fun gotoTop()
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.main_bookshelf, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        super.onCompatOptionsItemSelected(item)
-        when (item.itemId) {
-            R.id.menu_remote -> startActivity<RemoteBookActivity>()
-            R.id.menu_search -> startActivity<SearchActivity>()
-            R.id.menu_update_toc -> activityViewModel.upToc(books, onlyUpdateRead)
-            R.id.menu_bookshelf_layout -> configBookshelf()
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_add_local -> startActivity<ImportBookActivity>()
-            R.id.menu_add_url -> showAddBookByUrlAlert()
-            R.id.menu_bookshelf_manage -> startActivity<BookshelfManageActivity> {
+    protected fun handleBookshelfMenuAction(action: BookshelfMenuAction) {
+        when (action) {
+            BookshelfMenuAction.SEARCH -> startActivity<SearchActivity>()
+            BookshelfMenuAction.UPDATE_TOC -> activityViewModel.upToc(books, onlyUpdateRead)
+            BookshelfMenuAction.ADD_LOCAL -> startActivity<ImportBookActivity>()
+            BookshelfMenuAction.ADD_REMOTE -> startActivity<RemoteBookActivity>()
+            BookshelfMenuAction.ADD_URL -> showAddBookByUrlAlert()
+            BookshelfMenuAction.BOOKSHELF_MANAGE -> startActivity<BookshelfManageActivity> {
                 putExtra("groupId", groupId)
             }
-
-            R.id.menu_download -> startActivity<CacheActivity> {
+            BookshelfMenuAction.CACHE_EXPORT -> startActivity<CacheActivity> {
                 putExtra("groupId", groupId)
             }
-
-            R.id.menu_export_bookshelf -> viewModel.exportBookshelf(books) { file ->
+            BookshelfMenuAction.GROUP_MANAGE -> showDialogFragment(GroupManageDialog())
+            BookshelfMenuAction.BOOKSHELF_LAYOUT -> configBookshelf()
+            BookshelfMenuAction.EXPORT_BOOKSHELF -> viewModel.exportBookshelf(books) { file ->
                 exportResult.launch {
                     mode = HandleFileContract.EXPORT
                     fileData =
                         HandleFileContract.FileData("bookshelf.json", file, "application/json")
                 }
             }
-
-            R.id.menu_import_bookshelf -> importBookshelfAlert(groupId)
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
+            BookshelfMenuAction.IMPORT_BOOKSHELF -> importBookshelfAlert(groupId)
+            BookshelfMenuAction.LOG -> showDialogFragment<AppLogDialog>()
         }
     }
 
@@ -274,124 +266,72 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         }
     }
 
-    @SuppressLint("InflateParams")
     fun configBookshelf() {
-        alert(titleResource = R.string.bookshelf_layout) {
-            var bookshelfLayout = AppConfig.bookshelfLayout
-            var bookshelfSort = AppConfig.bookshelfSort
-            var showBookname = AppConfig.showBookname
-            var readProgressMode = AppConfig.bookshelfReadProgressMode
-            val alertBinding =
-                DialogBookshelfConfigBinding.inflate(layoutInflater)
-                    .apply {
-                        if (AppConfig.bookGroupStyle !in 0..<spGroupStyle.count) {
-                            AppConfig.bookGroupStyle = 0
-                        }
-                        if (bookshelfLayout !in rgLayout.indices) {
-                            bookshelfLayout = 3
-                            AppConfig.bookshelfLayout = 3
-                        }
-                        if (bookshelfSort !in rgSort.indices) {
-                            bookshelfSort = 0
-                            AppConfig.bookshelfSort = 0
-                        }
-                        if (showBookname !in rgbLayout.indices) {
-                            showBookname = 0
-                            AppConfig.showBookname = 0
-                        }
-                        if (readProgressMode !in 0..<spReadProgress.count) {
-                            readProgressMode = 1
-                            AppConfig.bookshelfReadProgressMode = readProgressMode
-                        }
-                        spGroupStyle.setSelection(AppConfig.bookGroupStyle)
-                        spReadProgress.setSelection(readProgressMode)
-                        swShowUnread.isChecked = AppConfig.showUnread
-                        swShowLastUpdateTime.isChecked = AppConfig.showLastUpdateTime
-                        swShowWaitUpBooks.isChecked = AppConfig.showWaitUpCount
-                        swShowBookshelfFastScroller.isChecked = AppConfig.showBookshelfFastScroller
-                        swShowRecentReading.isChecked = AppConfig.showBookshelfRecentReading
-                        swShowBookshelfStats.isChecked = AppConfig.showBookshelfStats
-                        rgLayout.checkByIndex(bookshelfLayout)
-                        rgbLayout.checkByIndex(showBookname)
-                        if (bookshelfLayout < 2) {
-                            bookNameChoice.visibility = View.GONE
-                        }
-                        rgLayout.setOnCheckedChangeListener { group, checkedId ->
-                            val index = group.getCheckedIndex()
-                            bookNameChoice.visibility = if (index > 1) View.VISIBLE else View.GONE
-                        }
-                        rgSort.checkByIndex(bookshelfSort)
-                        margin.progress = AppConfig.bookshelfMargin
-                    }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.apply {
-                    var notifyMain = false
-                    var recreate = false
-                    if (AppConfig.bookGroupStyle != spGroupStyle.selectedItemPosition) {
-                        AppConfig.bookGroupStyle = spGroupStyle.selectedItemPosition
-                        notifyMain = true
-                    }
-                    if (showBookname != rgbLayout.getCheckedIndex()) {
-                        AppConfig.showBookname = rgbLayout.getCheckedIndex()
-                        recreate = true
-                    }
-                    if (AppConfig.bookshelfMargin != margin.progress) {
-                        AppConfig.bookshelfMargin = margin.progress
-                        recreate = true
-                    }
-                    if (AppConfig.showUnread != swShowUnread.isChecked) {
-                        AppConfig.showUnread = swShowUnread.isChecked
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (AppConfig.showLastUpdateTime != swShowLastUpdateTime.isChecked) {
-                        AppConfig.showLastUpdateTime = swShowLastUpdateTime.isChecked
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (readProgressMode != spReadProgress.selectedItemPosition) {
-                        AppConfig.bookshelfReadProgressMode = spReadProgress.selectedItemPosition
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (AppConfig.showWaitUpCount != swShowWaitUpBooks.isChecked) {
-                        AppConfig.showWaitUpCount = swShowWaitUpBooks.isChecked
-                        activityViewModel.postUpBooksLiveData(true)
-                    }
-                    if (AppConfig.showBookshelfFastScroller != swShowBookshelfFastScroller.isChecked) {
-                        AppConfig.showBookshelfFastScroller = swShowBookshelfFastScroller.isChecked
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (AppConfig.showBookshelfRecentReading != swShowRecentReading.isChecked) {
-                        AppConfig.showBookshelfRecentReading = swShowRecentReading.isChecked
-                        recreate = true
-                    }
-                    if (AppConfig.showBookshelfStats != swShowBookshelfStats.isChecked) {
-                        AppConfig.showBookshelfStats = swShowBookshelfStats.isChecked
-                        recreate = true
-                    }
-                    if (bookshelfSort != rgSort.getCheckedIndex()) {
-                        AppConfig.bookshelfSort = rgSort.getCheckedIndex()
-                        upSort()
-                    }
-                    if (bookshelfLayout != rgLayout.getCheckedIndex()) {
-                        AppConfig.bookshelfLayout = rgLayout.getCheckedIndex()
-                        if (AppConfig.bookshelfLayout < 2) {
-                            activityViewModel.booksGridRecycledViewPool.clear()
-                        } else {
-                            activityViewModel.booksListRecycledViewPool.clear()
-                        }
-                        recreate = true
-                    }
-                    if (recreate) {
-                        postEvent(EventBus.RECREATE, "")
-                    } else if (notifyMain) {
-                        postEvent(EventBus.NOTIFY_MAIN, false)
-                    }
-                }
-            }
-            cancelButton()
-        }
+        showConfigDialogState = true
     }
 
+    private fun applyBookshelfConfig(newState: BookshelfConfigState) {
+        var notifyMain = false
+        var recreate = false
+        val oldShowBookname = AppConfig.showBookname
+        val oldReadProgressMode = AppConfig.bookshelfReadProgressMode
+        val oldBookshelfSort = AppConfig.bookshelfSort
+        val oldBookshelfLayout = AppConfig.bookshelfLayout
+
+        if (AppConfig.bookGroupStyle != newState.groupStyle) {
+            AppConfig.bookGroupStyle = newState.groupStyle
+            notifyMain = true
+        }
+        if (oldShowBookname != newState.showBookname) {
+            AppConfig.showBookname = newState.showBookname
+            recreate = true
+        }
+        if (AppConfig.bookshelfMargin != newState.margin) {
+            AppConfig.bookshelfMargin = newState.margin
+            recreate = true
+        }
+        if (AppConfig.showUnread != newState.showUnread) {
+            AppConfig.showUnread = newState.showUnread
+            postEvent(EventBus.BOOKSHELF_REFRESH, "")
+        }
+        if (AppConfig.showLastUpdateTime != newState.showLastUpdateTime) {
+            AppConfig.showLastUpdateTime = newState.showLastUpdateTime
+            postEvent(EventBus.BOOKSHELF_REFRESH, "")
+        }
+        if (oldReadProgressMode != newState.readProgressMode) {
+            AppConfig.bookshelfReadProgressMode = newState.readProgressMode
+            postEvent(EventBus.BOOKSHELF_REFRESH, "")
+        }
+        if (AppConfig.showWaitUpCount != newState.showWaitUpBooks) {
+            AppConfig.showWaitUpCount = newState.showWaitUpBooks
+            activityViewModel.postUpBooksLiveData(true)
+        }
+        if (AppConfig.showBookshelfFastScroller != newState.showFastScroller) {
+            AppConfig.showBookshelfFastScroller = newState.showFastScroller
+            postEvent(EventBus.BOOKSHELF_REFRESH, "")
+        }
+        if (AppConfig.showBookshelfRecentReading != newState.showRecentReading) {
+            AppConfig.showBookshelfRecentReading = newState.showRecentReading
+            recreate = true
+        }
+        if (AppConfig.showBookshelfStats != newState.showBookshelfStats) {
+            AppConfig.showBookshelfStats = newState.showBookshelfStats
+            recreate = true
+        }
+        if (oldBookshelfSort != newState.bookshelfSort) {
+            AppConfig.bookshelfSort = newState.bookshelfSort
+            upSort()
+        }
+        if (oldBookshelfLayout != newState.bookshelfLayout) {
+            AppConfig.bookshelfLayout = newState.bookshelfLayout
+            recreate = true
+        }
+        if (recreate) {
+            postEvent(EventBus.RECREATE, "")
+        } else if (notifyMain) {
+            postEvent(EventBus.NOTIFY_MAIN, false)
+        }
+    }
 
     private fun importBookshelfAlert(groupId: Long) {
         alert(titleResource = R.string.import_bookshelf) {

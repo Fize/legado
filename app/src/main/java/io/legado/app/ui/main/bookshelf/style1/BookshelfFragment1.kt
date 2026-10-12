@@ -3,38 +3,46 @@
 package io.legado.app.ui.main.bookshelf.style1
 
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
-import com.google.android.material.tabs.TabLayout
+import androidx.viewpager.widget.ViewPager
 import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.FragmentBookshelf1Binding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.book.group.GroupEditDialog
-import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.ui.main.bookshelf.BookshelfTopBar
 import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.isCreated
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import kotlin.collections.set
 
 /**
- * 书架界面
+ * 书架界面 (样式1 - 标签页)
  */
-class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1),
-    TabLayout.OnTabSelectedListener,
-    SearchView.OnQueryTextListener {
+class BookshelfFragment1() : BaseBookshelfFragment() {
 
     constructor(position: Int) : this() {
         val bundle = Bundle()
@@ -42,13 +50,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         arguments = bundle
     }
 
-    private val binding by viewBinding(FragmentBookshelf1Binding::bind)
     private val adapter by lazy { TabFragmentPageAdapter(childFragmentManager) }
-    private val tabLayout: TabLayout by lazy {
-        binding.titleBar.findViewById(R.id.tab_layout)
-    }
     private val bookGroups = mutableListOf<BookGroup>()
+    private var bookGroupsState by mutableStateOf<List<BookGroup>>(emptyList())
+    private var selectedTabPositionState by mutableIntStateOf(0)
+    private var viewPagerRef: ViewPager? = null
     private val fragmentMap = hashMapOf<Long, BooksFragment>()
+
     override val groupId: Long get() = selectedGroup?.groupId ?: 0
 
     override val books: List<Book>
@@ -58,33 +66,91 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         }
 
     override var onlyUpdateRead = false
+
+    private val selectedGroup: BookGroup?
+        get() = bookGroups.getOrNull(selectedTabPositionState)
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    Bookshelf1Screen()
+                }
+            }
+        }
+    }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
-        bindShelfHeader(binding.shelfHeader)
-        initView()
+        subscribeShelfHeaderRefresh()
         initBookGroupData()
     }
 
-    private val selectedGroup: BookGroup?
-        get() = bookGroups.getOrNull(tabLayout.selectedTabPosition)
-
-    private fun initView() {
-        binding.viewPagerBookshelf.setEdgeEffectColor(primaryColor)
-        tabLayout.isTabIndicatorFullWidth = false
-        tabLayout.tabMode = TabLayout.MODE_SCROLLABLE
-        tabLayout.setSelectedTabIndicatorColor(requireContext().accentColor)
-        tabLayout.setupWithViewPager(binding.viewPagerBookshelf)
-        binding.viewPagerBookshelf.offscreenPageLimit = 1
-        binding.viewPagerBookshelf.adapter = adapter
+    override fun onDestroyView() {
+        viewPagerRef = null
+        super.onDestroyView()
     }
 
-    override fun onQueryTextSubmit(query: String?): Boolean {
-        SearchActivity.start(requireContext(), query)
-        return false
-    }
+    @Composable
+    private fun Bookshelf1Screen() {
+        Column(modifier = Modifier.fillMaxSize()) {
+            BookshelfTopBar(
+                title = stringResource(R.string.bookshelf),
+                onMenuAction = ::handleBookshelfMenuAction,
+                bookGroups = bookGroupsState,
+                selectedTabIndex = selectedTabPositionState,
+                onTabSelected = { index ->
+                    selectedTabPositionState = index
+                    AppConfig.saveTabPosition = index
+                    viewPagerRef?.currentItem = index
+                },
+                onTabReselected = {
+                    selectedGroup?.let { group ->
+                        fragmentMap[group.groupId]?.let {
+                            toastOnUi("${group.groupName}(${it.getBooksCount()})")
+                        }
+                    }
+                },
+                onTabLongClick = { group ->
+                    showDialogFragment(GroupEditDialog(group))
+                },
+            )
 
-    override fun onQueryTextChange(newText: String?): Boolean {
-        return false
+            ShelfHeaderComposable()
+
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                factory = { ctx ->
+                    ViewPager(ctx).apply {
+                        id = R.id.view_pager_bookshelf
+                        setEdgeEffectColor(requireContext().primaryColor)
+                        offscreenPageLimit = 1
+                        adapter = this@BookshelfFragment1.adapter
+                        addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
+                            override fun onPageSelected(position: Int) {
+                                selectedTabPositionState = position
+                                AppConfig.saveTabPosition = position
+                            }
+                        })
+                        viewPagerRef = this
+                    }
+                },
+                update = { pager ->
+                    val target = selectedTabPositionState.coerceIn(0, (adapter.count - 1).coerceAtLeast(0))
+                    if (adapter.count > 0 && pager.currentItem != target) {
+                        pager.currentItem = target
+                    }
+                },
+            )
+        }
+
+        BookshelfDialogsComposable()
     }
 
     @Synchronized
@@ -95,12 +161,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             if (data != bookGroups) {
                 bookGroups.clear()
                 bookGroups.addAll(data)
+                bookGroupsState = data.toList()
                 adapter.notifyDataSetChanged()
-                selectLastTab()
-                for (i in 0 until adapter.count) {
-                    tabLayout.getTabAt(i)?.view?.setOnLongClickListener {
-                        showDialogFragment(GroupEditDialog(bookGroups[i]))
-                        true
+                val savedPos = AppConfig.saveTabPosition.coerceIn(0, (data.size - 1).coerceAtLeast(0))
+                selectedTabPositionState = savedPos
+                viewPagerRef?.post {
+                    if (adapter.count > savedPos) {
+                        viewPagerRef?.currentItem = savedPos
                     }
                 }
             }
@@ -109,28 +176,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     override fun upSort() {
         adapter.notifyDataSetChanged()
-    }
-
-    private fun selectLastTab() {
-        tabLayout.post {
-            tabLayout.removeOnTabSelectedListener(this)
-            tabLayout.getTabAt(AppConfig.saveTabPosition)?.select()
-            tabLayout.addOnTabSelectedListener(this)
-        }
-    }
-
-    override fun onTabReselected(tab: TabLayout.Tab) {
-        selectedGroup?.let { group ->
-            fragmentMap[group.groupId]?.let {
-                toastOnUi("${group.groupName}(${it.getBooksCount()})")
-            }
-        }
-    }
-
-    override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-
-    override fun onTabSelected(tab: TabLayout.Tab) {
-        AppConfig.saveTabPosition = tab.position
     }
 
     override fun gotoTop() {
@@ -144,10 +189,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             return bookGroups[position].groupName
         }
 
-        /**
-         * 确定视图位置是否更改时调用
-         * @return POSITION_NONE 已更改,刷新视图. POSITION_UNCHANGED 未更改,不刷新视图
-         */
         override fun getItemPosition(any: Any): Int {
             val fragment = any as BooksFragment
             val position = fragment.position
@@ -176,9 +217,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         override fun instantiateItem(container: ViewGroup, position: Int): Any {
             var fragment = super.instantiateItem(container, position) as BooksFragment
             val group = bookGroups[position]
-            /**
-             * Activity recreate 会复用之前的 Fragment，不正确的需要重新创建
-             */
             if (fragment.isCreated && getItemPosition(fragment) == POSITION_NONE) {
                 destroyItem(container, position, fragment)
                 fragment = super.instantiateItem(container, position) as BooksFragment

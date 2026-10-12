@@ -2,19 +2,25 @@
 
 package io.legado.app.ui.main
 
-import android.graphics.Rect
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.core.view.doOnLayout
-import androidx.core.view.isVisible
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -24,12 +30,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
 import io.legado.app.BuildConfig
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.ActivityMainBinding
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.SourceSharePassphraseImportPolicy
@@ -57,29 +62,24 @@ import io.legado.app.ui.main.explore.ExploreFragment
 import io.legado.app.ui.main.my.MyFragment
 import io.legado.app.utils.clearClip
 import io.legado.app.utils.getClipText
-import io.legado.app.utils.imeHeight
 import io.legado.app.utils.isCreated
-import io.legado.app.utils.isExpandedScreen
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
+import io.legado.app.utils.shouldUseTwoPane
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import splitties.views.bottomPadding
 import kotlin.time.Duration.Companion.hours
 
 /**
  * 主界面
  */
 @Suppress("PrivatePropertyName")
-class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
+class MainActivity : VMBaseComposeActivity<MainViewModel>(),
     MainViewModel.CallBack {
 
-    override val binding by viewBinding(ActivityMainBinding::inflate)
     override val viewModel by viewModels<MainViewModel>()
     private val idBookshelf = 0
     private val idBookshelf1 = 11
@@ -89,7 +89,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private var exitTime: Long = 0
     private var bookshelfReselected: Long = 0
     private var exploreReselected: Long = 0
-    private var pagePosition = 0
+    private var pagePosition by mutableIntStateOf(0)
     private val fragmentMap = hashMapOf<Int, Fragment>()
     private var bottomMenuCount = 3
     private val EXIT_INTERVAL = 2000L
@@ -97,6 +97,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private val adapter by lazy {
         TabFragmentPageAdapter(supportFragmentManager)
     }
+    private var viewPagerRef: ViewPager? = null
     private var selectedTabIdState by mutableIntStateOf(idBookshelf)
     private var showDiscoveryState by mutableStateOf(true)
     private var upBooksCountState by mutableIntStateOf(0)
@@ -106,11 +107,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         upBottomMenu()
-        initView()
         upHomePage()
         onBackPressedDispatcher.addCallback(this) {
             if (pagePosition != 0) {
-                binding.viewPagerMain.currentItem = 0
+                pagePosition = 0
+                selectedTabIdState = realPositions[0]
+                viewPagerRef?.currentItem = 0
                 return@addCallback
             }
             (fragmentMap[getFragmentId(0)] as? BookshelfFragment2)?.let {
@@ -131,29 +133,91 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
+    @Composable
+    override fun Content() {
+        val config = LocalConfiguration.current
+        val useRail = shouldUseTwoPane(
+            config.screenWidthDp,
+            config.screenHeightDp,
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding(),
+        ) {
+            if (useRail) {
+                MainNavigationRail(
+                    selectedTabId = selectedTabIdState,
+                    showDiscovery = showDiscoveryState,
+                    upBooksCount = upBooksCountState,
+                    onTabSelected = ::onTabSelected,
+                    onTabReselected = ::onTabReselected,
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            ) {
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    factory = { ctx ->
+                        ViewPager(ctx).apply {
+                            id = R.id.view_pager_main
+                            setEdgeEffectColor(primaryColor)
+                            offscreenPageLimit = 3
+                            adapter = this@MainActivity.adapter
+                            addOnPageChangeListener(PageChangeCallback())
+                            viewPagerRef = this
+                            val targetPos = pagePosition.coerceIn(0, (bottomMenuCount - 1).coerceAtLeast(0))
+                            if (currentItem != targetPos) {
+                                setCurrentItem(targetPos, false)
+                            }
+                        }
+                    },
+                    update = { pager ->
+                        val targetPos = pagePosition.coerceIn(0, (bottomMenuCount - 1).coerceAtLeast(0))
+                        if (pager.currentItem != targetPos) {
+                            pager.setCurrentItem(targetPos, false)
+                        }
+                    },
+                )
+
+                if (!useRail) {
+                    MainNavigationBar(
+                        selectedTabId = selectedTabIdState,
+                        showDiscovery = showDiscoveryState,
+                        upBooksCount = upBooksCountState,
+                        onTabSelected = ::onTabSelected,
+                        onTabReselected = ::onTabReselected,
+                    )
+                }
+            }
+        }
+    }
+
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         lifecycleScope.launch {
-            //版本更新
             upVersion()
             notifyAppCrash()
-            //备份同步
             backupSync()
-            //设置回调
             viewModel.setActivityCallback(this@MainActivity)
-            //自动更新书源
-            binding.viewPagerMain.postDelayed(1000) {
+            window.decorView.postDelayed(1000) {
                 viewModel.ruleSubsUp()
             }
             scheduleSourceSharePassphraseRead(1500)
-            //自动更新书籍
             val isAutoRefreshedBook = savedInstanceState?.getBoolean("isAutoRefreshedBook") ?: false
             if (AppConfig.autoRefreshBook && !isAutoRefreshedBook) {
-                binding.viewPagerMain.postDelayed(2000) {
+                window.decorView.postDelayed(2000) {
                     viewModel.upAllBookToc()
                 }
             }
-            binding.viewPagerMain.postDelayed(3000) {
+            window.decorView.postDelayed(3000) {
                 viewModel.postLoad()
             }
         }
@@ -184,12 +248,16 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    private fun onTabSelected(tabId: Int) = binding.run {
-        when (tabId) {
-            idBookshelf -> viewPagerMain.setCurrentItem(0, false)
-            idExplore -> viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
-            idMy -> viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
+    private fun onTabSelected(tabId: Int) {
+        val targetPos = when (tabId) {
+            idBookshelf -> 0
+            idExplore -> realPositions.indexOf(idExplore).coerceAtLeast(0)
+            idMy -> realPositions.indexOf(idMy).coerceAtLeast(0)
+            else -> 0
         }
+        pagePosition = targetPos
+        selectedTabIdState = realPositions[targetPos]
+        viewPagerRef?.setCurrentItem(targetPos, false)
     }
 
     private fun onTabReselected(tabId: Int) {
@@ -212,65 +280,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    private fun initView() = binding.run {
-        root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val keyboardHeight = windowInsets.imeHeight
-            view.bottomPadding = keyboardHeight
-            if (keyboardHeight > 0) view.doOnLayout {
-                currentFocus?.takeIf { it.onCheckIsTextEditor() }?.let { input ->
-                    input.requestRectangleOnScreen(Rect(0, 0, input.width, input.height), true)
-                }
-            }
-            windowInsets
-        }
-        viewPagerMain.setEdgeEffectColor(primaryColor)
-        viewPagerMain.offscreenPageLimit = 3
-        viewPagerMain.adapter = adapter
-        viewPagerMain.addOnPageChangeListener(PageChangeCallback())
-        bottomNavigationView.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        bottomNavigationView.setContent {
-            MainNavigationBar(
-                selectedTabId = selectedTabIdState,
-                showDiscovery = showDiscoveryState,
-                upBooksCount = upBooksCountState,
-                onTabSelected = ::onTabSelected,
-                onTabReselected = ::onTabReselected,
-            )
-        }
-        navigationRailView.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        navigationRailView.setContent {
-            MainNavigationRail(
-                selectedTabId = selectedTabIdState,
-                showDiscovery = showDiscoveryState,
-                upBooksCount = upBooksCountState,
-                onTabSelected = ::onTabSelected,
-                onTabReselected = ::onTabReselected,
-            )
-        }
-        upNavigationMode()
-    }
-
-    private fun upNavigationMode() = binding.run {
-        val useRail = io.legado.app.utils.shouldUseTwoPane(
-            resources.configuration.screenWidthDp,
-            resources.configuration.screenHeightDp,
-        )
-        navigationRailView.isVisible = useRail
-        bottomNavigationView.isVisible = !useRail
-    }
-
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
-        upNavigationMode()
-    }
-
-    /**
-     * 版本更新检查
-     */
     private fun upVersion() {
         if (LocalConfig.versionCode == appInfo.versionCode) {
             if (AppConfig.autoUpdateVariant) {
@@ -306,9 +315,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    /**
-     * 备份同步
-     */
     private fun backupSync() {
         if (!AppConfig.autoCheckNewBackup) {
             return
@@ -343,6 +349,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     override fun onDestroy() {
+        viewPagerRef = null
         super.onDestroy()
         Coroutine.async {
             BookHelp.clearInvalidCache()
@@ -352,9 +359,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    /**
-     * 如果重启太快fragment不会重建,这里更新一下书架的排序
-     */
     override fun recreate() {
         (fragmentMap[getFragmentId(0)] as? BaseBookshelfFragment)?.run {
             upSort()
@@ -370,11 +374,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             recreate()
         }
         observeEvent<Boolean>(EventBus.NOTIFY_MAIN) {
-            binding.apply {
-                upBottomMenu()
-                if (it) {
-                    viewPagerMain.setCurrentItem(bottomMenuCount - 1, false)
-                }
+            upBottomMenu()
+            if (it) {
+                val targetPos = (bottomMenuCount - 1).coerceAtLeast(0)
+                pagePosition = targetPos
+                selectedTabIdState = realPositions[targetPos]
+                viewPagerRef?.setCurrentItem(targetPos, false)
             }
         }
         observeEvent<String>(PreferKey.threadCount) {
@@ -402,7 +407,8 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         realPositions[index] = idMy
         bottomMenuCount = index + 1
         adapter.notifyDataSetChanged()
-        selectedTabIdState = realPositions[pagePosition.coerceIn(0, bottomMenuCount - 1)]
+        pagePosition = pagePosition.coerceIn(0, bottomMenuCount - 1)
+        selectedTabIdState = realPositions[pagePosition]
     }
 
     private fun scheduleSourceSharePassphraseRead(delayMillis: Long) {
@@ -427,7 +433,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         generation: Int = passphraseReadGeneration
     ) {
         pendingPassphraseRead = false
-        binding.viewPagerMain.postDelayed(delayMillis) {
+        window.decorView.postDelayed(delayMillis) {
             if (generation != passphraseReadGeneration) return@postDelayed
             val hasWindowFocus = hasWindowFocus()
             if (!hasWindowFocus) {
@@ -485,13 +491,14 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun upHomePage() {
-        when (AppConfig.defaultHomePage) {
-            "bookshelf" -> {}
-            "explore" -> if (AppConfig.showDiscovery) {
-                binding.viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
-            }
-            "my" -> binding.viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
+        val targetPos = when (AppConfig.defaultHomePage) {
+            "explore" -> if (AppConfig.showDiscovery) realPositions.indexOf(idExplore).coerceAtLeast(0) else 0
+            "my" -> realPositions.indexOf(idMy).coerceAtLeast(0)
+            else -> 0
         }
+        pagePosition = targetPos
+        selectedTabIdState = realPositions[targetPos]
+        viewPagerRef?.setCurrentItem(targetPos, false)
     }
 
     private fun getFragmentId(position: Int): Int {
