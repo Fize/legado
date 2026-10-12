@@ -38,7 +38,7 @@ class SelectionIntervalGuardTest {
     private companion object {
         val sources = listOf(
             "io/legado/app/ui/book/manage/BookshelfManageActivity.kt",
-            "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
+            "io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
         )
     }
 }

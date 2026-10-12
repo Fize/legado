@@ -1,6 +1,5 @@
 package io.legado.app.ui.menu
 
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -14,11 +13,11 @@ class Issue1008MenuContractTest {
             "menu_show_login_header",
             "ic_add_online"
         )
-        assertItemIcon(
-            "src/main/res/menu/book_source.xml",
-            "menu_group_sources_by_domain",
-            "ic_add_online"
+        val bookSourceActivity = readProjectFile(
+            "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
         )
+        assertTrue(bookSourceActivity.contains("stringResource(R.string.group_sources_by_domain)"))
+        assertTrue(bookSourceActivity.contains("iconRes = R.drawable.ic_add_online"))
     }
 
     private fun assertItemIcon(path: String, id: String, drawable: String) {

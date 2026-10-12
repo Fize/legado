@@ -157,16 +157,16 @@ class BookSourceViewModel(application: Application) : BaseViewModel(application)
     }
 
     fun saveToFile(
-        adapter: BookSourceAdapter,
+        selection: List<BookSourcePart>,
+        itemCount: Int,
         searchKey: String?,
         sortAscending: Boolean,
         sort: BookSourceSort,
         success: (file: File, name: String) -> Unit
     ) {
         execute {
-            val selection = adapter.selection
             val selectionSize = selection.size
-            val selectedRate = selectionSize.toFloat() / adapter.itemCount.toFloat()
+            val selectedRate = if (itemCount > 0) selectionSize.toFloat() / itemCount.toFloat() else 0f
             val sources = if (selectedRate == 1f) {
                 getBookSources(searchKey, sortAscending, sort)
             } else if (selectedRate < 0.3) {

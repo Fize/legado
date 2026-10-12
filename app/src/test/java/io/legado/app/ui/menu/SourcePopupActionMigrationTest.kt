@@ -8,14 +8,14 @@ import java.io.File
 class SourcePopupActionMigrationTest {
 
     @Test
-    fun `source related row menus use the shared vertical builder`() {
+    fun `source related row menus use the shared vertical builder or compose dropdown`() {
         sourceMenuFiles.forEach { path ->
             val source = readProjectFile(path)
             assertFalse("$path should not import platform PopupMenu", source.contains("import android.widget.PopupMenu"))
             assertFalse("$path should not import AppCompat PopupMenu", source.contains("import androidx.appcompat.widget.PopupMenu"))
             assertContains(path, source, "popupActionMenu(context)")
         }
-        assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "danger(\"delete\")")
+        assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "color = MaterialTheme.colorScheme.error")
         assertContains(CHANGE_BOOK, readProjectFile(CHANGE_BOOK), "danger(\"deleteSource\")")
         assertContains(CHANGE_CHAPTER, readProjectFile(CHANGE_CHAPTER), "danger(\"deleteSource\")")
         assertContains(EXPLORE, readProjectFile(EXPLORE), "color = MaterialTheme.colorScheme.error")
@@ -31,10 +31,10 @@ class SourcePopupActionMigrationTest {
     fun `dynamic source menu entries keep their visibility and labels`() {
         val bookSource = readProjectFile(BOOK_SOURCE)
         listOf(
-            "val defaultOrder = callBack.sort == BookSourceSort.Default",
-            "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)",
+            "val defaultOrder = sort == BookSourceSort.Default",
+            "if (source.hasLoginUrl)",
             "if (source.enabledExplore) R.string.disable_explore else R.string.enable_explore",
-            "source.hasExploreUrl"
+            "if (source.hasExploreUrl)"
         ).forEach { assertContains(BOOK_SOURCE, bookSource, it) }
 
         assertContains(
@@ -80,14 +80,13 @@ class SourcePopupActionMigrationTest {
     fun `source menu callbacks and delete side effects are preserved`() {
         assertActions(
             BOOK_SOURCE,
-            "\"top\" -> callBack.toTop(source)",
-            "\"bottom\" -> callBack.toBottom(source)",
-            "\"login\" -> context.startActivity<SourceLoginActivity>",
-            "\"search\" -> callBack.searchBook(source)",
-            "\"delete\" -> {",
-            "callBack.del(source)",
-            "selected.remove(source)",
-            "\"toggleExplore\" -> callBack.enableExplore(!source.enabledExplore, source)"
+            "toTop(source)",
+            "toBottom(source)",
+            "startActivity<SourceLoginActivity>",
+            "searchBook(source)",
+            "del(source)",
+            "selectedUrlsState = selectedUrlsState - source.bookSourceUrl",
+            "enableExplore(!source.enabledExplore, source)"
         )
         assertActions(
             CHANGE_BOOK,
@@ -147,11 +146,11 @@ class SourcePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
+        const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
         const val CHANGE_BOOK = "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt"
         const val CHANGE_CHAPTER = "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceAdapter.kt"
         const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
-        val sourceMenuFiles = listOf(BOOK_SOURCE, CHANGE_BOOK, CHANGE_CHAPTER)
+        val sourceMenuFiles = listOf(CHANGE_BOOK, CHANGE_CHAPTER)
         val legacyMenuFiles = listOf(
             "src/main/res/menu/book_source_item.xml",
             "src/main/res/menu/change_source_item.xml",

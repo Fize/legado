@@ -3,34 +3,36 @@ package io.legado.app.ui.book.source.edit
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withStateAtLeast
 import io.legado.app.R
-import io.legado.app.base.BaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.ActivityJsSourceEditBinding
 import io.legado.app.model.jsSource.JsSourceUpsert
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class JsSourceEditActivity : BaseActivity<ActivityJsSourceEditBinding>(imageBg = false) {
+class JsSourceEditActivity : BaseComposeActivity(imageBg = false) {
 
     companion object {
         private const val STATE_OPENED_SOURCE_URL = "openedSourceUrl"
         private const val STATE_PENDING_TEXT = "pendingText"
         private const val STATE_STAGE = "stage"
     }
-
-    override val binding by viewBinding(ActivityJsSourceEditBinding::inflate)
 
     private var openedSourceUrl: String? = null
     private var pendingText: String? = null
@@ -60,6 +62,16 @@ class JsSourceEditActivity : BaseActivity<ActivityJsSourceEditBinding>(imageBg =
     ) {
         stage = stage.afterLoginResult()
         pendingText?.let(::openEditor) ?: super.finish()
+    }
+
+    @Composable
+    override fun Content() {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {

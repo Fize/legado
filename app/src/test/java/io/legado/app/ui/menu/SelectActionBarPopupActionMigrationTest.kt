@@ -104,24 +104,23 @@ class SelectActionBarPopupActionMigrationTest {
         const val POPUP_ACTION = "src/main/java/io/legado/app/ui/widget/PopupAction.kt"
         const val VIEW_EXTENSIONS = "src/main/java/io/legado/app/utils/ViewExtensions.kt"
 
-        val expectedMenuIds = mapOf(
-            "book_source_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_add_group",
-                "@+id/menu_remove_group",
-                "@+id/menu_enable_explore",
-                "@+id/menu_disable_explore",
-                "@+id/menu_top_sel",
-                "@+id/menu_bottom_sel",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source",
-                "@+id/menu_check_source",
-                "@+id/menu_check_selected_interval"
-            ),
-        )
+        val expectedMenuIds = emptyMap<String, List<String>>()
 
         val expectedComposeMenuLabels = mapOf(
+            "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt" to listOf(
+                "R.string.enable_selection",
+                "R.string.disable_selection",
+                "R.string.add_group",
+                "R.string.remove_group",
+                "R.string.enable_explore",
+                "R.string.disable_explore",
+                "R.string.selection_to_top",
+                "R.string.selection_to_bottom",
+                "R.string.export_selection",
+                "R.string.share_selected_source",
+                "R.string.check_select_source",
+                "R.string.check_selected_interval"
+            ),
             "src/main/java/io/legado/app/ui/book/import/local/ImportBookActivity.kt" to listOf(
                 "R.string.delete"
             ),

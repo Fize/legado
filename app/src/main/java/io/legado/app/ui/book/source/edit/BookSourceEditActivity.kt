@@ -1,23 +1,72 @@
 package io.legado.app.ui.book.source.edit
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import android.widget.AdapterView
 import android.widget.EditText
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.BookSourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
@@ -27,60 +76,44 @@ import io.legado.app.data.entities.rule.ExploreRule
 import io.legado.app.data.entities.rule.ReviewRule
 import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.data.entities.rule.TocRule
-import io.legado.app.databinding.ActivityBookSourceEditBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.widget.bindFieldNavigation
-import io.legado.app.ui.widget.code.CodeView
 import io.legado.app.ui.widget.code.EditSafety
-import io.legado.app.ui.widget.code.resolveSelectionHandleClearance
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
-import io.legado.app.ui.widget.recycler.NoChildScrollLinearLayoutManager
-import io.legado.app.ui.widget.setFieldLabels
 import io.legado.app.ui.widget.text.EditEntity
 import io.legado.app.utils.GSON
-import io.legado.app.utils.imeHeight
+import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
-import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.share
 import io.legado.app.utils.shareWithQr
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import splitties.views.bottomPadding
 
 class BookSourceEditActivity :
-    VMBaseActivity<ActivityBookSourceEditBinding, BookSourceEditViewModel>(),
+    VMBaseComposeActivity<BookSourceEditViewModel>(),
     KeyboardToolPop.CallBack,
     VariableDialog.Callback {
 
-    override val binding by viewBinding(ActivityBookSourceEditBinding::inflate)
     override val viewModel by viewModels<BookSourceEditViewModel>()
 
-    private val adapter by lazy { BookSourceEditAdapter(::openUnsafeTextEditor) }
     private val sourceEntities: ArrayList<EditEntity> = ArrayList()
     private val searchEntities: ArrayList<EditEntity> = ArrayList()
     private val exploreEntities: ArrayList<EditEntity> = ArrayList()
@@ -94,6 +127,23 @@ class BookSourceEditActivity :
     private var pendingResultAvailable = false
     private var pendingResultText: String? = null
     private var pendingResultCursor = -1
+
+    private var optionsExpandedState by mutableStateOf(false)
+    private var isEnableState by mutableStateOf(true)
+    private var isEnableExploreState by mutableStateOf(true)
+    private var isEnableCookieState by mutableStateOf(true)
+    private var isEnableReviewState by mutableStateOf(false)
+    private var isEventListenerState by mutableStateOf(false)
+    private var isCustomButtonState by mutableStateOf(false)
+    private var selectedTypePositionState by mutableIntStateOf(0)
+    private var selectedTabPositionState by mutableIntStateOf(0)
+    private var focusedFieldKeyState by mutableStateOf<String?>(null)
+    private var editRefreshVersionState by mutableIntStateOf(0)
+    private var autoCompleteState by mutableStateOf(false)
+
+    private val fieldSelections = mutableStateMapOf<String, TextRange>()
+    private val undoStacks = hashMapOf<String, ArrayDeque<String>>()
+    private val redoStacks = hashMapOf<String, ArrayDeque<String>>()
 
     private val jsSourceEdit = registerForActivityResult(
         StartActivityContract(JsSourceEditActivity::class.java)
@@ -119,7 +169,7 @@ class BookSourceEditActivity :
     }
 
     private val softKeyboardTool by lazy {
-        KeyboardToolPop(this, lifecycleScope, binding.root, this)
+        KeyboardToolPop(this, lifecycleScope, window.decorView, this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -155,43 +205,34 @@ class BookSourceEditActivity :
                 }
                 return@initData
             }
+            autoCompleteState = viewModel.autoComplete
             upSourceView(viewModel.bookSource)
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.source_edit, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = getSource().hasLogin()
-        menu.findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            pendingResultAvailable = true
-            pendingResultText = result.data?.getStringExtra("text")
-            pendingResultCursor = result.data?.getIntExtra("cursorPosition", -1) ?: -1
-            applyPendingEditResult()
-        } else {
-            clearPendingEditResult()
+    private val textEditLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                pendingResultAvailable = true
+                pendingResultText = result.data?.getStringExtra("text")
+                pendingResultCursor = result.data?.getIntExtra("cursorPosition", -1) ?: -1
+                applyPendingEditResult()
+            } else {
+                clearPendingEditResult()
+            }
         }
-    }
 
     private fun onFullEditClicked() {
-        val view = window.decorView.findFocus()
-        if (view is EditText) {
-            val key = view.getTag(R.id.tag) as? String
-            val editEntity = key?.let {
-                findEditEntity(binding.tabLayout.selectedTabPosition, it)
-            }
-            if (editEntity != null) {
-                openTextEditor(editEntity, view.selectionStart)
-                return
-            }
+        val key = focusedFieldKeyState
+            ?: (window.decorView.findFocus() as? EditText)?.getTag(R.id.tag) as? String
+        val editEntity = key?.let {
+            findEditEntity(selectedTabPositionState, it)
+        }
+        if (editEntity != null) {
+            val selectionKey = "${selectedTabPositionState}:${editEntity.key}"
+            val cursor = fieldSelections[selectionKey]?.start ?: 0
+            openTextEditor(editEntity, cursor)
+            return
         }
         toastOnUi(R.string.please_focus_cursor_on_textbox)
     }
@@ -201,7 +242,7 @@ class BookSourceEditActivity :
     }
 
     private fun openTextEditor(editEntity: EditEntity, cursorPosition: Int) {
-        pendingEditTabPosition = binding.tabLayout.selectedTabPosition
+        pendingEditTabPosition = selectedTabPositionState
         pendingEditKey = editEntity.key
         val intent = Intent(this, CodeEditActivity::class.java).apply {
             putExtra("text", editEntity.value.orEmpty())
@@ -212,7 +253,12 @@ class BookSourceEditActivity :
     }
 
     private fun findEditEntity(tabPosition: Int, key: String): EditEntity? {
-        val entities = when (tabPosition) {
+        val entities = entitiesForTab(tabPosition)
+        return entities.find { it.key == key }
+    }
+
+    private fun entitiesForTab(tabPosition: Int?): ArrayList<EditEntity> {
+        return when (tabPosition) {
             1 -> searchEntities
             2 -> exploreEntities
             3 -> infoEntities
@@ -221,65 +267,19 @@ class BookSourceEditActivity :
             6 -> reviewEntities
             else -> sourceEntities
         }
-        return entities.find { it.key == key }
     }
 
     private fun refreshEditedEntity(editEntity: EditEntity, cursorPosition: Int) {
-        val index = adapter.editEntities.indexOf(editEntity)
-        if (index < 0) return
-
-        adapter.notifyItemChanged(index)
+        val selectionKey = "${selectedTabPositionState}:${editEntity.key}"
         if (
-            cursorPosition < 0 ||
-            EditSafety.isCombiningHeavy(editEntity.value.orEmpty()) ||
-            EditSafety.isTooLongForInline(editEntity.value.orEmpty())
-        ) return
-
-        binding.recyclerView.post {
-            val holder = binding.recyclerView.findViewHolderForAdapterPosition(index)
-                as? BookSourceEditAdapter.MyViewHolder
-            holder?.binding?.editText?.run {
-                requestFocus()
-                setSelection(cursorPosition.coerceIn(0, text.length))
-            }
+            cursorPosition >= 0 &&
+            !EditSafety.isCombiningHeavy(editEntity.value.orEmpty()) &&
+            !EditSafety.isTooLongForInline(editEntity.value.orEmpty())
+        ) {
+            val safeCursor = cursorPosition.coerceIn(0, editEntity.value.orEmpty().length)
+            fieldSelections[selectionKey] = TextRange(safeCursor)
         }
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_fullscreen_edit -> onFullEditClicked()
-
-            R.id.menu_save -> saveSource {
-                finish()
-            }
-
-            R.id.menu_clear_cookie -> viewModel.clearCookie(getSource().bookSourceUrl)
-            R.id.menu_auto_complete -> viewModel.autoComplete = !viewModel.autoComplete
-            R.id.menu_copy_source -> sendToClip(GSON.toJson(getSource()))
-            R.id.menu_paste_source -> viewModel.pasteSource { upSourceView(it) }
-            R.id.menu_qr_code_camera -> qrCodeResult.launch()
-            R.id.menu_share_str -> share(GSON.toJson(getSource()))
-            R.id.menu_share_qr -> shareWithQr(
-                GSON.toJson(getSource()),
-                getString(R.string.share_book_source),
-                ErrorCorrectionLevel.L
-            )
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_login -> saveSource { source ->
-                startActivity<SourceLoginActivity> {
-                    putExtra("type", "bookSource")
-                    putExtra("key", source.bookSourceUrl)
-                }
-            }
-
-            R.id.menu_set_source_variable -> setSourceVariable()
-            R.id.menu_search -> saveSource { source ->
-                SearchActivity.start(this, source)
-            }
-
-        }
-        return super.onCompatOptionsItemSelected(item)
+        editRefreshVersionState++
     }
 
     private fun saveSource(onSuccess: (BookSource) -> Unit) {
@@ -290,120 +290,487 @@ class BookSourceEditActivity :
     }
 
     private fun initView() {
-        initOptionPanel()
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
-            setText(R.string.source_tab_base)
-        })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
-            setText(R.string.source_tab_search)
-        })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
-            setText(R.string.source_tab_find)
-        })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
-            setText(R.string.source_tab_info)
-        })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
-            setText(R.string.source_tab_toc)
-        })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
-            setText(R.string.source_tab_content)
-        })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
-            setText(R.string.source_tab_review)
-        })
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.layoutManager = NoChildScrollLinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
-        binding.fieldNav.bindFieldNavigation(binding.recyclerView)
-        binding.recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->
-            (oldFocus as? CodeView)?.keepSelectionVisible = false
-            (newFocus as? CodeView)?.keepSelectionVisible = true
-        }
-        binding.recyclerView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            (binding.recyclerView.findFocus() as? CodeView)?.requestSelectionVisible()
-        }
-        val transparentBar = transparentNavBar && !AppConfig.isEInkMode
-        listOf(binding.tabLayout, binding.fieldNav).forEach { tabs ->
-            tabs.setBackgroundColor(if (transparentBar) Color.TRANSPARENT else backgroundColor)
-            if (transparentBar) tabs.elevation = 0f
-            tabs.setSelectedTabIndicatorColor(accentColor)
-        }
-        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabReselected(tab: TabLayout.Tab?) {
-
-            }
-
-            override fun onTabUnselected(tab: TabLayout.Tab?) {
-
-            }
-
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                setEditEntities(tab?.position)
-            }
-        })
-        val selectionHandleClearance = resolveSelectionHandleClearance(this)
-        binding.recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val navigationBarHeight = windowInsets.navigationBarHeight
-            val imeHeight = windowInsets.imeHeight
-            view.bottomPadding = if (imeHeight == 0) navigationBarHeight
-            else selectionHandleClearance
-            softKeyboardTool.initialPadding = imeHeight
-            windowInsets
-        }
-    }
-
-    private fun initOptionPanel() {
-        binding.optionsHeader.setOnClickListener {
-            updateOptionPanel(binding.optionsContent.visibility != View.VISIBLE)
-        }
-        listOf(
-            binding.cbIsEnable,
-            binding.cbIsEnableExplore,
-            binding.cbIsEnableCookie,
-            binding.cbIsEnableReview,
-            binding.cbIsEventListener,
-            binding.cbIsCustomButton
-        ).forEach { checkBox ->
-            checkBox.setOnCheckedChangeListener { _, _ -> updateOptionPanel() }
-        }
-        binding.spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long
-            ) = updateOptionPanel()
-
-            override fun onNothingSelected(parent: AdapterView<*>?) = updateOptionPanel()
-        }
         updateOptionPanel(false)
     }
 
-    private fun updateOptionPanel(expanded: Boolean = binding.optionsContent.visibility == View.VISIBLE) {
-        binding.optionsContent.visibility = if (expanded) View.VISIBLE else View.GONE
-        binding.ivOptionsExpand.setImageResource(
-            if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more
-        )
-        val summary = mutableListOf(
-            binding.spType.selectedItem?.toString() ?: getString(R.string.book_type)
-        )
-        listOf(
-            getString(R.string.is_enable) to binding.cbIsEnable.isChecked,
-            getString(R.string.discovery) to binding.cbIsEnableExplore.isChecked,
-            getString(R.string.auto_save_cookie) to binding.cbIsEnableCookie.isChecked,
-            getString(R.string.review) to binding.cbIsEnableReview.isChecked,
-            getString(R.string.is_event_listener) to binding.cbIsEventListener.isChecked,
-            getString(R.string.custom_button) to binding.cbIsCustomButton.isChecked
-        ).forEach { (label, checked) ->
-            if (checked) summary.add(label)
+    private fun updateOptionPanel(expanded: Boolean = optionsExpandedState) {
+        optionsExpandedState = expanded
+    }
+
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
+    override fun Content() {
+        @Suppress("UNUSED_VARIABLE")
+        val refreshVer = editRefreshVersionState
+        val currentTab = selectedTabPositionState
+        val entities = remember(currentTab, refreshVer) {
+            entitiesForTab(currentTab).toList()
         }
-        binding.tvOptionsSummary.text = summary.joinToString(" | ")
-        val action = getString(
-            if (expanded) R.string.book_intro_collapse else R.string.book_intro_expand
+        val listState = rememberLazyListState()
+        val coroutineScope = rememberCoroutineScope()
+
+        LaunchedEffect(currentTab) {
+            listState.scrollToItem(0)
+        }
+
+        val hasLogin = remember(refreshVer, currentTab) {
+            getSource().hasLogin()
+        }
+
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.edit_book_source),
+                    onBack = { finish() },
+                    menuActions = buildList {
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.edit_content),
+                                iconRes = R.drawable.ic_code,
+                                showAsAction = true,
+                                onClick = { onFullEditClicked() },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.action_save),
+                                iconRes = R.drawable.ic_save,
+                                showAsAction = true,
+                                onClick = {
+                                    saveSource {
+                                        finish()
+                                    }
+                                },
+                            )
+                        )
+                        if (hasLogin) {
+                            add(
+                                LegadoMenuAction(
+                                    title = stringResource(R.string.login),
+                                    onClick = {
+                                        saveSource { source ->
+                                            startActivity<SourceLoginActivity> {
+                                                putExtra("type", "bookSource")
+                                                putExtra("key", source.bookSourceUrl)
+                                            }
+                                        }
+                                    },
+                                )
+                            )
+                        }
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.search),
+                                onClick = {
+                                    saveSource { source ->
+                                        SearchActivity.start(this@BookSourceEditActivity, source)
+                                    }
+                                },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.cookie),
+                                onClick = { viewModel.clearCookie(getSource().bookSourceUrl) },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.auto_complete),
+                                checked = autoCompleteState,
+                                onClick = {
+                                    viewModel.autoComplete = !viewModel.autoComplete
+                                    autoCompleteState = viewModel.autoComplete
+                                },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.copy_source),
+                                onClick = { sendToClip(GSON.toJson(getSource())) },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.paste_source),
+                                onClick = { viewModel.pasteSource { upSourceView(it) } },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.set_source_variable),
+                                onClick = { setSourceVariable() },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.import_by_qr_code),
+                                onClick = { qrCodeResult.launch() },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.qr_share),
+                                onClick = {
+                                    shareWithQr(
+                                        GSON.toJson(getSource()),
+                                        getString(R.string.share_book_source),
+                                        ErrorCorrectionLevel.L,
+                                    )
+                                },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.str_share),
+                                onClick = { share(GSON.toJson(getSource())) },
+                            )
+                        )
+                        add(
+                            LegadoMenuAction(
+                                title = stringResource(R.string.log),
+                                onClick = { showDialogFragment<AppLogDialog>() },
+                            )
+                        )
+                    },
+                )
+            },
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .imePadding(),
+            ) {
+                SourceOptionsCardComposable()
+
+                val mainTabs = listOf(
+                    R.string.source_tab_base,
+                    R.string.source_tab_search,
+                    R.string.source_tab_find,
+                    R.string.source_tab_info,
+                    R.string.source_tab_toc,
+                    R.string.source_tab_content,
+                    R.string.source_tab_review,
+                )
+                ScrollableTabRow(
+                    selectedTabIndex = currentTab.coerceIn(0, mainTabs.lastIndex),
+                    edgePadding = 8.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    mainTabs.forEachIndexed { index, titleRes ->
+                        Tab(
+                            selected = currentTab == index,
+                            onClick = {
+                                selectedTabPositionState = index
+                                setEditEntities(index)
+                            },
+                            text = { Text(text = stringResource(titleRes)) },
+                        )
+                    }
+                }
+
+                if (entities.isNotEmpty()) {
+                    val activeFieldIndex = listState.firstVisibleItemIndex.coerceIn(0, entities.lastIndex)
+                    ScrollableTabRow(
+                        selectedTabIndex = activeFieldIndex,
+                        edgePadding = 8.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                    ) {
+                        entities.forEachIndexed { index, entity ->
+                            Tab(
+                                selected = activeFieldIndex == index,
+                                onClick = {
+                                    coroutineScope.launch {
+                                        listState.animateScrollToItem(index)
+                                    }
+                                },
+                                text = {
+                                    Text(
+                                        text = entity.hint,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                ) {
+                    itemsIndexed(
+                        items = entities,
+                        key = { _, entity -> "$currentTab:${entity.key}" },
+                    ) { _, entity ->
+                        EditEntityFieldRow(
+                            tabPosition = currentTab,
+                            editEntity = entity,
+                            refreshVer = refreshVer,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
+    private fun SourceOptionsCardComposable() {
+        val typeEntries = stringArrayResource(R.array.book_type)
+        val selectedTypeLabel = typeEntries.getOrNull(selectedTypePositionState)
+            ?: stringResource(R.string.book_type)
+        val summaryParts = buildList {
+            add(selectedTypeLabel)
+            if (isEnableState) add(stringResource(R.string.is_enable))
+            if (isEnableExploreState) add(stringResource(R.string.discovery))
+            if (isEnableCookieState) add(stringResource(R.string.auto_save_cookie))
+            if (isEnableReviewState) add(stringResource(R.string.review))
+            if (isEventListenerState) add(stringResource(R.string.is_event_listener))
+            if (isCustomButtonState) add(stringResource(R.string.custom_button))
+        }
+        val summaryText = summaryParts.joinToString(" | ")
+        val actionLabel = stringResource(
+            if (optionsExpandedState) R.string.book_intro_collapse else R.string.book_intro_expand
         )
-        binding.optionsHeader.contentDescription =
-            "${getString(R.string.setting)}, ${binding.tvOptionsSummary.text}, $action"
+        val headerContentDesc = "${stringResource(R.string.setting)}, $summaryText, $actionLabel"
+
+        var showTypeMenu by remember { mutableStateOf(false) }
+
+        Card(
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .semantics { contentDescription = headerContentDesc }
+                        .clickable { updateOptionPanel(!optionsExpandedState) }
+                        .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.setting),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = summaryText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Icon(
+                        painter = painterResource(
+                            if (optionsExpandedState) R.drawable.ic_expand_less else R.drawable.ic_expand_more
+                        ),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+
+                if (optionsExpandedState) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.book_type),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Box {
+                            OutlinedButton(onClick = { showTypeMenu = true }) {
+                                Text(text = selectedTypeLabel)
+                            }
+                            DropdownMenu(
+                                expanded = showTypeMenu,
+                                onDismissRequest = { showTypeMenu = false },
+                            ) {
+                                typeEntries.forEachIndexed { index, entry ->
+                                    DropdownMenuItem(
+                                        text = { Text(entry) },
+                                        onClick = {
+                                            selectedTypePositionState = index
+                                            showTypeMenu = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OptionCheckBoxItem(
+                            label = stringResource(R.string.is_enable),
+                            checked = isEnableState,
+                            onCheckedChange = { isEnableState = it },
+                        )
+                        OptionCheckBoxItem(
+                            label = stringResource(R.string.discovery),
+                            checked = isEnableExploreState,
+                            onCheckedChange = { isEnableExploreState = it },
+                        )
+                        OptionCheckBoxItem(
+                            label = stringResource(R.string.auto_save_cookie),
+                            checked = isEnableCookieState,
+                            onCheckedChange = { isEnableCookieState = it },
+                        )
+                        OptionCheckBoxItem(
+                            label = stringResource(R.string.review),
+                            checked = isEnableReviewState,
+                            onCheckedChange = { isEnableReviewState = it },
+                        )
+                        OptionCheckBoxItem(
+                            label = stringResource(R.string.is_event_listener),
+                            checked = isEventListenerState,
+                            onCheckedChange = { isEventListenerState = it },
+                        )
+                        OptionCheckBoxItem(
+                            label = stringResource(R.string.custom_button),
+                            checked = isCustomButtonState,
+                            onCheckedChange = { isCustomButtonState = it },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun OptionCheckBoxItem(
+        label: String,
+        checked: Boolean,
+        onCheckedChange: (Boolean) -> Unit,
+    ) {
+        Row(
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .clickable { onCheckedChange(!checked) }
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+
+    @Composable
+    private fun EditEntityFieldRow(
+        tabPosition: Int,
+        editEntity: EditEntity,
+        refreshVer: Int,
+    ) {
+        val rawText = remember(editEntity, refreshVer) { editEntity.value.orEmpty() }
+        val combiningPlaceholder = stringResource(R.string.combining_text_placeholder)
+        val largePlaceholder = stringResource(R.string.large_text_placeholder, rawText.length)
+        val presentation = remember(rawText, combiningPlaceholder, largePlaceholder) {
+            if (EditSafety.isTooLongForInline(rawText)) {
+                EditSafety.Presentation(
+                    text = largePlaceholder,
+                    isInlineEditable = false,
+                )
+            } else {
+                EditSafety.presentation(rawText, combiningPlaceholder)
+            }
+        }
+        val isUnsafeText = !presentation.isInlineEditable
+        val selectionKey = "$tabPosition:${editEntity.key}"
+
+        if (isUnsafeText) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { openUnsafeTextEditor(editEntity) }
+            ) {
+                OutlinedTextField(
+                    value = presentation.text,
+                    onValueChange = {},
+                    readOnly = true,
+                    enabled = false,
+                    label = { Text(editEntity.hint) },
+                    maxLines = EditSafety.PREVIEW_LINES,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        } else {
+            val savedSelection = fieldSelections[selectionKey]
+            var textFieldValue by remember(editEntity, refreshVer) {
+                val safeRange = savedSelection?.let {
+                    TextRange(
+                        it.start.coerceIn(0, rawText.length),
+                        it.end.coerceIn(0, rawText.length),
+                    )
+                } ?: TextRange(rawText.length)
+                mutableStateOf(
+                    TextFieldValue(
+                        text = rawText,
+                        selection = safeRange,
+                    )
+                )
+            }
+
+            OutlinedTextField(
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    val oldText = textFieldValue.text
+                    if (newValue.text != oldText) {
+                        val stack = undoStacks.getOrPut(selectionKey) { ArrayDeque() }
+                        if (stack.lastOrNull() != oldText) {
+                            stack.addLast(oldText)
+                            if (stack.size > 50) stack.removeFirst()
+                        }
+                        redoStacks[selectionKey]?.clear()
+                    }
+                    textFieldValue = newValue
+                    editEntity.value = newValue.text
+                    fieldSelections[selectionKey] = newValue.selection
+                },
+                label = { Text(editEntity.hint) },
+                maxLines = AppConfig.sourceEditMaxLine.coerceAtLeast(1),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) {
+                            focusedFieldKeyState = editEntity.key
+                        }
+                    },
+            )
+        }
     }
 
     override fun finish() {
@@ -427,39 +794,27 @@ class BookSourceEditActivity :
     }
 
     private fun setEditEntities(tabPosition: Int?) {
-        val entities = when (tabPosition) {
-            1 -> searchEntities
-            2 -> exploreEntities
-            3 -> infoEntities
-            4 -> tocEntities
-            5 -> contentEntities
-            6 -> reviewEntities
-            else -> sourceEntities
-        }
-        adapter.editEntities = entities
-        binding.fieldNav.setFieldLabels(entities.map { it.hint })
-        binding.recyclerView.scrollToPosition(0)
-        window.decorView.rootView.clearFocus()
+        selectedTabPositionState = tabPosition ?: 0
+        focusedFieldKeyState = null
+        editRefreshVersionState++
     }
 
     private fun upSourceView(bookSource: BookSource?) {
         val bs = bookSource ?: BookSource()
         bs.let {
-            binding.cbIsEnable.isChecked = it.enabled
-            binding.cbIsEnableExplore.isChecked = it.enabledExplore
-            binding.cbIsEnableCookie.isChecked = it.enabledCookieJar ?: false
-            binding.cbIsEnableReview.isChecked = it.ruleReview?.enabled ?: false
-            binding.spType.setSelection(
-                when (it.bookSourceType) {
-                    BookSourceType.video -> 4
-                    BookSourceType.file -> 3
-                    BookSourceType.image -> 2
-                    BookSourceType.audio -> 1
-                    else -> 0
-                }
-            )
-            binding.cbIsEventListener.isChecked = it.eventListener
-            binding.cbIsCustomButton.isChecked = it.customButton
+            isEnableState = it.enabled
+            isEnableExploreState = it.enabledExplore
+            isEnableCookieState = it.enabledCookieJar ?: false
+            isEnableReviewState = it.ruleReview?.enabled ?: false
+            selectedTypePositionState = when (it.bookSourceType) {
+                BookSourceType.video -> 4
+                BookSourceType.file -> 3
+                BookSourceType.image -> 2
+                BookSourceType.audio -> 1
+                else -> 0
+            }
+            isEventListenerState = it.eventListener
+            isCustomButtonState = it.customButton
         }
         updateOptionPanel()
         // 基本信息
@@ -586,7 +941,6 @@ class BookSourceEditActivity :
             add(EditEntity("replyBadgeRule", rr.replyBadgeRule, R.string.rule_review_reply_badge))
             add(EditEntity("replyContentRule", rr.replyContentRule, R.string.rule_review_reply_content))
         }
-        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
         setEditEntities(0)
         applyPendingEditResult()
     }
@@ -610,25 +964,25 @@ class BookSourceEditActivity :
 
     private fun getSource(): BookSource {
         val source = viewModel.bookSource?.copy() ?: BookSource()
-        source.enabled = binding.cbIsEnable.isChecked
-        source.enabledExplore = binding.cbIsEnableExplore.isChecked
-        source.enabledCookieJar = binding.cbIsEnableCookie.isChecked
-        source.bookSourceType = when (binding.spType.selectedItemPosition) {
+        source.enabled = isEnableState
+        source.enabledExplore = isEnableExploreState
+        source.enabledCookieJar = isEnableCookieState
+        source.bookSourceType = when (selectedTypePositionState) {
             4 -> BookSourceType.video
             3 -> BookSourceType.file
             2 -> BookSourceType.image
             1 -> BookSourceType.audio
             else -> BookSourceType.default
         }
-        source.eventListener = binding.cbIsEventListener.isChecked
-        source.customButton = binding.cbIsCustomButton.isChecked
+        source.eventListener = isEventListenerState
+        source.customButton = isCustomButtonState
         val searchRule = SearchRule()
         val exploreRule = ExploreRule()
         val bookInfoRule = BookInfoRule()
         val tocRule = TocRule()
         val contentRule = ContentRule()
         val reviewRule = source.ruleReview?.copy() ?: ReviewRule()
-        reviewRule.enabled = binding.cbIsEnableReview.isChecked
+        reviewRule.enabled = isEnableReviewState
         sourceEntities.forEach {
             it.value = it.value?.takeIf { s -> s.isNotBlank() }
             when (it.key) {
@@ -665,9 +1019,6 @@ class BookSourceEditActivity :
                 "intro" -> searchRule.intro =
                     viewModel.ruleComplete(it.value, searchRule.bookList)
 
-//                "updateTime" -> searchRule.updateTime =
-//                    viewModel.ruleComplete(it.value, searchRule.bookList)
-
                 "wordCount" -> searchRule.wordCount =
                     viewModel.ruleComplete(it.value, searchRule.bookList)
 
@@ -698,9 +1049,6 @@ class BookSourceEditActivity :
                 "intro" -> exploreRule.intro =
                     viewModel.ruleComplete(it.value, exploreRule.bookList)
 
-//                "updateTime" -> exploreRule.updateTime =
-//                    viewModel.ruleComplete(it.value, exploreRule.bookList)
-
                 "wordCount" -> exploreRule.wordCount =
                     viewModel.ruleComplete(it.value, exploreRule.bookList)
 
@@ -727,9 +1075,6 @@ class BookSourceEditActivity :
 
                 "intro" -> bookInfoRule.intro =
                     viewModel.ruleComplete(it.value, bookInfoRule.init)
-
-//                "updateTime" -> bookInfoRule.updateTime =
-//                    viewModel.ruleComplete(it.value, bookInfoRule.init)
 
                 "wordCount" -> bookInfoRule.wordCount =
                     viewModel.ruleComplete(it.value, bookInfoRule.init)
@@ -841,21 +1186,12 @@ class BookSourceEditActivity :
         val helpActions = arrayListOf(
             SelectItem("插入URL参数", "urlOption"),
         )
-        val view = window.decorView.findFocus()
-        if (view is EditText) {
-            when (view.getTag(R.id.tag)) {
-                "bookSourceGroup" -> {
-                    helpActions.add(
-                        SelectItem("插入分组", "addGroup")
-                    )
-                }
-
-                else -> {
-                    helpActions.add(
-                        SelectItem("选择文件", "selectFile")
-                    )
-                }
-            }
+        val activeKey = focusedFieldKeyState
+            ?: (window.decorView.findFocus() as? EditText)?.getTag(R.id.tag) as? String
+        if (activeKey == "bookSourceGroup") {
+            helpActions.add(SelectItem("插入分组", "addGroup"))
+        } else if (activeKey != null) {
+            helpActions.add(SelectItem("选择文件", "selectFile"))
         }
         return helpActions
     }
@@ -871,22 +1207,38 @@ class BookSourceEditActivity :
     }
 
     override fun sendText(text: String) {
+        if (text.isEmpty()) return
+        val key = focusedFieldKeyState
+        val entity = key?.let { findEditEntity(selectedTabPositionState, it) }
+        if (entity != null) {
+            val selectionKey = "${selectedTabPositionState}:${entity.key}"
+            val current = entity.value.orEmpty()
+            val stack = undoStacks.getOrPut(selectionKey) { ArrayDeque() }
+            stack.addLast(current)
+            redoStacks[selectionKey]?.clear()
+
+            val range = fieldSelections[selectionKey] ?: TextRange(current.length)
+            val start = minOf(range.start, range.end).coerceIn(0, current.length)
+            val end = maxOf(range.start, range.end).coerceIn(0, current.length)
+            val updated = buildString {
+                append(current.substring(0, start))
+                append(text)
+                append(current.substring(end))
+            }
+            entity.value = updated
+            fieldSelections[selectionKey] = TextRange(start + text.length)
+            editRefreshVersionState++
+            return
+        }
         val view = window.decorView.findFocus()
         if (view is EditText) {
-            var start = view.selectionStart
-            var end = view.selectionEnd
-            if (start > end) {
-                val temp = start
-                start = end
-                end = temp
-            }
-            if (text.isNotEmpty()) {
-                val edit = view.editableText//获取EditText的文字
-                if (start < 0 || start >= edit.length) {
-                    edit.append(text)
-                } else {
-                    edit.replace(start, end, text)//光标所在位置插入文字
-                }
+            val start = minOf(view.selectionStart, view.selectionEnd)
+            val end = maxOf(view.selectionStart, view.selectionEnd)
+            val edit = view.editableText
+            if (start < 0 || start >= edit.length) {
+                edit.append(text)
+            } else {
+                edit.replace(start, end, text)
             }
         }
     }
@@ -915,6 +1267,20 @@ class BookSourceEditActivity :
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onUndoClicked() {
+        val key = focusedFieldKeyState
+        val entity = key?.let { findEditEntity(selectedTabPositionState, it) }
+        if (entity != null) {
+            val selectionKey = "${selectedTabPositionState}:${entity.key}"
+            val undoStack = undoStacks[selectionKey]
+            if (!undoStack.isNullOrEmpty()) {
+                val prev = undoStack.removeLast()
+                redoStacks.getOrPut(selectionKey) { ArrayDeque() }.addLast(entity.value.orEmpty())
+                entity.value = prev
+                fieldSelections[selectionKey] = TextRange(prev.length)
+                editRefreshVersionState++
+            }
+            return
+        }
         val editText = window.decorView.findFocus()
         if (editText is EditText) {
             editText.onTextContextMenuItem(android.R.id.undo)
@@ -923,6 +1289,20 @@ class BookSourceEditActivity :
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onRedoClicked() {
+        val key = focusedFieldKeyState
+        val entity = key?.let { findEditEntity(selectedTabPositionState, it) }
+        if (entity != null) {
+            val selectionKey = "${selectedTabPositionState}:${entity.key}"
+            val redoStack = redoStacks[selectionKey]
+            if (!redoStack.isNullOrEmpty()) {
+                val next = redoStack.removeLast()
+                undoStacks.getOrPut(selectionKey) { ArrayDeque() }.addLast(entity.value.orEmpty())
+                entity.value = next
+                fieldSelections[selectionKey] = TextRange(next.length)
+                editRefreshVersionState++
+            }
+            return
+        }
         val editText = window.decorView.findFocus()
         if (editText is EditText) {
             editText.onTextContextMenuItem(android.R.id.redo)
