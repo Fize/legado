@@ -24,7 +24,7 @@ class ChangeSourceViewLifecycleContractTest {
     @Test
     fun `dialog collectors are cancelled with the current view`() {
         val book = source("ChangeBookSourceDialog.kt")
-            .section("private fun initLiveData()", "private fun showChangeSourceLoading")
+            .section("private fun initLiveData()", "private fun showEmptySearchGroupDialog")
         val chapter = source("ChangeChapterSourceDialog.kt")
             .section("private fun initLiveData()", "private fun showEmptySearchGroupDialog")
 
@@ -60,21 +60,20 @@ class ChangeSourceViewLifecycleContractTest {
 
         assertTrue(dialog.contains("private var autoScrollCurrentSource = true"))
         assertTrue(collector.contains("if (autoScrollCurrentSource && it.isNotEmpty())"))
-        assertTrue(collector.contains("binding.recyclerView.post"))
         assertTrue(collector.contains("if (scrollToDurSource()) autoScrollCurrentSource = false"))
         assertTrue(dialog.contains("autoScrollCurrentSource = true"))
         assertTrue(
-            dialog.section("private fun scrollToDurSource(): Boolean", "override fun changeTo")
+            dialog.section("private fun scrollToDurSource(): Boolean", "fun changeTo")
                 .contains("if (searchBook.bookUrl == oldBookUrl)")
         )
     }
 
     @Test
     fun `current book source keeps a subtle background and check mark`() {
-        val adapter = source("ChangeBookSourceAdapter.kt")
-        assertTrue(adapter.contains("viewSelectedBackground"))
-        assertTrue(adapter.contains("ColorUtils.withAlpha(context.accentColor, 0.1f)"))
-        assertTrue(adapter.contains("ivChecked.visible()"))
+        val components = source("ChangeSourceComposeComponents.kt")
+        assertTrue(components.contains("ColorUtils.withAlpha(context.accentColor, 0.1f)"))
+        assertTrue(components.contains("R.drawable.ic_check"))
+        assertTrue(components.contains("showSelectedHighlight && isCurrent"))
     }
 
     @Test
@@ -131,8 +130,8 @@ class ChangeSourceViewLifecycleContractTest {
 
         listOf(bookDialog, chapterDialog).forEach { dialog ->
             val deleteSource = dialog.section(
-                "override fun deleteSource",
-                "override fun setBookScore",
+                "fun deleteSource",
+                "fun setBookScore",
             )
 
             assertTrue(deleteSource.contains("viewModel.autoChangeSource("))
@@ -146,7 +145,7 @@ class ChangeSourceViewLifecycleContractTest {
         val delete = viewModel.section("fun del", "fun autoChangeSource")
         val loading = bookDialog.section(
             "private fun showChangeSourceLoading",
-            "private val startStopMenuItem",
+            "private fun scrollToDurSource",
         )
         assertTrue(delete.contains("Coroutine.async"))
         assertFalse(delete.contains("execute {"))
@@ -213,17 +212,12 @@ class ChangeSourceViewLifecycleContractTest {
     }
 
     @Test
-    fun `adapter delete confirmation is released with the recycler view`() {
-        val adapter = source("ChangeBookSourceAdapter.kt")
-        val detach = adapter.section(
-            "override fun onDetachedFromRecyclerView",
-            "interface CallBack",
-        )
+    fun `row delete confirmation is scoped to composable lifecycle`() {
+        val components = source("ChangeSourceComposeComponents.kt")
 
-        assertTrue(adapter.contains("if (deleteSourceDialog == null)"))
-        assertTrue(adapter.contains("if (deleteSourceDialog === dialog)"))
-        assertTrue(detach.contains("deleteSourceDialog?.dismiss()"))
-        assertTrue(detach.contains("deleteSourceDialog = null"))
+        assertTrue(components.contains("var showDeleteConfirm by remember { mutableStateOf(false) }"))
+        assertTrue(components.contains("if (showDeleteConfirm)"))
+        assertTrue(components.contains("onDeleteSource()"))
     }
 
     @Test
@@ -248,25 +242,22 @@ class ChangeSourceViewLifecycleContractTest {
     }
 
     @Test
-    fun `per view adapter observers are released`() {
+    fun `per view dialogs and compositions are released`() {
         val book = source("ChangeBookSourceDialog.kt")
         val chapter = source("ChangeChapterSourceDialog.kt")
         val bookDestroy = book.section(
             "override fun onDestroyView()",
-            "private fun showTitle()",
+            "private fun syncChangeSourceResultOptions()",
         )
         val chapterDestroy = chapter.section(
             "override fun onDestroyView()",
-            "private fun showTitle()",
+            "private fun syncChangeSourceResultOptions()",
         )
 
-        assertTrue(bookDestroy.contains("unregisterAdapterDataObserver"))
-        assertTrue(bookDestroy.contains("binding.recyclerView.adapter = null"))
+        assertTrue(book.contains("DisposeOnViewTreeLifecycleDestroyed"))
         assertTrue(bookDestroy.contains("searchFinishDialog?.dismiss()"))
         assertTrue(bookDestroy.contains("waitDialog?.dismiss()"))
-        assertTrue(chapterDestroy.contains("unregisterAdapterDataObserver"))
-        assertTrue(chapterDestroy.contains("binding.recyclerView.adapter = null"))
-        assertTrue(chapterDestroy.contains("binding.recyclerViewToc.adapter = null"))
+        assertTrue(chapter.contains("DisposeOnViewTreeLifecycleDestroyed"))
         assertTrue(chapterDestroy.contains("searchFinishDialog?.dismiss()"))
         assertTrue(chapter.contains("addCallback(viewLifecycleOwner)"))
     }
@@ -296,7 +287,7 @@ class ChangeSourceViewLifecycleContractTest {
             } else {
                 dialog.section(
                     "private fun showEmptySearchGroupDialog(",
-                    "private val startStopMenuItem",
+                    "private fun showOriginalChaptersState",
                 )
             }
             assertTrue(prompt.contains("if (event.peek() != true)"))
@@ -316,7 +307,7 @@ class ChangeSourceViewLifecycleContractTest {
             "null -> Unit",
         )
 
-        assertTrue(error.contains("binding.clToc.gone()"))
+        assertTrue(error.contains("tocVisible = false"))
         assertTrue(error.contains("viewModel.clearToc()"))
     }
 
@@ -345,14 +336,14 @@ class ChangeSourceViewLifecycleContractTest {
     @Test
     fun `chapter automation freezes its target and rejects blank content`() {
         val dialog = source("ChangeChapterSourceDialog.kt")
-        val openToc = dialog.section("override fun openToc", "private fun showTocState")
+        val openToc = dialog.section("fun openToc", "private fun showTocState")
         val viewModel = source("ChangeChapterSourceViewModel.kt")
         val loadToc = viewModel.section("fun loadToc", "fun clearToc")
         val cache = viewModel.section("private fun cacheContents", "fun automationRangeDefaults")
         val stop = viewModel.section("fun stopAutomation", "private fun cacheAutomationPositions")
         val renderState = dialog.section(
             "private fun showAutomationState",
-            "private val automationMenuItem",
+            "override fun observeLiveBus()",
         )
 
         assertTrue(openToc.contains("viewModel.isAutomationActive"))
@@ -364,7 +355,7 @@ class ChangeSourceViewLifecycleContractTest {
         assertTrue(stop.contains("requestStopAfterCurrent()"))
         assertTrue(renderState.contains("is ChapterSourceAutomationPause.ContentError"))
         assertTrue(renderState.contains("else ->"))
-        assertTrue(renderState.contains("tocAdapter.clearSelection()"))
+        assertTrue(renderState.contains("clearSelection()"))
     }
 
     private fun source(fileName: String): String {

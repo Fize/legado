@@ -13,11 +13,10 @@ class SourcePopupActionMigrationTest {
             val source = readProjectFile(path)
             assertFalse("$path should not import platform PopupMenu", source.contains("import android.widget.PopupMenu"))
             assertFalse("$path should not import AppCompat PopupMenu", source.contains("import androidx.appcompat.widget.PopupMenu"))
-            assertContains(path, source, "popupActionMenu(context)")
+            assertContains(path, source, "DropdownMenu(")
         }
         assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "color = MaterialTheme.colorScheme.error")
-        assertContains(CHANGE_BOOK, readProjectFile(CHANGE_BOOK), "danger(\"deleteSource\")")
-        assertContains(CHANGE_CHAPTER, readProjectFile(CHANGE_CHAPTER), "danger(\"deleteSource\")")
+        assertContains(CHANGE_SOURCE_COMPOSE, readProjectFile(CHANGE_SOURCE_COMPOSE), "color = MaterialTheme.colorScheme.error")
         assertContains(EXPLORE, readProjectFile(EXPLORE), "color = MaterialTheme.colorScheme.error")
         legacyMenuFiles.forEach { path ->
             assertFalse(
@@ -55,16 +54,14 @@ class SourcePopupActionMigrationTest {
             "R.string.delete",
             "R.string.disable_explore else R.string.enable_explore"
         )
-        listOf(CHANGE_BOOK, CHANGE_CHAPTER).forEach { path ->
-            assertOrdered(
-                path,
-                "R.string.to_top",
-                "R.string.to_bottom",
-                "R.string.edit_source",
-                "R.string.disable_source",
-                "R.string.delete_source"
-            )
-        }
+        assertOrdered(
+            CHANGE_SOURCE_COMPOSE,
+            "R.string.to_top",
+            "R.string.to_bottom",
+            "R.string.edit_source",
+            "R.string.disable_source",
+            "R.string.delete_source"
+        )
         assertOrdered(
             EXPLORE,
             "R.string.edit",
@@ -89,25 +86,32 @@ class SourcePopupActionMigrationTest {
             "enableExplore(!source.enabledExplore, source)"
         )
         assertActions(
+            CHANGE_SOURCE_COMPOSE,
+            "onTopSource()",
+            "onBottomSource()",
+            "onEditSource()",
+            "onDisableSource()",
+            "showDeleteConfirm = true",
+            "stringResource(R.string.draw)",
+            "onDeleteSource()"
+        )
+        assertActions(
             CHANGE_BOOK,
-            "\"topSource\" -> callBack.topSource(searchBook)",
-            "\"bottomSource\" -> callBack.bottomSource(searchBook)",
-            "\"editSource\" -> callBack.editSource(searchBook)",
-            "\"disableSource\" -> callBack.disableSource(searchBook)",
-            "\"deleteSource\" -> {",
-            "deleteSourceDialog = context.alert(R.string.draw)",
-            "callBack.deleteSource(searchBook)",
-            "updateItems(0, itemCount, listOf<Int>())"
+            "topSource(item)",
+            "bottomSource(item)",
+            "editSource(item)",
+            "disableSource(item)",
+            "deleteSource(item)",
+            "scoreRevision++"
         )
         assertActions(
             CHANGE_CHAPTER,
-            "\"topSource\" -> callBack.topSource(searchBook)",
-            "\"bottomSource\" -> callBack.bottomSource(searchBook)",
-            "\"editSource\" -> callBack.editSource(searchBook)",
-            "\"disableSource\" -> callBack.disableSource(searchBook)",
-            "\"deleteSource\" -> {",
-            "callBack.deleteSource(searchBook)",
-            "updateItems(0, itemCount, listOf<Int>())"
+            "topSource(item)",
+            "bottomSource(item)",
+            "editSource(item)",
+            "disableSource(item)",
+            "deleteSource(item)",
+            "scoreRevision++"
         )
         assertActions(
             EXPLORE,
@@ -147,10 +151,11 @@ class SourcePopupActionMigrationTest {
 
     private companion object {
         const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
-        const val CHANGE_BOOK = "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt"
-        const val CHANGE_CHAPTER = "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceAdapter.kt"
+        const val CHANGE_SOURCE_COMPOSE = "src/main/java/io/legado/app/ui/book/changesource/ChangeSourceComposeComponents.kt"
+        const val CHANGE_BOOK = "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt"
+        const val CHANGE_CHAPTER = "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt"
         const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
-        val sourceMenuFiles = listOf(CHANGE_BOOK, CHANGE_CHAPTER)
+        val sourceMenuFiles = listOf(CHANGE_SOURCE_COMPOSE)
         val legacyMenuFiles = listOf(
             "src/main/res/menu/book_source_item.xml",
             "src/main/res/menu/change_source_item.xml",

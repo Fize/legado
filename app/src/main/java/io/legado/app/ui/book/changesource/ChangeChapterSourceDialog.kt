@@ -1,23 +1,69 @@
 package io.legado.app.ui.book.changesource
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.SearchView
-import androidx.appcompat.widget.Toolbar
-import androidx.core.view.isVisible
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Lifecycle.State.RESUMED
 import androidx.lifecycle.Lifecycle.State.STARTED
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withStateAtLeast
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppLog
@@ -27,39 +73,29 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
-import io.legado.app.databinding.DialogChapterChangeSourceBinding
-import io.legado.app.databinding.DialogDownloadChoiceBinding
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.elevation
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
-import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.StartActivityContract
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.dpToPx
-import io.legado.app.utils.gone
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.transaction
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-
-class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_change_source),
-    Toolbar.OnMenuItemClickListener,
-    ChangeChapterSourceAdapter.CallBack,
-    ChangeChapterTocAdapter.Callback {
+/**
+ * 单章/批量章节换源界面 (Compose)
+ */
+class ChangeChapterSourceDialog() : BaseDialogFragment() {
 
     constructor(
         name: String,
@@ -77,41 +113,510 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         }
     }
 
-    private val binding by viewBinding(DialogChapterChangeSourceBinding::bind)
     private val batchMode: Boolean get() = arguments?.getBoolean("batchMode") == true
-    private val groups = linkedSetOf<String>()
+    private val groups = mutableStateListOf<String>()
     private val callBack: CallBack? get() = activity as? CallBack
     private val viewModel: ChangeChapterSourceViewModel by viewModels()
     private val editSourceResult =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             viewModel.startSearch()
         }
-    private val searchBookAdapter by lazy {
-        ChangeChapterSourceAdapter(requireContext(), viewModel, this)
-    }
-    private val tocAdapter by lazy {
-        ChangeChapterTocAdapter(requireContext(), this)
-    }
+
     private var searchFinishDialog: AlertDialog? = null
-    private var adapterDataObserver: RecyclerView.AdapterDataObserver? = null
     private var targetBook: Book? = null
-    private var tocLoading = false
-    private var contentLoading = false
-    private var batchCaching = false
+    private var tocLoading by mutableStateOf(false)
+    private var contentLoading by mutableStateOf(false)
+    private var batchCaching by mutableStateOf(false)
+
+    private var searchItems by mutableStateOf<List<SearchBook>>(emptyList())
+    private var tocItems by mutableStateOf<List<BookChapter>>(emptyList())
+    private var selectedChapterIndices by mutableStateOf<Set<Int>>(emptySet())
+    private var durChapterIndex by mutableIntStateOf(0)
+    private var tocVisible by mutableStateOf(false)
+    private var selectionEnabled by mutableStateOf(true)
+    private var isSearching by mutableStateOf(false)
+    private var searchQuery by mutableStateOf("")
+    private var currentTitle by mutableStateOf("")
+    private var currentSubtitle by mutableStateOf<String?>(null)
+    private var currentBookUrl by mutableStateOf<String?>(null)
+    private var scoreRevision by mutableIntStateOf(0)
+    private var isAutomationActiveState by mutableStateOf(false)
+    private var hasOriginalChapterState by mutableStateOf(false)
+    private var canSelectState by mutableStateOf(true)
+
+    private var scrollSourceTargetIndex by mutableStateOf<Int?>(null)
+    private var scrollSourceTrigger by mutableIntStateOf(0)
+    private var scrollTocTargetIndex by mutableStateOf<Int?>(null)
+    private var scrollTocTrigger by mutableIntStateOf(0)
+
+    private var showWordCountFilterDialog by mutableStateOf(false)
+    private var automationRangeDefault by mutableStateOf<IntRange?>(null)
+
+    private var checkAuthorState by mutableStateOf(AppConfig.changeSourceCheckAuthor)
+    private var loadInfoState by mutableStateOf(AppConfig.changeSourceLoadInfo)
+    private var loadTocState by mutableStateOf(AppConfig.changeSourceLoadToc)
+    private var loadWordCountState by mutableStateOf(AppConfig.changeSourceLoadWordCount)
+    private var sortRespondTimeState by mutableStateOf(AppConfig.changeSourceSortRespondTime)
+    private var wordCountFilterModeState by mutableIntStateOf(AppConfig.changeSourceWordCountFilterMode)
+    private var selectedGroupState by mutableStateOf(AppConfig.searchGroup)
+
+    private val selectedChapters: List<Pair<BookChapter, String?>>
+        get() = selectedChapterSourceItems(tocItems, selectedChapterIndices)
+
+    private val selectedPositions: List<Int>
+        get() = tocItems.mapIndexedNotNull { position, chapter ->
+            position.takeIf { chapter.index in selectedChapterIndices }
+        }
+
+    private val selectionCount: Int
+        get() = selectedChapterIndices.size
+
+    private val lastSelectedPosition: Int
+        get() = tocItems.indexOfLast { it.index in selectedChapterIndices }
+
     override fun onStart() {
         super.onStart()
         setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
     }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    val context = LocalContext.current
+                    val accent = remember(context) { Color(context.accentColor) }
+                    val sourceListState = rememberLazyListState()
+                    val tocListState = rememberLazyListState()
+                    val coroutineScope = rememberCoroutineScope()
+
+                    LaunchedEffect(scrollSourceTrigger) {
+                        val index = scrollSourceTargetIndex ?: return@LaunchedEffect
+                        if (index in searchItems.indices) {
+                            sourceListState.scrollToItem(index)
+                        }
+                    }
+
+                    LaunchedEffect(scrollTocTrigger) {
+                        val index = scrollTocTargetIndex ?: return@LaunchedEffect
+                        if (tocItems.isNotEmpty()) {
+                            tocListState.scrollToItem(index.coerceIn(0, tocItems.lastIndex))
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colorResource(R.color.background))
+                    ) {
+                        ChangeSourceTopBar(
+                            title = currentTitle,
+                            subtitle = currentSubtitle,
+                            showNavigationIcon = false,
+                            onBack = { dismissAllowingStateLoss() },
+                            isSearching = isSearching,
+                            searchQuery = searchQuery,
+                            onSearchQueryChange = { query ->
+                                searchQuery = query
+                                viewModel.screen(query)
+                            },
+                            onStartStopClick = { viewModel.startOrStopSearch() },
+                            onSourceManageClick = { startActivity<BookSourceActivity>() },
+                            showAutomation = batchMode,
+                            isAutomationActive = isAutomationActiveState,
+                            onAutomationClick = {
+                                if (viewModel.isAutomationActive) {
+                                    viewModel.stopAutomation()
+                                } else {
+                                    showAutomationRangeDialog()
+                                }
+                            },
+                            checkAuthor = checkAuthorState,
+                            onCheckAuthorChange = { checked ->
+                                AppConfig.changeSourceCheckAuthor = checked
+                                checkAuthorState = checked
+                                viewModel.refresh()
+                            },
+                            loadInfo = loadInfoState,
+                            onLoadInfoChange = { checked ->
+                                AppConfig.changeSourceLoadInfo = checked
+                                loadInfoState = checked
+                            },
+                            loadToc = loadTocState,
+                            onLoadTocChange = { checked ->
+                                AppConfig.changeSourceLoadToc = checked
+                                loadTocState = checked
+                            },
+                            loadWordCount = loadWordCountState,
+                            onLoadWordCountChange = { checked ->
+                                AppConfig.changeSourceLoadWordCount = checked
+                                syncChangeSourceResultOptions()
+                                viewModel.onLoadWordCountChecked()
+                            },
+                            sortRespondTime = sortRespondTimeState,
+                            onSortRespondTimeChange = { enabled ->
+                                AppConfig.changeSourceSortRespondTime = enabled
+                                syncChangeSourceResultOptions()
+                                viewModel.onResultOptionsChanged(enabled)
+                            },
+                            wordCountFilterEnabled = wordCountFilterModeState != ChangeSourceResultOptions.FILTER_OFF,
+                            onWordCountFilterClick = { showWordCountFilterDialog = true },
+                            groups = groups,
+                            selectedGroup = selectedGroupState,
+                            onGroupSelect = { group ->
+                                AppConfig.searchGroup = group
+                                selectedGroupState = group
+                                lifecycleScope.launch(IO) {
+                                    viewModel.stopSearch()
+                                    if (viewModel.refresh()) {
+                                        viewModel.startSearch()
+                                    }
+                                }
+                            }
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                LazyColumn(
+                                    state = sourceListState,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                ) {
+                                    itemsIndexed(
+                                        items = searchItems,
+                                        key = { _, item -> item.bookUrl }
+                                    ) { _, item ->
+                                        val isCurrent = currentBookUrl == item.bookUrl
+                                        val score = scoreRevision.let { getBookScore(item) }
+                                        ChangeSourceItemRow(
+                                            item = item,
+                                            isCurrent = isCurrent,
+                                            showSelectedHighlight = false,
+                                            score = score,
+                                            loadWordCount = loadWordCountState,
+                                            onClick = { openToc(item) },
+                                            onScoreChange = { newScore ->
+                                                setBookScore(item, newScore)
+                                            },
+                                            onTopSource = { topSource(item) },
+                                            onBottomSource = { bottomSource(item) },
+                                            onEditSource = { editSource(item) },
+                                            onDisableSource = { disableSource(item) },
+                                            onDeleteSource = { deleteSource(item) }
+                                        )
+                                    }
+                                }
+
+                                ChangeSourceBottomBar(
+                                    statusText = callBack?.oldBook?.originName.orEmpty(),
+                                    middleEllipsis = true,
+                                    onDurClick = { scrollToDurSource() },
+                                    onScrollTop = {
+                                        if (searchItems.isNotEmpty()) {
+                                            coroutineScope.launch {
+                                                sourceListState.scrollToItem(0)
+                                            }
+                                        }
+                                    },
+                                    onScrollBottom = {
+                                        if (searchItems.isNotEmpty()) {
+                                            coroutineScope.launch {
+                                                sourceListState.scrollToItem(searchItems.lastIndex)
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+
+                            if (tocVisible) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(colorResource(R.color.background))
+                                ) {
+                                    val busy = tocLoading || batchCaching
+                                    val hideEnabled = !(batchMode && (busy || isAutomationActiveState))
+                                    Surface(
+                                        shadowElevation = 4.dp,
+                                        color = colorResource(R.color.background),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp)
+                                                .clickable(enabled = hideEnabled) {
+                                                    tocVisible = false
+                                                    viewModel.clearToc()
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_arrow_down),
+                                                contentDescription = stringResource(R.string.close),
+                                                tint = colorResource(R.color.primaryText)
+                                            )
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f)
+                                    ) {
+                                        LazyColumn(
+                                            state = tocListState,
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            itemsIndexed(
+                                                items = tocItems,
+                                                key = { index, chapter -> "${chapter.index}_$index" }
+                                            ) { position, chapter ->
+                                                val isDur = durChapterIndex == chapter.index
+                                                val isSelected = batchMode && chapter.index in selectedChapterIndices
+                                                val rowClickable = !batchMode || (!chapter.isVolume && selectionEnabled)
+                                                val rowBg = if (chapter.isVolume) {
+                                                    colorResource(R.color.btn_bg_press)
+                                                } else {
+                                                    Color.Transparent
+                                                }
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(rowBg)
+                                                        .then(
+                                                            if (chapter.isVolume) {
+                                                                Modifier.semantics { heading() }
+                                                            } else {
+                                                                Modifier
+                                                            }
+                                                        )
+                                                        .clickable(enabled = rowClickable) {
+                                                            if (batchMode) {
+                                                                if (chapter.isVolume || !selectionEnabled) return@clickable
+                                                                selectedChapterIndices = if (chapter.index in selectedChapterIndices) {
+                                                                    selectedChapterIndices - chapter.index
+                                                                } else {
+                                                                    selectedChapterIndices + chapter.index
+                                                                }
+                                                                selectionChanged()
+                                                            } else {
+                                                                clickChapter(
+                                                                    chapter,
+                                                                    tocItems.getOrNull(position + 1)?.url
+                                                                )
+                                                            }
+                                                        }
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = chapter.title,
+                                                            color = if (isDur) accent else colorResource(R.color.primaryText),
+                                                            fontSize = 14.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        if (!chapter.tag.isNullOrEmpty() && !chapter.isVolume) {
+                                                            Text(
+                                                                text = chapter.tag.orEmpty(),
+                                                                color = colorResource(R.color.secondaryText),
+                                                                fontSize = 12.sp,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    }
+                                                    if (!batchMode && isDur) {
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Icon(
+                                                            painter = painterResource(R.drawable.ic_check),
+                                                            contentDescription = null,
+                                                            tint = accent,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    } else if (batchMode && !chapter.isVolume) {
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Checkbox(
+                                                            checked = isSelected,
+                                                            onCheckedChange = null
+                                                        )
+                                                    }
+                                                }
+                                                HorizontalDivider(
+                                                    thickness = 0.5.dp,
+                                                    color = colorResource(R.color.divider)
+                                                )
+                                            }
+                                        }
+
+                                        if (tocLoading || contentLoading || batchCaching) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier
+                                                    .size(48.dp)
+                                                    .align(Alignment.Center)
+                                            )
+                                        }
+                                    }
+
+                                    if (batchMode) {
+                                        val busyActions = tocLoading || batchCaching
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(colorResource(R.color.background))
+                                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    if (viewModel.isAutomationActive) {
+                                                        if (viewModel.skipAutomationChapter() &&
+                                                            viewModel.automationState.value is ChapterSourceAutomationState.Finished
+                                                        ) {
+                                                            toastOnUi(R.string.chapter_source_finished)
+                                                            dismissAllowingStateLoss()
+                                                        }
+                                                    } else {
+                                                        viewModel.currentOriginalChapter?.let(::advanceOriginalChapter)
+                                                    }
+                                                },
+                                                enabled = hasOriginalChapterState && !busyActions,
+                                                border = BorderStroke(1.dp, accent),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(48.dp)
+                                            ) {
+                                                Text(stringResource(R.string.chapter_source_skip))
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = { cacheSelectedChapters() },
+                                                enabled = hasOriginalChapterState &&
+                                                        selectedChapterIndices.isNotEmpty() &&
+                                                        !busyActions &&
+                                                        canSelectState,
+                                                border = BorderStroke(1.dp, accent),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(48.dp)
+                                            ) {
+                                                Text(stringResource(R.string.chapter_source_cache_next))
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = {
+                                                    viewModel.stopAutomation()
+                                                    dismissAllowingStateLoss()
+                                                },
+                                                enabled = !batchCaching,
+                                                border = BorderStroke(1.dp, accent),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(48.dp)
+                                            ) {
+                                                Text(stringResource(R.string.complete))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (showWordCountFilterDialog) {
+                        ChangeSourceWordCountFilterDialog(
+                            onDismiss = { showWordCountFilterDialog = false },
+                            onChanged = { reload ->
+                                syncChangeSourceResultOptions()
+                                viewModel.onResultOptionsChanged(reload)
+                            }
+                        )
+                    }
+
+                    automationRangeDefault?.let { range ->
+                        var startText by remember(range) { mutableStateOf(range.first.toString()) }
+                        var endText by remember(range) { mutableStateOf(range.last.toString()) }
+                        AlertDialog(
+                            onDismissRequest = { automationRangeDefault = null },
+                            title = { Text(stringResource(R.string.chapter_source_automation)) },
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = startText,
+                                        onValueChange = { startText = it },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text("-")
+                                    OutlinedTextField(
+                                        value = endText,
+                                        onValueChange = { endText = it },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        val tocState = viewModel.tocState.value as? ChapterTocState.Success
+                                        val originalBook = callBack?.oldBook
+                                        val start = startText.trim().toIntOrNull()
+                                        val end = endText.trim().toIntOrNull()
+                                        automationRangeDefault = null
+                                        if (tocState == null || originalBook == null || start == null || end == null ||
+                                            !viewModel.startAutomation(
+                                                originalBook,
+                                                tocState.book,
+                                                tocState.toc,
+                                                start,
+                                                end,
+                                            )
+                                        ) {
+                                            toastOnUi(R.string.chapter_source_automation_invalid_range)
+                                        }
+                                    }
+                                ) {
+                                    Text(stringResource(android.R.string.ok))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { automationRangeDefault = null }) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
+        currentBookUrl = oldBookUrl
+        syncChangeSourceResultOptions()
         viewModel.initData(arguments, callBack?.oldBook, activity is ReadBookActivity)
         showTitle()
-        initMenu()
-        initView()
-        initRecyclerView()
-        initSearchView()
-        initBottomBar()
         initLiveData()
         initBatchMode()
         activity?.onBackPressedDispatcher?.addCallback(viewLifecycleOwner) {
@@ -124,8 +629,8 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                 return@addCallback
             }
             if (batchMode && tocLoading) return@addCallback
-            if (binding.clToc.isVisible) {
-                binding.clToc.gone()
+            if (tocVisible) {
+                tocVisible = false
                 viewModel.clearToc()
                 return@addCallback
             }
@@ -134,19 +639,25 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
     }
 
     override fun onDestroyView() {
-        adapterDataObserver?.let(searchBookAdapter::unregisterAdapterDataObserver)
-        adapterDataObserver = null
-        binding.recyclerView.adapter = null
-        binding.recyclerViewToc.adapter = null
         searchFinishDialog?.dismiss()
         searchFinishDialog = null
         super.onDestroyView()
     }
 
+    private fun syncChangeSourceResultOptions() {
+        checkAuthorState = AppConfig.changeSourceCheckAuthor
+        loadInfoState = AppConfig.changeSourceLoadInfo
+        loadTocState = AppConfig.changeSourceLoadToc
+        loadWordCountState = AppConfig.changeSourceLoadWordCount
+        sortRespondTimeState = AppConfig.changeSourceSortRespondTime
+        wordCountFilterModeState = AppConfig.changeSourceWordCountFilterMode
+        selectedGroupState = AppConfig.searchGroup
+    }
+
     private fun showTitle() {
-        binding.toolBar.title = viewModel.currentOriginalChapter?.title ?: viewModel.chapterTitle
+        currentTitle = viewModel.currentOriginalChapter?.title ?: viewModel.chapterTitle
         if (batchMode) {
-            binding.toolBar.subtitle = when (val state = viewModel.automationState.value) {
+            currentSubtitle = when (val state = viewModel.automationState.value) {
                 is ChapterSourceAutomationState.Ready -> getString(
                     R.string.chapter_source_automation_progress,
                     state.position + 1,
@@ -180,116 +691,16 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
 
                 else -> getString(
                     R.string.chapter_source_selected_count,
-                    tocAdapter.selectionCount,
+                    selectionCount,
                 )
             }
-        }
-    }
-
-    private fun initMenu() {
-        binding.toolBar.inflateMenu(R.menu.change_source)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
-        binding.toolBar.menu.findItem(R.id.menu_check_author)
-            ?.isChecked = AppConfig.changeSourceCheckAuthor
-        binding.toolBar.menu.findItem(R.id.menu_load_info)
-            ?.isChecked = AppConfig.changeSourceLoadInfo
-        binding.toolBar.menu.findItem(R.id.menu_load_toc)
-            ?.isChecked = AppConfig.changeSourceLoadToc
-        binding.toolBar.menu.findItem(R.id.menu_chapter_source_automation)
-            ?.isVisible = batchMode
-        binding.toolBar.menu.syncChangeSourceResultOptions()
-    }
-
-    private fun initView() {
-        binding.ivHideToc.setOnClickListener {
-            if (batchMode && (tocLoading || batchCaching)) return@setOnClickListener
-            binding.clToc.gone()
-            viewModel.clearToc()
-        }
-        binding.flHideToc.elevation = requireContext().elevation
-        binding.btnBatchSkip.setOnClickListener {
-            if (viewModel.isAutomationActive) {
-                if (viewModel.skipAutomationChapter() &&
-                    viewModel.automationState.value is ChapterSourceAutomationState.Finished
-                ) {
-                    toastOnUi(R.string.chapter_source_finished)
-                    dismissAllowingStateLoss()
-                }
-            } else {
-                viewModel.currentOriginalChapter?.let(::advanceOriginalChapter)
-            }
-        }
-        binding.btnBatchCacheNext.setOnClickListener {
-            cacheSelectedChapters()
-        }
-        binding.btnBatchFinish.setOnClickListener {
-            viewModel.stopAutomation()
-            dismissAllowingStateLoss()
-        }
-    }
-
-    private fun initRecyclerView() {
-        val recyclerView = binding.recyclerView
-        recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        recyclerView.adapter = searchBookAdapter
-        adapterDataObserver = object : RecyclerView.AdapterDataObserver() {
-            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-                if (positionStart == 0) {
-                    recyclerView.scrollToPosition(0)
-                }
-            }
-
-            override fun onItemRangeMoved(fromPosition: Int, toPosition: Int, itemCount: Int) {
-                if (toPosition == 0) {
-                    recyclerView.scrollToPosition(0)
-                }
-            }
-        }.also(searchBookAdapter::registerAdapterDataObserver)
-        binding.recyclerViewToc.adapter = tocAdapter
-    }
-
-    private fun initSearchView() {
-        val searchView = binding.toolBar.menu.findItem(R.id.menu_screen).actionView as SearchView
-        searchView.setOnCloseListener {
-            showTitle()
-            false
-        }
-        searchView.setOnSearchClickListener {
-            binding.toolBar.title = ""
-            binding.toolBar.subtitle = ""
-        }
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                viewModel.screen(newText)
-                return false
-            }
-
-        })
-    }
-
-    private fun initBottomBar() {
-        binding.tvDur.text = callBack?.oldBook?.originName
-        binding.tvDur.setOnClickListener {
-            scrollToDurSource()
-        }
-        binding.ivTop.setOnClickListener {
-            binding.recyclerView.scrollToPosition(0)
-        }
-        binding.ivBottom.setOnClickListener {
-            binding.recyclerView.scrollToPosition(searchBookAdapter.itemCount - 1)
+        } else {
+            currentSubtitle = null
         }
     }
 
     private fun initBatchMode() {
-        tocAdapter.batchMode = batchMode
-        binding.llBatchActions.isVisible = batchMode
         if (!batchMode) return
-        binding.toolBar.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         updateBatchActions()
         val oldBook = callBack?.oldBook ?: return
         viewModel.loadOriginalChapters(oldBook.bookUrl)
@@ -297,20 +708,8 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
 
     private fun initLiveData() {
         val owner = viewLifecycleOwner
-        viewModel.searchStateData.observe(viewLifecycleOwner) {
-            binding.refreshProgressBar.isAutoLoading = it
-            if (it) {
-                startStopMenuItem?.let { item ->
-                    item.setIcon(R.drawable.ic_stop_black_24dp)
-                    item.setTitle(R.string.stop)
-                }
-            } else {
-                startStopMenuItem?.let { item ->
-                    item.setIcon(R.drawable.ic_refresh_black_24dp)
-                    item.setTitle(R.string.refresh)
-                }
-            }
-            binding.toolBar.menu.applyTint(requireContext())
+        viewModel.searchStateData.observe(owner) {
+            isSearching = it
         }
         viewModel.searchFinishData.observe(owner) { event ->
             owner.lifecycleScope.launch {
@@ -323,7 +722,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         viewModel.tocState.observe(owner, ::showTocState)
         viewModel.contentLoading.observe(owner) { loading ->
             contentLoading = loading
-            updateLoadingIndicator()
         }
         viewModel.contentResult.observe(owner) { event ->
             owner.lifecycleScope.launch {
@@ -336,7 +734,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                         }
 
                         is ChapterContentResult.Error -> {
-                            binding.clToc.gone()
+                            tocVisible = false
                             viewModel.clearToc()
                             toastOnUi(result.message)
                         }
@@ -379,7 +777,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                 }
             }
         }
-        viewModel.batchCaching.observe(owner, ::setBatchCaching)
+        viewModel.batchCaching.observe(owner, ::updateBatchCaching)
         viewModel.automationState.observe(owner) { state ->
             showAutomationState(state)
             if (state is ChapterSourceAutomationState.Ready) {
@@ -406,7 +804,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         owner.lifecycleScope.launch {
             owner.lifecycle.currentStateFlow.first { it.isAtLeast(STARTED) }
             viewModel.searchDataFlow.conflate().collect {
-                searchBookAdapter.setItems(it)
+                searchItems = it
                 delay(1000)
             }
         }
@@ -414,7 +812,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             appDb.bookSourceDao.flowEnabledGroups().conflate().collect {
                 groups.clear()
                 groups.addAll(it)
-                upGroupMenu()
             }
         }
     }
@@ -439,9 +836,10 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             yesButton {
                 event.take()
                 AppConfig.searchGroup = ""
+                selectedGroupState = ""
                 viewModel.startSearch()
                 owner.lifecycleScope.launch {
-                    upGroupMenu()
+                    syncChangeSourceResultOptions()
                 }
             }
             onCancelled { event.take() }
@@ -479,84 +877,17 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         }
     }
 
-    private val startStopMenuItem: MenuItem?
-        get() = binding.toolBar.menu.findItem(R.id.menu_start_stop)
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_check_author -> {
-                AppConfig.changeSourceCheckAuthor = !item.isChecked
-                item.isChecked = !item.isChecked
-                viewModel.refresh()
-            }
-
-            R.id.menu_load_info -> {
-                AppConfig.changeSourceLoadInfo = !item.isChecked
-                item.isChecked = !item.isChecked
-            }
-
-            R.id.menu_load_toc -> {
-                AppConfig.changeSourceLoadToc = !item.isChecked
-                item.isChecked = !item.isChecked
-            }
-
-            R.id.menu_load_word_count -> {
-                AppConfig.changeSourceLoadWordCount = !item.isChecked
-                binding.toolBar.menu.syncChangeSourceResultOptions()
-                viewModel.onLoadWordCountChecked()
-            }
-
-            R.id.menu_sort_respond_time -> {
-                val enabled = !item.isChecked
-                AppConfig.changeSourceSortRespondTime = enabled
-                binding.toolBar.menu.syncChangeSourceResultOptions()
-                viewModel.onResultOptionsChanged(enabled)
-            }
-
-            R.id.menu_word_count_filter -> showChangeSourceWordCountFilter { reload ->
-                binding.toolBar.menu.syncChangeSourceResultOptions()
-                viewModel.onResultOptionsChanged(reload)
-            }
-
-            R.id.menu_start_stop -> viewModel.startOrStopSearch()
-            R.id.menu_chapter_source_automation -> {
-                if (viewModel.isAutomationActive) {
-                    viewModel.stopAutomation()
-                } else {
-                    showAutomationRangeDialog()
-                }
-            }
-
-            R.id.menu_source_manage -> startActivity<BookSourceActivity>()
-            else -> if (item?.groupId == R.id.source_group && !item.isChecked) {
-                item.isChecked = true
-                if (item.title.toString() == getString(R.string.all_source)) {
-                    AppConfig.searchGroup = ""
-                } else {
-                    AppConfig.searchGroup = item.title.toString()
-                }
-                lifecycleScope.launch(IO) {
-                    viewModel.stopSearch()
-                    if (viewModel.refresh()) {
-                        viewModel.startSearch()
-                    }
-                }
-            }
-        }
-        return false
-    }
-
     private fun scrollToDurSource() {
-        searchBookAdapter.getItems().forEachIndexed { index, searchBook ->
+        searchItems.forEachIndexed { index, searchBook ->
             if (searchBook.bookUrl == oldBookUrl) {
-                (binding.recyclerView.layoutManager as LinearLayoutManager)
-                    .scrollToPositionWithOffset(index, 60.dpToPx())
+                scrollSourceTargetIndex = index
+                scrollSourceTrigger++
                 return
             }
         }
     }
 
-    override fun openToc(searchBook: SearchBook) {
+    fun openToc(searchBook: SearchBook) {
         if (viewModel.isAutomationActive || batchCaching || tocLoading) return
         viewModel.loadToc(searchBook.toBook())
     }
@@ -565,29 +896,30 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         when (state) {
             ChapterTocState.Idle -> {
                 targetBook = null
-                setTocLoading(false)
+                updateTocLoading(false)
             }
 
             is ChapterTocState.Loading -> {
                 targetBook = state.book
-                tocAdapter.clearSelection()
-                tocAdapter.setItems(null)
-                binding.clToc.visible()
-                setTocLoading(true)
+                clearSelection()
+                tocItems = emptyList()
+                tocVisible = true
+                updateTocLoading(true)
             }
 
             is ChapterTocState.Success -> {
                 targetBook = state.book
-                binding.clToc.visible()
-                setTocLoading(false)
-                tocAdapter.durChapterIndex = BookHelp.getDurChapter(
+                tocVisible = true
+                updateTocLoading(false)
+                durChapterIndex = BookHelp.getDurChapter(
                     viewModel.chapterIndex,
                     viewModel.chapterTitle,
                     state.toc,
                     searchAllChapterNumbers = true,
                 )
-                tocAdapter.setItems(state.toc)
-                binding.recyclerViewToc.scrollToPosition(tocAdapter.durChapterIndex - 5)
+                tocItems = state.toc
+                scrollTocTargetIndex = (durChapterIndex - 5).coerceAtLeast(0)
+                scrollTocTrigger++
             }
 
             is ChapterTocState.Error -> {
@@ -596,35 +928,35 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                     state.throwable,
                     true,
                 )
-                setTocLoading(false)
-                binding.clToc.gone()
+                updateTocLoading(false)
+                tocVisible = false
                 viewModel.clearToc()
             }
         }
     }
 
-    override val oldBookUrl: String?
+    val oldBookUrl: String?
         get() = callBack?.oldBook?.bookUrl
 
-    override fun topSource(searchBook: SearchBook) {
+    fun topSource(searchBook: SearchBook) {
         viewModel.topSource(searchBook)
     }
 
-    override fun bottomSource(searchBook: SearchBook) {
+    fun bottomSource(searchBook: SearchBook) {
         viewModel.bottomSource(searchBook)
     }
 
-    override fun editSource(searchBook: SearchBook) {
+    fun editSource(searchBook: SearchBook) {
         editSourceResult.launch {
             putExtra("sourceUrl", searchBook.origin)
         }
     }
 
-    override fun disableSource(searchBook: SearchBook) {
+    fun disableSource(searchBook: SearchBook) {
         viewModel.disableSource(searchBook)
     }
 
-    override fun deleteSource(searchBook: SearchBook) {
+    fun deleteSource(searchBook: SearchBook) {
         if (oldBookUrl == searchBook.bookUrl) {
             viewModel.autoChangeSource(callBack?.oldBook?.type, searchBook)
         } else {
@@ -632,54 +964,69 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         }
     }
 
-    override fun setBookScore(searchBook: SearchBook, score: Int) {
+    fun setBookScore(searchBook: SearchBook, score: Int) {
         viewModel.setBookScore(searchBook, score)
+        scoreRevision++
     }
 
-    override fun getBookScore(searchBook: SearchBook): Int {
+    fun getBookScore(searchBook: SearchBook): Int {
         return viewModel.getBookScore(searchBook)
     }
 
-    override fun clickChapter(bookChapter: BookChapter, nextChapterUrl: String?) {
+    fun clickChapter(bookChapter: BookChapter, nextChapterUrl: String?) {
         if (batchMode) return
         targetBook?.let {
             viewModel.loadContent(it, bookChapter, nextChapterUrl)
         }
     }
 
-    override fun selectionChanged() {
+    fun selectionChanged() {
         viewLifecycleOwnerLiveData.value?.lifecycleScope?.launch {
             showTitle()
             updateBatchActions()
         }
     }
 
+    private fun clearSelection() {
+        if (selectedChapterIndices.isEmpty()) return
+        selectedChapterIndices = emptySet()
+        selectionChanged()
+    }
+
+    private fun selectPositions(positions: Collection<Int>) {
+        val nextSelection = positions.mapNotNullTo(hashSetOf()) { position ->
+            tocItems.getOrNull(position)?.takeUnless { it.isVolume }?.index
+        }
+        if (nextSelection == selectedChapterIndices) return
+        selectedChapterIndices = nextSelection
+        selectionChanged()
+    }
+
     private fun cacheSelectedChapters() {
-        if (tocAdapter.selectionCount == 0 || tocLoading || batchCaching) return
+        if (selectionCount == 0 || tocLoading || batchCaching) return
         if (viewModel.isAutomationActive) {
-            viewModel.cacheAutomationSelection(tocAdapter.selectedPositions)
+            viewModel.cacheAutomationSelection(selectedPositions)
             return
         }
         val sourceBook = targetBook ?: return
         val originalBook = callBack?.oldBook ?: return
         val chapter = viewModel.currentOriginalChapter ?: return
-        val lastSelectedPosition = tocAdapter.lastSelectedPosition
+        val lastPos = lastSelectedPosition
         viewModel.cacheContents(
             sourceBook,
-            tocAdapter.selectedChapters,
+            selectedChapters,
             originalBook,
             chapter,
-            lastSelectedPosition + 1,
+            lastPos + 1,
         )
     }
 
     private fun showCacheSuccess(result: ChapterCacheResult.Success) {
         callBack?.contentCached(result.cachedChapterIndex)
-        tocAdapter.clearSelection()
-        if (tocAdapter.itemCount > 0) {
-            binding.recyclerViewToc.scrollToPosition(
-                result.targetPosition.coerceAtMost(tocAdapter.itemCount - 1)
-            )
+        clearSelection()
+        if (tocItems.isNotEmpty()) {
+            scrollTocTargetIndex = result.targetPosition.coerceAtMost(tocItems.lastIndex)
+            scrollTocTrigger++
         }
         result.automationSessionId?.let { sessionId ->
             if (!viewModel.acknowledgeAutomationCache(sessionId, result.cachedChapterIndex)) {
@@ -707,11 +1054,10 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
 
     private fun advanceOriginalChapter(chapter: BookChapter, targetPosition: Int? = null) {
         val nextChapter = viewModel.advanceOriginalChapter(chapter)
-        tocAdapter.clearSelection()
-        if (targetPosition != null && tocAdapter.itemCount > 0) {
-            binding.recyclerViewToc.scrollToPosition(
-                targetPosition.coerceAtMost(tocAdapter.itemCount - 1)
-            )
+        clearSelection()
+        if (targetPosition != null && tocItems.isNotEmpty()) {
+            scrollTocTargetIndex = targetPosition.coerceAtMost(tocItems.lastIndex)
+            scrollTocTrigger++
         }
         if (nextChapter == null) {
             toastOnUi(R.string.chapter_source_finished)
@@ -722,20 +1068,14 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         updateBatchActions()
     }
 
-    private fun setTocLoading(loading: Boolean) {
+    private fun updateTocLoading(loading: Boolean) {
         tocLoading = loading
-        updateLoadingIndicator()
         updateBatchActions()
     }
 
-    private fun setBatchCaching(caching: Boolean) {
+    private fun updateBatchCaching(caching: Boolean) {
         batchCaching = caching
-        updateLoadingIndicator()
         updateBatchActions()
-    }
-
-    private fun updateLoadingIndicator() {
-        binding.loadingToc.isVisible = tocLoading || contentLoading || batchCaching
     }
 
     private fun updateBatchActions() {
@@ -745,12 +1085,10 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         val automationState = viewModel.automationState.value
         val automationActive = viewModel.isAutomationActive
         val canSelect = !automationActive || automationState is ChapterSourceAutomationState.Paused
-        tocAdapter.selectionEnabled = !busy && canSelect
-        binding.ivHideToc.isEnabled = !busy && !automationActive
-        binding.btnBatchSkip.isEnabled = hasOriginalChapter && !busy
-        binding.btnBatchCacheNext.isEnabled = hasOriginalChapter &&
-                tocAdapter.selectionCount > 0 && !busy && canSelect
-        binding.btnBatchFinish.isEnabled = !batchCaching
+        hasOriginalChapterState = hasOriginalChapter
+        isAutomationActiveState = automationActive
+        canSelectState = canSelect
+        selectionEnabled = !busy && canSelect
     }
 
     private fun showAutomationRangeDialog() {
@@ -759,62 +1097,38 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             toastOnUi(R.string.chapter_source_automation_select_target)
             return
         }
-        val originalBook = callBack?.oldBook ?: return
+        if (callBack?.oldBook == null) return
         val range = viewModel.automationRangeDefaults()
         if (range == null) {
             toastOnUi(R.string.chapter_list_empty)
             return
         }
-        alert(titleResource = R.string.chapter_source_automation) {
-            val rangeBinding = DialogDownloadChoiceBinding.inflate(layoutInflater).apply {
-                editStart.setText(range.first.toString())
-                editEnd.setText(range.last.toString())
-            }
-            customView { rangeBinding.root }
-            okButton {
-                val start = rangeBinding.editStart.text?.toString()?.trim()?.toIntOrNull()
-                val end = rangeBinding.editEnd.text?.toString()?.trim()?.toIntOrNull()
-                if (start == null || end == null || !viewModel.startAutomation(
-                        originalBook,
-                        tocState.book,
-                        tocState.toc,
-                        start,
-                        end,
-                    )
-                ) {
-                    toastOnUi(R.string.chapter_source_automation_invalid_range)
-                }
-            }
-            cancelButton()
-        }
+        automationRangeDefault = range
     }
 
     private fun showAutomationState(state: ChapterSourceAutomationState) {
-        automationMenuItem?.setTitle(
-            if (viewModel.isAutomationActive) {
-                R.string.chapter_source_automation_stop
-            } else {
-                R.string.chapter_source_automation
-            }
-        )
+        isAutomationActiveState = viewModel.isAutomationActive
         when (state) {
             is ChapterSourceAutomationState.Caching -> {
-                tocAdapter.selectPositions(state.targetPositions)
+                selectPositions(state.targetPositions)
             }
 
             is ChapterSourceAutomationState.Paused -> when (state.reason) {
                 is ChapterSourceAutomationPause.ContentError -> {
-                    tocAdapter.selectPositions(state.targetPositions)
+                    selectPositions(state.targetPositions)
                 }
 
                 else -> {
-                    tocAdapter.clearSelection()
-                    state.targetPositions.firstOrNull()?.let(binding.recyclerViewToc::scrollToPosition)
+                    clearSelection()
+                    state.targetPositions.firstOrNull()?.let { pos ->
+                        scrollTocTargetIndex = pos
+                        scrollTocTrigger++
+                    }
                 }
             }
 
             is ChapterSourceAutomationState.Ready,
-            is ChapterSourceAutomationState.Finished -> tocAdapter.clearSelection()
+            is ChapterSourceAutomationState.Finished -> clearSelection()
 
             ChapterSourceAutomationState.Idle -> Unit
         }
@@ -822,42 +1136,9 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
         updateBatchActions()
     }
 
-    private val automationMenuItem: MenuItem?
-        get() = binding.toolBar.menu.findItem(R.id.menu_chapter_source_automation)
-
-    /**
-     * 更新分组菜单
-     */
-    private fun upGroupMenu() {
-        binding.toolBar.menu.findItem(R.id.menu_group)?.subMenu?.transaction { menu ->
-            val selectedGroup = AppConfig.searchGroup
-            menu.removeGroup(R.id.source_group)
-            val allItem = menu.add(R.id.source_group, Menu.NONE, Menu.NONE, R.string.all_source)
-            var hasSelectedGroup = false
-            groups.forEach { group ->
-                menu.add(R.id.source_group, Menu.NONE, Menu.NONE, group)?.let {
-                    if (group == selectedGroup) {
-                        it.isChecked = true
-                        hasSelectedGroup = true
-                    }
-                }
-            }
-            menu.setGroupCheckable(R.id.source_group, true, true)
-            if (!hasSelectedGroup) {
-                allItem.isChecked = true
-            }
-        }
-    }
-
     override fun observeLiveBus() {
         observeEvent<String>(EventBus.SOURCE_CHANGED) {
-            searchBookAdapter.notifyItemRangeChanged(
-                0,
-                searchBookAdapter.itemCount,
-                Bundle().apply {
-                    putString("upCurSource", oldBookUrl)
-                }
-            )
+            currentBookUrl = oldBookUrl
         }
     }
 

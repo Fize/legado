@@ -17,35 +17,30 @@ class FontSelectionStyleTest {
 
     @Test
     fun `selected font uses an accent stroke`() {
-        val layout = readProjectFile("src/main/res/layout/item_font.xml")
-        val adapter = readProjectFile("src/main/java/io/legado/app/ui/font/FontAdapter.kt")
+        val dialog = readProjectFile("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
+            .substringAfter("internal fun FontItemRow(")
 
-        assertFalse(layout.contains("MaterialCardView"))
-        assertTrue(layout.contains("<LinearLayout"))
-        assertTrue(layout.contains("@+id/root_card"))
-        assertTrue(layout.contains("android:foreground=\"?android:attr/selectableItemBackground\""))
-        assertTrue(adapter.contains("rootCard.background = GradientDrawable().apply"))
-        assertTrue(adapter.contains("setColor(Color.TRANSPARENT)"))
-        assertTrue(adapter.contains("setStroke(2.dpToPx(), context.accentColor)"))
-        assertTrue(adapter.contains("val selected = doc.toString() == curFilePath"))
-        assertTrue(adapter.contains("R.string.font_item_private"))
-        assertTrue(adapter.contains("R.string.font_item_external"))
+        assertTrue(dialog.contains("val selected = doc.toString() == curFilePath"))
+        assertTrue(dialog.contains(".background(Color.Transparent)"))
+        assertTrue(dialog.contains("Modifier.border(2.dp, accent, RoundedCornerShape(4.dp))"))
+        assertTrue(dialog.contains("R.string.font_item_private"))
+        assertTrue(dialog.contains("R.string.font_item_external"))
     }
 
     @Test
     fun `font preview falls back when loading a recycled row fails`() {
-        val adapter = readProjectFile("src/main/java/io/legado/app/ui/font/FontAdapter.kt")
-            .substringAfter("override fun convert")
+        val dialog = readProjectFile("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
+            .substringAfter("internal fun loadFontTypeface(")
 
-        assertTrue(adapter.contains("tvFont.typeface = kotlin.runCatching"))
-        assertTrue(adapter.contains("}.getOrNull() ?: Typeface.DEFAULT"))
+        assertTrue(dialog.contains("return kotlin.runCatching"))
+        assertTrue(dialog.contains("}.getOrNull() ?: Typeface.DEFAULT"))
     }
 
     @Test
     fun `private fonts load independently of the optional external folder`() {
         val dialog = readProjectFile("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
         val setup = dialog.substringAfter("val fontPath = getPrefString(PreferKey.fontFolder)")
-            .substringBefore("override fun onMenuItemClick")
+            .substringBefore("private fun importFont(uri: Uri)")
         val localLoaderMarker =
             "private fun loadLocalFonts(openFolderWhenEmpty: Boolean = false)"
         assertTrue(dialog.contains(localLoaderMarker))
@@ -59,7 +54,7 @@ class FontSelectionStyleTest {
         assertFalse(readableFolder.contains("loadLocalFonts"))
         assertTrue(localLoader.contains("getLocalFonts()"))
         assertTrue(localLoader.contains("if (it.isNotEmpty())"))
-        assertTrue(localLoader.contains("adapter.setItems(it)"))
+        assertTrue(localLoader.contains("fontItems.addAll(it)"))
         assertTrue(localLoader.contains("else if (openFolderWhenEmpty)"))
         assertTrue(localLoader.contains("openFolder()"))
 
@@ -161,13 +156,11 @@ class FontSelectionStyleTest {
     @Test
     fun `font picker exposes a single file import and keeps same names by path`() {
         val dialog = readProjectFile("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
-        val menu = readProjectFile("src/main/res/menu/font_select.xml")
         val importIo = dialog.substringAfter("private fun importFont(uri: Uri)")
             .substringAfter("execute {")
             .substringBefore("}.onSuccess")
 
-        assertTrue(menu.contains("@+id/menu_import"))
-        assertTrue(menu.contains("@drawable/ic_import"))
+        assertTrue(dialog.contains("R.drawable.ic_import"))
         assertTrue(dialog.contains("mode = HandleFileContract.FILE"))
         assertTrue(importIo.contains("FileDoc.fromUri(uri, false)"))
         assertTrue(importIo.contains("source.openInputStream().getOrThrow()"))

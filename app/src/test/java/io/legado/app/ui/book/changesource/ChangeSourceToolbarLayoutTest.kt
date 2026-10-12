@@ -7,17 +7,14 @@ import java.io.File
 class ChangeSourceToolbarLayoutTest {
 
     @Test
-    fun `change source toolbars reserve end inset for expanded search actions`() {
-        listOf(
-            "dialog_book_change_source.xml",
-            "dialog_chapter_change_source.xml",
-        ).forEach { name ->
-            val source = projectFile("src/main/res/layout/$name").readText()
-            assertTrue(
-                "$name must reserve the action end inset",
-                source.contains("app:contentInsetEndWithActions=\"16dp\"")
-            )
-        }
+    fun `change source top bar reserves end padding for expanded search field`() {
+        val source = projectFile(
+            "src/main/java/io/legado/app/ui/book/changesource/ChangeSourceComposeComponents.kt"
+        ).readText()
+        assertTrue(
+            "ChangeSourceTopBar must reserve end padding for expanded search actions",
+            source.contains(".padding(end = 16.dp)")
+        )
     }
 
     private fun projectFile(pathInApp: String): File {

@@ -20,10 +20,10 @@ class TitleBarAccessibilityTest {
         )
 
         val changeSourceNavigation = projectFile(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt"
+            "src/main/java/io/legado/app/ui/book/changesource/ChangeSourceComposeComponents.kt"
         ).readText()
-            .substringAfter("private fun initNavigationView()")
-            .substringBefore("\n    private fun")
+            .substringAfter("internal fun ChangeSourceTopBar(")
+            .substringBefore("internal fun ChangeSourceItemRow(")
         assertTrue(changeSourceNavigation.contains("R.string.back"))
         assertFalse(changeSourceNavigation.contains("abc_action_bar_up_description"))
 

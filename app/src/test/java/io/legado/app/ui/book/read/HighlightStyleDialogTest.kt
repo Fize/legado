@@ -106,7 +106,7 @@ class HighlightStyleDialogTest {
             File("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt"),
             File("app/src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
         ).first(File::isFile).readText()
-        val callback = source.substringAfter("override fun onFontSelect")
+        val callback = source.substringAfter("fun onFontSelect")
             .substringBefore("private fun onDefaultFontChange")
         val highlightDialog = sequenceOf(
             File("src/main/java/io/legado/app/ui/book/read/HighlightStyleDialog.kt"),

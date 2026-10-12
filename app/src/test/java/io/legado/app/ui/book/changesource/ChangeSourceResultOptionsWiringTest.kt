@@ -9,16 +9,15 @@ class ChangeSourceResultOptionsWiringTest {
 
     @Test
     fun `both change source dialogs share result option controls`() {
-        val menu = projectFile("src/main/res/menu/change_source.xml").readText()
-        assertTrue(menu.contains("@+id/menu_sort_respond_time"))
-        assertTrue(menu.contains("@+id/menu_word_count_filter"))
+        val components = projectFile(COMPONENTS).readText()
+        assertTrue(components.contains("R.string.change_source_sort_respond_time"))
+        assertTrue(components.contains("R.string.change_source_word_count_filter"))
 
         DIALOGS.forEach { path ->
             val source = projectFile(path).readText()
-            assertTrue(path, source.contains("R.id.menu_sort_respond_time"))
-            assertTrue(path, source.contains("R.id.menu_word_count_filter"))
+            assertTrue(path, source.contains("AppConfig.changeSourceSortRespondTime"))
+            assertTrue(path, source.contains("ChangeSourceWordCountFilterDialog"))
             assertTrue(path, source.contains("syncChangeSourceResultOptions()"))
-            assertTrue(path, source.contains("showChangeSourceWordCountFilter"))
         }
     }
 
@@ -45,12 +44,10 @@ class ChangeSourceResultOptionsWiringTest {
     }
 
     @Test
-    fun `both adapters refresh measured result fields`() {
-        ADAPTERS.forEach { path ->
-            val source = projectFile(path).readText()
-            assertTrue(path, source.contains("oldItem.chapterWordCountText == newItem.chapterWordCountText"))
-            assertTrue(path, source.contains("oldItem.respondTime == newItem.respondTime"))
-        }
+    fun `compose row renders measured result fields`() {
+        val source = projectFile(COMPONENTS).readText()
+        assertTrue(source.contains("item.chapterWordCountText"))
+        assertTrue(source.contains("item.respondTime"))
     }
 
     @Test
@@ -82,14 +79,12 @@ class ChangeSourceResultOptionsWiringTest {
             "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
         private const val CHAPTER_VIEW_MODEL =
             "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceViewModel.kt"
+        private const val COMPONENTS =
+            "src/main/java/io/legado/app/ui/book/changesource/ChangeSourceComposeComponents.kt"
         private const val APP_CONFIG = "src/main/java/io/legado/app/help/config/AppConfig.kt"
         private val DIALOGS = listOf(
             "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
             "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt",
-        )
-        private val ADAPTERS = listOf(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt",
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceAdapter.kt",
         )
     }
 }

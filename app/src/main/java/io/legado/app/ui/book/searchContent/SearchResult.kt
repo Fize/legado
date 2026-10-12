@@ -1,6 +1,12 @@
 package io.legado.app.ui.book.searchContent
 
 import android.text.Spanned
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.core.text.HtmlCompat
 import io.legado.app.help.config.AppConfig
 
@@ -17,6 +23,54 @@ data class SearchResult(
     val queryIndexInChapter: Int = 0,
     val isRegex: Boolean = false
 ) {
+    fun toAnnotatedString(textColor: Color, accentColor: Color): AnnotatedString {
+        if (query.isNotBlank()) {
+            val matchRange: IntRange? = if (isRegex) {
+                runCatching {
+                    (Regex(query).find(resultText, 20) ?: Regex(query).find(resultText))?.range
+                }.getOrNull()
+            } else {
+                var idx = resultText.indexOf(query, 20)
+                if (idx < 0) idx = resultText.indexOf(query)
+                if (idx >= 0) idx until (idx + query.length) else null
+            }
+
+            if (matchRange != null) {
+                val start = matchRange.first
+                val end = matchRange.last + 1
+                val matchedText = resultText.substring(start, end)
+                val leftString = resultText.take(start)
+                val rightString = resultText.substring(end)
+                val highlightStyle = if (AppConfig.isEInkMode) {
+                    SpanStyle(color = textColor, textDecoration = TextDecoration.Underline)
+                } else {
+                    SpanStyle(color = accentColor)
+                }
+                val normalStyle = SpanStyle(color = textColor)
+                return buildAnnotatedString {
+                    withStyle(highlightStyle) {
+                        append(chapterTitle)
+                    }
+                    append("\n")
+                    withStyle(normalStyle) {
+                        append(leftString)
+                    }
+                    withStyle(highlightStyle) {
+                        append(matchedText)
+                    }
+                    withStyle(normalStyle) {
+                        append(rightString)
+                    }
+                }
+            }
+        }
+        return buildAnnotatedString {
+            withStyle(SpanStyle(color = textColor)) {
+                append(resultText)
+            }
+        }
+    }
+
     fun getHtmlCompat(textColor: String, accentColor: String): Spanned {
         if (query.isNotBlank()) {
             if (isRegex) { // 正则表达式高亮处理

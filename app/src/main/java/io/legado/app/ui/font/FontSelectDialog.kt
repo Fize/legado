@@ -1,31 +1,77 @@
 package io.legado.app.ui.font
 
+import android.content.Context
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
-import androidx.appcompat.widget.Toolbar
+import android.view.ViewGroup
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogFontSelectBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.RealPathUtil
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefString
@@ -33,25 +79,26 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.list
 import io.legado.app.utils.listFileDocs
 import io.legado.app.utils.openInputStream
+import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.launch
 import java.io.File
 
+data class FontItem(
+    val doc: FileDoc,
+    val privateFolder: Boolean,
+)
+
 /**
- * 字体选择对话框
+ * 字体选择对话框 (Compose)
  */
-class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
-    Toolbar.OnMenuItemClickListener,
-    FontAdapter.CallBack {
+class FontSelectDialog : BaseDialogFragment() {
     private val fontRegex = Regex("(?i).*\\.[ot]tf")
-    private val binding by viewBinding(DialogFontSelectBinding::bind)
-    private val adapter by lazy {
-        val curFontPath = callBack?.curFontPath ?: ""
-        FontAdapter(requireContext(), curFontPath, this)
-    }
+    private val fontItems = mutableStateListOf<FontItem>()
+    private var showSystemTypefaceDialog by mutableStateOf(false)
+
     private val selectFontDir = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
             if (uri.isContentScheme()) {
@@ -81,15 +128,149 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
         setLayout(0.9f, 0.9f)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.setTitle(R.string.select_font)
-        binding.toolBar.inflateMenu(R.menu.font_select)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
-        binding.recyclerView.layoutManager = LinearLayoutManager(context)
-        binding.recyclerView.adapter = adapter
+    @OptIn(ExperimentalMaterial3Api::class)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    val context = LocalContext.current
+                    val barBg = Color(context.primaryColor)
+                    val barContent = Color(context.primaryTextColor)
+                    val curFilePath = callBack?.curFontPath.orEmpty()
+                    var menuExpanded by remember { mutableStateOf(false) }
 
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colorResource(R.color.background))
+                    ) {
+                        TopAppBar(
+                            title = { Text(stringResource(R.string.select_font)) },
+                            actions = {
+                                TextButton(
+                                    onClick = {
+                                        if (!shouldSelectSystemTypeface(callBack)) {
+                                            onDefaultFontChange()
+                                            dismissAllowingStateLoss()
+                                        } else {
+                                            showSystemTypefaceDialog = true
+                                        }
+                                    }
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.default_font),
+                                        color = barContent
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        importFont.launch {
+                                            mode = HandleFileContract.FILE
+                                            title = getString(R.string.import_str)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_import),
+                                        contentDescription = stringResource(R.string.import_str),
+                                        tint = barContent
+                                    )
+                                }
+                                Box {
+                                    IconButton(onClick = { menuExpanded = true }) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreVert,
+                                            contentDescription = stringResource(R.string.more_menu),
+                                            tint = barContent
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = menuExpanded,
+                                        onDismissRequest = { menuExpanded = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.other_folder)) },
+                                            onClick = {
+                                                menuExpanded = false
+                                                openFolder()
+                                            }
+                                        )
+                                    }
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = barBg,
+                                titleContentColor = barContent,
+                                actionIconContentColor = barContent
+                            )
+                        )
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            items(
+                                items = fontItems,
+                                key = { it.doc.toString() }
+                            ) { item ->
+                                FontItemRow(
+                                    item = item,
+                                    curFilePath = curFilePath,
+                                    onSelect = { onFontSelect(item.doc) }
+                                )
+                            }
+                        }
+                    }
+
+                    if (showSystemTypefaceDialog) {
+                        val options = stringArrayResource(R.array.system_typefaces)
+                        AlertDialog(
+                            onDismissRequest = { showSystemTypefaceDialog = false },
+                            title = { Text(stringResource(R.string.system_typeface)) },
+                            text = {
+                                Column {
+                                    options.forEachIndexed { index, label ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    showSystemTypefaceDialog = false
+                                                    AppConfig.systemTypefaces = index
+                                                    onDefaultFontChange()
+                                                    dismissAllowingStateLoss()
+                                                }
+                                                .padding(vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = AppConfig.systemTypefaces == index,
+                                                onClick = null
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(text = label)
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showSystemTypefaceDialog = false }) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         loadFonts()
     }
 
@@ -109,38 +290,6 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
                 loadFontFilesByPermission(fontPath)
             }
         }
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_default -> {
-                if (!shouldSelectSystemTypeface(callBack)) {
-                    onDefaultFontChange()
-                    dismissAllowingStateLoss()
-                    return true
-                }
-                val requireContext = requireContext()
-                alert(titleResource = R.string.system_typeface) {
-                    items(
-                        requireContext.resources.getStringArray(R.array.system_typefaces).toList()
-                    ) { _, i ->
-                        AppConfig.systemTypefaces = i
-                        onDefaultFontChange()
-                        dismissAllowingStateLoss()
-                    }
-                }
-            }
-            R.id.menu_other -> {
-                openFolder()
-            }
-            R.id.menu_import -> {
-                importFont.launch {
-                    mode = HandleFileContract.FILE
-                    title = getString(R.string.import_str)
-                }
-            }
-        }
-        return true
     }
 
     private fun importFont(uri: Uri) {
@@ -184,7 +333,8 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
             mergeFontItems(arrayListOf(), getLocalFonts())
         }.onSuccess {
             if (it.isNotEmpty()) {
-                adapter.setItems(it)
+                fontItems.clear()
+                fontItems.addAll(it)
             } else if (openFolderWhenEmpty) {
                 openFolder()
             }
@@ -222,7 +372,8 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
             } ?: ArrayList()
             mergeFontItems(fontItems, getLocalFonts())
         }.onSuccess {
-            adapter.setItems(it)
+            fontItems.clear()
+            fontItems.addAll(it)
         }.onError {
             AppLog.put("加载字体文件失败\n${it.localizedMessage}", it)
             toastOnUi("getFontFiles:${it.localizedMessage}")
@@ -248,7 +399,7 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
         }
     }
 
-    override fun onFontSelect(docItem: FileDoc) {
+    fun onFontSelect(docItem: FileDoc) {
         callBack?.selectFont(docItem.toString())
         dismissAllowingStateLoss()
     }
@@ -271,4 +422,80 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
             return callBack?.selectSystemTypefaceOnDefault != false
         }
     }
+}
+
+@Composable
+internal fun FontItemRow(
+    item: FontItem,
+    curFilePath: String,
+    onSelect: () -> Unit,
+) {
+    val context = LocalContext.current
+    val doc = item.doc
+    val selected = doc.toString() == curFilePath
+    val accent = remember(context) { Color(context.accentColor) }
+    val typeface = remember(doc) { loadFontTypeface(context, doc) }
+    val fontFamily = remember(typeface) { FontFamily(typeface) }
+    val label = stringResource(
+        if (item.privateFolder) R.string.font_item_private else R.string.font_item_external,
+        doc.name,
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Transparent)
+            .then(
+                if (selected) {
+                    Modifier.border(2.dp, accent, RoundedCornerShape(4.dp))
+                } else {
+                    Modifier
+                }
+            )
+            .clickable(onClick = onSelect)
+            .padding(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontFamily = fontFamily,
+            color = colorResource(R.color.primaryText),
+            modifier = Modifier
+                .weight(1f)
+                .padding(5.dp)
+        )
+        Box(
+            modifier = Modifier.size(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = null,
+                    tint = colorResource(R.color.primaryText),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+internal fun loadFontTypeface(context: Context, doc: FileDoc): Typeface {
+    return kotlin.runCatching {
+        if (doc.isContentScheme) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.contentResolver
+                    .openFileDescriptor(doc.uri, "r")?.use {
+                        Typeface.Builder(it.fileDescriptor).build()
+                    }
+            } else {
+                Typeface.createFromFile(RealPathUtil.getPath(context, doc.uri))
+            }
+        } else {
+            Typeface.createFromFile(doc.uri.path!!)
+        }
+    }.onFailure {
+        it.printOnDebug()
+        AppLog.put("读取字体 ${doc.name} 出错\n${it.localizedMessage}", it, true)
+    }.getOrNull() ?: Typeface.DEFAULT
 }
