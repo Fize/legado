@@ -98,7 +98,7 @@ class HighlightRuleEditDialogTest {
         ).readText()
 
         assertTrue(source.contains("private var isLoaded = false"))
-        assertTrue(source.contains("binding.btnOk.isEnabled = false"))
+        assertTrue(source.contains("enabled = isLoadedState"))
         assertTrue(source.contains("if (isLoaded) (if (view == null) rule else getRule())"))
     }
 

@@ -1,53 +1,120 @@
 package io.legado.app.ui.highlight
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.appDb
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemGroupManageBinding
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.ui.compose.component.LegadoTopAppBar
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.requestInputMethod
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class HighlightGroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view) {
+class HighlightGroupManageDialog : BaseDialogFragment() {
 
     private val viewModel: HighlightRuleViewModel by activityViewModels()
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val adapter by lazy { GroupAdapter(requireContext()) }
+    private var groupsState by mutableStateOf<List<String>>(emptyList())
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, 0.9f)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        view.setBackgroundColor(backgroundColor)
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.setTitle(R.string.highlight_rule_group_manage)
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        binding.recyclerView.adapter = adapter
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
         lifecycleScope.launch {
-            appDb.highlightRuleDao.flowGroups().conflate().collect { adapter.setItems(it) }
+            appDb.highlightRuleDao.flowGroups().conflate().collect {
+                groupsState = it
+            }
+        }
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    DialogContent()
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun DialogContent() {
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.highlight_rule_group_manage),
+                    onBack = { dismissAllowingStateLoss() },
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                items(
+                    items = groupsState,
+                    key = { it },
+                ) { group ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = group,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { editGroup(group) }) {
+                            Text(text = stringResource(R.string.edit))
+                        }
+                        TextButton(onClick = { deleteGroup(group) }) {
+                            Text(
+                                text = stringResource(R.string.delete),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                }
+            }
         }
     }
 
@@ -95,26 +162,5 @@ class HighlightGroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_v
 
     private data class MoveTarget(val title: String, val group: String?) {
         override fun toString() = title
-    }
-
-    private inner class GroupAdapter(context: Context) :
-        RecyclerAdapter<String, ItemGroupManageBinding>(context) {
-        override fun getViewBinding(parent: ViewGroup) =
-            ItemGroupManageBinding.inflate(inflater, parent, false)
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemGroupManageBinding,
-            item: String,
-            payloads: MutableList<Any>
-        ) {
-            binding.root.setBackgroundColor(context.backgroundColor)
-            binding.tvGroup.text = item
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemGroupManageBinding) {
-            binding.tvEdit.setOnClickListener { getItem(holder.layoutPosition)?.let(::editGroup) }
-            binding.tvDel.setOnClickListener { getItem(holder.layoutPosition)?.let(::deleteGroup) }
-        }
     }
 }
