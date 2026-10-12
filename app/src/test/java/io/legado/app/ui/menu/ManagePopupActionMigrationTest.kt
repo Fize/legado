@@ -101,13 +101,12 @@ class ManagePopupActionMigrationTest {
     @Test
     fun `dialog overflow menus use the shared vertical bridge or Compose TopAppBar`() {
         val sourceLogin = readProjectFile("src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt")
-        assertContains("SourceLoginDialog.kt", sourceLogin, "installMd3OverflowMenu(")
-        assertContains("SourceLoginDialog.kt", sourceLogin, "showIcons = true")
-        assertContains(
-            "SourceLoginDialog.kt",
-            sourceLogin,
-            "onOpenCustomMenu = { it.applyOpenTint(requireContext()) }"
-        )
+        assertContains("SourceLoginDialog.kt", sourceLogin, "LegadoTopAppBar(")
+        assertContains("SourceLoginDialog.kt", sourceLogin, "DropdownMenu(")
+        assertContains("SourceLoginDialog.kt", sourceLogin, "painterResource(R.drawable.ic_add_online)")
+        assertContains("SourceLoginDialog.kt", sourceLogin, "painterResource(R.drawable.ic_clear)")
+        assertContains("SourceLoginDialog.kt", sourceLogin, "painterResource(R.drawable.ic_clear_all)")
+        assertContains("SourceLoginDialog.kt", sourceLogin, "painterResource(R.drawable.ic_history)")
 
         val appLog = readProjectFile("src/main/java/io/legado/app/ui/about/AppLogDialog.kt")
         assertContains("AppLogDialog.kt", appLog, "LegadoTopAppBar(")
@@ -121,26 +120,12 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `dialog menu actions provide icons for the vertical menu`() {
-        val menus = mapOf(
-            "source_login.xml" to listOf(
-                "menu_ok",
-                "menu_show_login_header",
-                "menu_del_login_header",
-                "menu_clear_login_info",
-                "menu_log"
-            )
-        )
-        menus.forEach { (file, ids) ->
-            val source = readProjectFile("src/main/res/menu/$file")
-            ids.forEach { id ->
-                val item = source.substringAfter("android:id=\"@+id/$id\"")
-                    .substringBefore("/>")
-                assertTrue(
-                    "$file/$id should declare an icon",
-                    item.contains("android:icon=\"@drawable/")
-                )
-            }
-        }
+        val sourceLogin = readProjectFile("src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt")
+        assertTrue(sourceLogin.contains("Icons.Default.Check"))
+        assertTrue(sourceLogin.contains("R.drawable.ic_add_online"))
+        assertTrue(sourceLogin.contains("R.drawable.ic_clear"))
+        assertTrue(sourceLogin.contains("R.drawable.ic_clear_all"))
+        assertTrue(sourceLogin.contains("R.drawable.ic_history"))
     }
 
     @Test

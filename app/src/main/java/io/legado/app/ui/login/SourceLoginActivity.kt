@@ -1,19 +1,25 @@
 package io.legado.app.ui.login
 
 import android.os.Bundle
+import android.view.View
 import androidx.activity.viewModels
-import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.fragment.app.FragmentContainerView
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.data.entities.BaseSource
-import io.legado.app.databinding.ActivitySourceLoginBinding
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
+class SourceLoginActivity : VMBaseComposeActivity<SourceLoginViewModel>() {
 
-class SourceLoginActivity : VMBaseActivity<ActivitySourceLoginBinding, SourceLoginViewModel>() {
-
-    override val binding by viewBinding(ActivitySourceLoginBinding::inflate)
     override val viewModel by viewModels<SourceLoginViewModel>()
+    private val containerId = View.generateViewId()
+    private var showWebViewFragment by mutableStateOf(false)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         viewModel.initData(intent, success = { source ->
@@ -23,11 +29,28 @@ class SourceLoginActivity : VMBaseActivity<ActivitySourceLoginBinding, SourceLog
         })
     }
 
+    @Composable
+    override fun Content() {
+        if (showWebViewFragment) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    FragmentContainerView(ctx).apply {
+                        id = containerId
+                        if (supportFragmentManager.findFragmentByTag("webViewLogin") == null) {
+                            supportFragmentManager.beginTransaction()
+                                .replace(id, WebViewLoginFragment(), "webViewLogin")
+                                .commitAllowingStateLoss()
+                        }
+                    }
+                }
+            )
+        }
+    }
+
     private fun initView(source: BaseSource) {
         if (!source.hasLoginForm()) {
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.fl_fragment, WebViewLoginFragment(), "webViewLogin")
-                .commit()
+            showWebViewFragment = true
         } else {
             showDialogFragment<SourceLoginDialog>()
         }

@@ -5,12 +5,10 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Base64
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -20,16 +18,52 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.annotation.Keep
-import androidx.core.view.isGone
+import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.isVisible
-import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.textfield.TextInputEditText
-import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.event.ColorSchemeUpdateEvent
+import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
+import io.github.rosemoe.sora.event.SubscriptionReceipt
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
 import io.github.rosemoe.sora.util.regex.RegexBackrefGrammar
 import io.github.rosemoe.sora.widget.CodeEditor
@@ -38,9 +72,8 @@ import io.github.rosemoe.sora.widget.EditorSearcher.SearchOptions
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.ActivityCodeEditBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.dialogs.SelectItem
@@ -50,6 +83,7 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.code.config.ChangeThemeDialog
 import io.legado.app.ui.code.config.SettingsDialog
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.widget.code.EditSafety
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
 import io.legado.app.utils.ColorUtils
@@ -59,10 +93,9 @@ import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 class CodeEditActivity :
-    VMBaseActivity<ActivityCodeEditBinding, CodeEditViewModel>(),
+    VMBaseComposeActivity<CodeEditViewModel>(),
     KeyboardToolPop.CallBack, ChangeThemeDialog.CallBack, SettingsDialog.CallBack,
     CurlAnalyzeUrlDialog.Callback {
     companion object {
@@ -78,25 +111,50 @@ class CodeEditActivity :
         private const val SAFE_EDITOR_LOAD_TIMEOUT_MILLIS = 15_000L
         private const val SAFE_EDITOR_READ_TIMEOUT_MILLIS = 5_000L
     }
-    override val binding by viewBinding(ActivityCodeEditBinding::inflate)
+
     override val viewModel by viewModels<CodeEditViewModel>()
     private val softKeyboardTool by lazy {
-        KeyboardToolPop(this, lifecycleScope, binding.root, this)
+        KeyboardToolPop(this, lifecycleScope, window.decorView, this)
     }
-    private val editor: CodeEditor by lazy { binding.editText }
+    private val editor: CodeEditor by lazy {
+        CodeEditor(this).apply {
+            setTextSize(18f)
+        }
+    }
+    private val editorContainer: FrameLayout by lazy {
+        FrameLayout(this).apply {
+            addView(
+                editor,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+    }
     private val editorSearcher: EditorSearcher by lazy { editor.searcher }
     private var searchOptions: SearchOptions? = null
-    private var menuSaveBtn: MenuItem? = null
-    private var menuLoginSourceBtn: MenuItem? = null
-    private var useSafeEditor = false
+    private var useSafeEditor by mutableStateOf(false)
     private var safeEditor: WebView? = null
-    private var safeEditorStatus = SafeEditorStatus.IDLE
-    private var safeEditorReadPending = false
+    private var safeEditorStatus by mutableStateOf(SafeEditorStatus.IDLE)
+    private var safeEditorReadPending by mutableStateOf(false)
     private var safeEditorReadGeneration = 0
     private var safeEditorLoadTimeout: Runnable? = null
     private var safeEditorReadTimeout: Runnable? = null
-    private var editorReady = false
+    private var editorReady by mutableStateOf(false)
     private var textActions: CodeTextActions? = null
+
+    private var titleState by mutableStateOf("")
+    private var autoWrapState by mutableStateOf(AppConfig.editAutoWrap)
+    private var showSearchGroup by mutableStateOf(false)
+    private var showReplaceGroup by mutableStateOf(false)
+    private var findTextState by mutableStateOf(findText)
+    private var replaceTextState by mutableStateOf(replaceText)
+    private var isRegexState by mutableStateOf(isRegex)
+    private var searchResultTextState by mutableStateOf("0")
+    private var focusedSearchField by mutableStateOf<String?>(null)
+    private var receiptSearch: SubscriptionReceipt<PublishSearchResultEvent>? = null
+    private var receiptChange: SubscriptionReceipt<SelectionChangeEvent>? = null
 
     private enum class SafeEditorStatus {
         IDLE,
@@ -110,6 +168,7 @@ class CodeEditActivity :
     private var themeIndex = -1
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        titleState = getString(R.string.edit_code)
         // SavedStateHandle is available only after BaseActivity has called super.onCreate.
         if (!isInitialized) {
             viewModel.initSora()
@@ -124,7 +183,7 @@ class CodeEditActivity :
         viewModel.initData(intent) {
             if (isDestroyed) return@initData
             viewModel.title?.let {
-                binding.titleBar.title = it
+                titleState = it
             }
             val text = viewModel.editorDraft?.text ?: viewModel.initialText
             viewModel.editorDraft?.let { viewModel.cursorPosition = it.cursorPosition }
@@ -135,15 +194,348 @@ class CodeEditActivity :
                 setupCodeEditor(text)
             }
             editorReady = true
-            invalidateOptionsMenu()
         }
         initView()
     }
 
     private fun initView() {
-        binding.root.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
+        window.decorView.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
             softKeyboardTool.initialPadding = windowInsets.imeHeight
             windowInsets
+        }
+    }
+
+    @Composable
+    override fun Content() {
+        var showMenu by remember { mutableStateOf(false) }
+        val showSoraActions = !useSafeEditor
+        val canReturnText = viewModel.writable &&
+            (!useSafeEditor ||
+                (safeEditorStatus == SafeEditorStatus.READY && !safeEditorReadPending))
+        val showLoginAction = shouldShowLoginSourceAction(
+            viewModel.writable,
+            isLoginSourceActionEnabled()
+        )
+        val showJsSyntaxAction = shouldShowJavaScriptSyntaxAction(
+            useSafeEditor,
+            viewModel.canCheckJavaScriptSyntax
+        )
+
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = titleState,
+                    onNavigationClick = { finish() },
+                    actions = {
+                        if (showSoraActions) {
+                            IconButton(onClick = { search() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = stringResource(R.string.search)
+                                )
+                            }
+                        }
+                        if (viewModel.writable) {
+                            IconButton(
+                                onClick = { save(false) },
+                                enabled = canReturnText
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_save),
+                                    contentDescription = stringResource(R.string.action_save)
+                                )
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = stringResource(R.string.more_menu)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                if (showLoginAction) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.login)) },
+                                        enabled = canReturnText,
+                                        onClick = {
+                                            showMenu = false
+                                            returnText(RESULT_ACTION_LOGIN_SOURCE)
+                                        }
+                                    )
+                                }
+                                if (showSoraActions) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.change_theme)) },
+                                        onClick = {
+                                            showMenu = false
+                                            showDialogFragment(ChangeThemeDialog())
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.select_all)) },
+                                        onClick = {
+                                            showMenu = false
+                                            if (!useSafeEditor) editor.selectAll()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.format_code)) },
+                                        onClick = {
+                                            showMenu = false
+                                            if (!useSafeEditor) viewModel.formatCode(editor)
+                                        }
+                                    )
+                                }
+                                if (showJsSyntaxAction) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.check_javascript_syntax)) },
+                                        onClick = {
+                                            showMenu = false
+                                            if (!useSafeEditor) {
+                                                viewModel.checkJavaScriptSyntax(editor)
+                                            }
+                                        }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.curl_analyze_url_converter)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showCurlAnalyzeUrlConverter()
+                                    }
+                                )
+                                if (showSoraActions) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.config_settings)) },
+                                        onClick = {
+                                            showMenu = false
+                                            showDialogFragment(SettingsDialog(this@CodeEditActivity, this@CodeEditActivity))
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.auto_wrap)) },
+                                        trailingIcon = {
+                                            Checkbox(
+                                                checked = autoWrapState,
+                                                onCheckedChange = null
+                                            )
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            val next = !AppConfig.editAutoWrap
+                                            autoWrapState = next
+                                            upEdit(autoWarp = next)
+                                            putPrefBoolean(PreferKey.editAutoWrap, next)
+                                        }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.log)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showDialogFragment<AppLogDialog>()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    factory = {
+                        (editorContainer.parent as? ViewGroup)?.removeView(editorContainer)
+                        editorContainer
+                    }
+                )
+
+                if (showSearchGroup && !useSafeEditor) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 2.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.search_result),
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = searchResultTextState,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = stringResource(R.string.regex),
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Switch(
+                                        checked = isRegexState,
+                                        onCheckedChange = { checked ->
+                                            isRegex = checked
+                                            isRegexState = checked
+                                            setSearchOptions()
+                                            searchTxt(findTextState)
+                                        }
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.find),
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+                                OutlinedTextField(
+                                    value = findTextState,
+                                    onValueChange = { text ->
+                                        findTextState = text
+                                        if (text.isNotEmpty()) {
+                                            findText = text
+                                            searchTxt(findText)
+                                        } else {
+                                            editorSearcher.stopSearch()
+                                            editor.invalidate()
+                                        }
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .onFocusChanged { state ->
+                                            if (state.isFocused) focusedSearchField = "find"
+                                            else if (focusedSearchField == "find") focusedSearchField = null
+                                        }
+                                )
+                                IconButton(
+                                    onClick = { closeSearchGroup() }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.close)
+                                    )
+                                }
+                            }
+
+                            if (showReplaceGroup) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.replace),
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = replaceTextState,
+                                        onValueChange = { text ->
+                                            replaceTextState = text
+                                            if (text.isNotEmpty()) {
+                                                replaceText = text
+                                            }
+                                        },
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .onFocusChanged { state ->
+                                                if (state.isFocused) focusedSearchField = "replace"
+                                                else if (focusedSearchField == "replace") focusedSearchField = null
+                                            }
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            showReplaceGroup = false
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = stringResource(R.string.close)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        if (editorSearcher.hasQuery()) {
+                                            editorSearcher.gotoPrevious()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(stringResource(R.string.btn_previous), fontSize = 14.sp)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        if (editorSearcher.hasQuery()) {
+                                            editorSearcher.gotoNext()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(stringResource(R.string.btn_next), fontSize = 14.sp)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        if (!showReplaceGroup) {
+                                            showReplaceGroup = true
+                                        } else if (editorSearcher.hasQuery()) {
+                                            editorSearcher.replaceCurrentMatch(replaceTextState)
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(stringResource(R.string.replace), fontSize = 14.sp)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        if (editorSearcher.hasQuery()) {
+                                            editorSearcher.replaceAll(replaceTextState)
+                                        }
+                                    },
+                                    enabled = showReplaceGroup,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(stringResource(R.string.replace_all), fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -198,7 +590,7 @@ class CodeEditActivity :
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupSafeEditor(text: String) {
         safeEditorStatus = SafeEditorStatus.LOADING
-        binding.searchGroup.visibility = View.GONE
+        showSearchGroup = false
         editorSearcher.stopSearch()
         editor.visibility = View.GONE
         val webView = getOrCreateSafeEditor()
@@ -287,7 +679,7 @@ class CodeEditActivity :
             contentDescription = getString(R.string.safe_code_editor)
             visibility = View.GONE
         }.also {
-            binding.editorContainer.addView(it)
+            editorContainer.addView(it)
             safeEditor = it
         }
     }
@@ -319,20 +711,14 @@ class CodeEditActivity :
         cancelSafeEditorRead(restoreEditing = false)
         safeEditorLoadTimeout?.let(webView::removeCallbacks)
         safeEditorLoadTimeout = null
-        binding.editorContainer.removeView(webView)
+        editorContainer.removeView(webView)
         safeEditor = null
         webView.destroy()
         updateSafeEditorActionButtons()
         toastOnUi(R.string.safe_code_editor_load_failed)
     }
 
-    private fun updateSafeEditorActionButtons() {
-        val enabled = viewModel.writable &&
-            safeEditorStatus == SafeEditorStatus.READY &&
-            !safeEditorReadPending
-        menuSaveBtn?.isEnabled = enabled
-        menuLoginSourceBtn?.isEnabled = enabled && isLoginSourceActionEnabled()
-    }
+    private fun updateSafeEditorActionButtons() = Unit
 
     private fun buildSafeEditorHtml(text: String): String {
         val encodedText = Base64.encodeToString(
@@ -556,6 +942,8 @@ class CodeEditActivity :
     }
 
     override fun onDestroy() {
+        receiptSearch?.unsubscribe()
+        receiptChange?.unsubscribe()
         textActions?.dismiss()
         editorSearcher.stopSearch()
         editor.release()
@@ -569,7 +957,7 @@ class CodeEditActivity :
             loadUrl("about:blank")
             clearHistory()
             removeAllViews()
-            binding.editorContainer.removeView(this)
+            editorContainer.removeView(this)
             destroy()
         }
         safeEditor = null
@@ -660,7 +1048,7 @@ class CodeEditActivity :
 
     private fun putEditorText(intent: Intent, text: String) {
         if (this.intent.getBooleanExtra("useTextFile", false) &&
-            text.length > io.legado.app.ui.widget.code.EditSafety.MAX_INLINE_TEXT_LENGTH
+            text.length > EditSafety.MAX_INLINE_TEXT_LENGTH
         ) {
             intent.putExtra("textFile", CodeTextTransfer.write(this, text))
         } else {
@@ -725,145 +1113,52 @@ class CodeEditActivity :
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.code_edit_activity, menu)
-        menuSaveBtn = menu.findItem(R.id.menu_save)
-        menuLoginSourceBtn = menu.findItem(R.id.menu_login)
-        updateEditorMenu(menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        updateEditorMenu(menu)
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    private fun updateEditorMenu(menu: Menu) {
-        val showSoraActions = !useSafeEditor
-        val canReturnText = viewModel.writable &&
-            (!useSafeEditor ||
-                (safeEditorStatus == SafeEditorStatus.READY && !safeEditorReadPending))
-        menu.findItem(R.id.menu_search)?.isVisible = showSoraActions
-        menu.findItem(R.id.menu_change_theme)?.isVisible = showSoraActions
-        menu.findItem(R.id.menu_select_all)?.isVisible = showSoraActions
-        menu.findItem(R.id.menu_format_code)?.isVisible = showSoraActions
-        menu.findItem(R.id.menu_check_javascript_syntax)?.isVisible =
-            shouldShowJavaScriptSyntaxAction(useSafeEditor, viewModel.canCheckJavaScriptSyntax)
-        menu.findItem(R.id.menu_config_settings)?.isVisible = showSoraActions
-        menu.findItem(R.id.menu_auto_wrap)?.apply {
-            isVisible = showSoraActions
-            isChecked = AppConfig.editAutoWrap
-        }
-        menu.findItem(R.id.menu_save)?.apply {
-            isVisible = viewModel.writable
-            isEnabled = canReturnText
-        }
-        menu.findItem(R.id.menu_login)?.apply {
-            isVisible = shouldShowLoginSourceAction(
-                viewModel.writable,
-                isLoginSourceActionEnabled()
-            )
-            isEnabled = canReturnText
-        }
-    }
-
     private fun setSearchOptions() {
-        searchOptions =  SearchOptions(
+        searchOptions = SearchOptions(
             if (isRegex) SearchOptions.TYPE_REGULAR_EXPRESSION else SearchOptions.TYPE_NORMAL,
             !isRegex,
             RegexBackrefGrammar.DEFAULT
         )
     }
 
+    private fun closeSearchGroup() {
+        showSearchGroup = false
+        showReplaceGroup = false
+        focusedSearchField = null
+        editorSearcher.stopSearch()
+        receiptSearch?.unsubscribe()
+        receiptChange?.unsubscribe()
+        receiptSearch = null
+        receiptChange = null
+        editor.requestFocus()
+        editor.invalidate()
+    }
+
     private fun search() {
         if (useSafeEditor) return
-        if (binding.searchGroup.isVisible) {
-            binding.btnCloseFind.performClick()
+        if (showSearchGroup) {
+            closeSearchGroup()
             return
         }
-        binding.switchRegex.run {
-            isChecked = isRegex
-            setSearchOptions()
-            setOnCheckedChangeListener { _, isChecked ->
-                isRegex = isChecked
-                setSearchOptions()
-                searchTxt(binding.etFind.text.toString())
-            }
-        }
-        val receiptSearch =
+        isRegexState = isRegex
+        findTextState = findText
+        replaceTextState = replaceText
+        setSearchOptions()
+        receiptSearch?.unsubscribe()
+        receiptChange?.unsubscribe()
+        receiptSearch =
             editor.subscribeEvent(PublishSearchResultEvent::class.java) { event, _ ->
                 if (event.editor == editor) {
                     updateSearchResults()
                 }
             }
-        val receiptChange = editor.subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
+        receiptChange = editor.subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
             if (event.cause == SelectionChangeEvent.CAUSE_SEARCH) {
                 updateSearchResults()
             }
         }
-        binding.searchGroup.visibility = View.VISIBLE
-        binding.btnCloseFind.setOnClickListener {
-            binding.searchGroup.visibility = View.GONE
-            editorSearcher.stopSearch()
-            receiptSearch.unsubscribe()
-            receiptChange.unsubscribe()
-            editor.requestFocus()
-            editor.invalidate()
-        }
+        showSearchGroup = true
         searchTxt(findText)
-        binding.etFind.run {
-            requestFocus()
-            setText(findText)
-            addTextChangedListener { text ->
-                if (!text.isNullOrEmpty()) {
-                    findText = text.toString()
-                    searchTxt(findText)
-                } else {
-                    editorSearcher.stopSearch()
-                    editor.invalidate()
-                }
-            }
-
-        }
-        binding.etReplace.run {
-            setText(replaceText)
-            addTextChangedListener { text ->
-                if (!text.isNullOrEmpty()) {
-                    replaceText = text.toString()
-                }
-            }
-        }
-        binding.btnPrevious.setOnClickListener {
-            if (editorSearcher.hasQuery()) {
-                editorSearcher.gotoPrevious()
-            }
-        }
-        binding.btnNext.setOnClickListener {
-            if (editorSearcher.hasQuery()) {
-                editorSearcher.gotoNext()
-            }
-        }
-        binding.btnReplace.setOnClickListener {
-            if (binding.replaceGroup.isGone) {
-                binding.replaceGroup.visibility = View.VISIBLE
-                binding.btnReplaceAll.isEnabled = true
-                binding.etReplace.requestFocus()
-            } else {
-                if (editorSearcher.hasQuery()) {
-                    editorSearcher.replaceCurrentMatch(binding.etReplace.text.toString())
-                }
-            }
-        }
-        binding.btnCloseReplace.setOnClickListener {
-            binding.replaceGroup.visibility = View.GONE
-            binding.btnReplaceAll.isEnabled = false
-            binding.etFind.requestFocus()
-        }
-        binding.btnReplaceAll.setOnClickListener {
-            if (editorSearcher.hasQuery()) {
-                editorSearcher.replaceAll(binding.etReplace.text.toString())
-            }
-        }
     }
 
     private fun searchTxt(txt: String) {
@@ -885,35 +1180,9 @@ class CodeEditActivity :
         if (editorSearcher.hasQuery()) {
             val totalResults = editorSearcher.matchedPositionCount
             val currentPosition = editorSearcher.currentMatchedPositionIndex + 1
-            binding.tvSearchResult.text =
+            searchResultTextState =
                 "${if (currentPosition > 0) "$currentPosition/" else ""}$totalResults"
         }
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_search -> if (!useSafeEditor) search()
-            R.id.menu_save -> save(false)
-            R.id.menu_login -> returnText(RESULT_ACTION_LOGIN_SOURCE)
-            R.id.menu_select_all -> if (!useSafeEditor) editor.selectAll()
-            R.id.menu_format_code -> if (!useSafeEditor) viewModel.formatCode(editor)
-            R.id.menu_check_javascript_syntax -> if (!useSafeEditor) {
-                viewModel.checkJavaScriptSyntax(editor)
-            }
-            R.id.menu_curl_analyze_url -> showCurlAnalyzeUrlConverter()
-            R.id.menu_change_theme -> if (!useSafeEditor) showDialogFragment(ChangeThemeDialog())
-            R.id.menu_config_settings -> if (!useSafeEditor) {
-                showDialogFragment(SettingsDialog(this, this))
-            }
-            R.id.menu_auto_wrap -> {
-                if (useSafeEditor) return super.onCompatOptionsItemSelected(item)
-                item.isChecked = !AppConfig.editAutoWrap
-                upEdit(autoWarp = !AppConfig.editAutoWrap)
-                putPrefBoolean(PreferKey.editAutoWrap, !AppConfig.editAutoWrap)
-            }
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     private fun showCurlAnalyzeUrlConverter() {
@@ -941,26 +1210,19 @@ class CodeEditActivity :
             insertSafeEditorText(text)
             return
         }
-        val view = window.decorView.findFocus()
-        if (view is TextInputEditText) {
-            var start = view.selectionStart
-            var end = view.selectionEnd
-            if (start > end) {
-                val temp = start
-                start = end
-                end = temp
+        when (focusedSearchField) {
+            "find" -> {
+                findTextState += text
+                findText = findTextState
+                searchTxt(findText)
             }
-            if (text.isNotEmpty()) {
-                val edit = view.editableText//获取EditText的文字
-                if (start < 0 || start >= edit.length) {
-                    edit.append(text)
-                } else {
-                    edit.replace(start, end, text)//光标所在位置插入文字
-                }
+            "replace" -> {
+                replaceTextState += text
+                replaceText = replaceTextState
             }
-        }
-        else {
-            editor.insertText(text, text.length)
+            else -> {
+                editor.insertText(text, text.length)
+            }
         }
     }
 

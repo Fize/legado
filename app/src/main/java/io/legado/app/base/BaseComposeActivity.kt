@@ -244,4 +244,29 @@ abstract class BaseComposeDialogFragment(
 
 }
 
+abstract class BaseComposeFragment : BaseFragment() {
+
+    override fun onCreateView(
+        inflater: android.view.LayoutInflater,
+        container: android.view.ViewGroup?,
+        savedInstanceState: Bundle?
+    ): android.view.View {
+        return androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(
+                androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                LegadoTheme {
+                    Content()
+                }
+            }
+        }
+    }
+
+    @Composable
+    protected abstract fun Content()
+
+}
+
+
 

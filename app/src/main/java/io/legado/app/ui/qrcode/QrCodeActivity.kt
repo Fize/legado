@@ -3,20 +3,29 @@ package io.legado.app.ui.qrcode
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
+import android.view.View
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.fragment.app.FragmentContainerView
 import com.google.zxing.Result
 import io.legado.app.R
-import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityQrcodeCaptureBinding
+import io.legado.app.base.BaseComposeActivity
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.QRCodeUtils
 import io.legado.app.utils.readBytes
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class QrCodeActivity : BaseActivity<ActivityQrcodeCaptureBinding>(), ScanResultCallback {
+class QrCodeActivity : BaseComposeActivity(), ScanResultCallback {
 
-    override val binding by viewBinding(ActivityQrcodeCaptureBinding::inflate)
+    private val containerId = View.generateViewId()
 
     private val selectQrImage = registerForActivityResult(HandleFileContract()) {
         it.uri?.readBytes(this)?.let { bytes ->
@@ -25,26 +34,49 @@ class QrCodeActivity : BaseActivity<ActivityQrcodeCaptureBinding>(), ScanResultC
         }
     }
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        val fTag = "qrCodeFragment"
-        val qrCodeFragment = QrCodeFragment()
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fl_content, qrCodeFragment, fTag)
-            .commit()
-    }
+    override fun onActivityCreated(savedInstanceState: Bundle?) = Unit
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.qr_code_scan, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.action_choose_from_gallery -> selectQrImage.launch {
-                mode = HandleFileContract.IMAGE
+    @Composable
+    override fun Content() {
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.scan_qr_code),
+                    onNavigationClick = { finish() },
+                    actions = {
+                        TextButton(
+                            onClick = {
+                                selectQrImage.launch {
+                                    mode = HandleFileContract.IMAGE
+                                }
+                            }
+                        ) {
+                            Text(
+                                text = stringResource(R.string.gallery),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                )
             }
+        ) { innerPadding ->
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                factory = { ctx ->
+                    FragmentContainerView(ctx).apply {
+                        id = containerId
+                        val fTag = "qrCodeFragment"
+                        if (supportFragmentManager.findFragmentByTag(fTag) == null) {
+                            supportFragmentManager.beginTransaction()
+                                .replace(id, QrCodeFragment(), fTag)
+                                .commitAllowingStateLoss()
+                        }
+                    }
+                }
+            )
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     override fun onScanResultCallback(result: Result?) {

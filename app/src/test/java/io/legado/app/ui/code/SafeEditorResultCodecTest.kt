@@ -109,20 +109,19 @@ class SafeEditorResultCodecTest {
 
     @Test
     fun `normal code editor layout does not eagerly inflate a webview`() {
-        val layout = File(
-            repositoryRoot(),
-            "app/src/main/res/layout/activity_code_edit.xml"
-        ).readText()
+        val activity = activitySource()
 
-        assertFalse(layout.contains("<WebView"))
-        assertTrue(layout.contains("android:id=\"@+id/editorContainer\""))
+        assertTrue(activity.contains("private var safeEditor: WebView? = null"))
+        assertTrue(activity.contains("private val editorContainer: FrameLayout by lazy"))
+        assertTrue(activity.contains("addView(\n                editor,"))
     }
 
     @Test
     fun `optional source login action reads the active safe editor`() {
         val activity = activitySource()
 
-        assertTrue(activity.contains("menu.findItem(R.id.menu_login)?.apply"))
+        assertTrue(activity.contains("if (showLoginAction)"))
+        assertTrue(activity.contains("returnText(RESULT_ACTION_LOGIN_SOURCE)"))
         assertTrue(activity.contains("readSafeEditorState { state ->"))
         assertTrue(
             activity.contains(

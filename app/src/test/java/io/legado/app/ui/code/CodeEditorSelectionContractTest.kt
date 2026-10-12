@@ -11,12 +11,9 @@ class CodeEditorSelectionContractTest {
         val activity = projectFile(
             "app/src/main/java/io/legado/app/ui/code/CodeEditActivity.kt"
         ).readText()
-        val menu = projectFile("app/src/main/res/menu/code_edit_activity.xml").readText()
 
-        assertTrue(menu.contains("@+id/menu_select_all"))
-        assertTrue(menu.contains("@string/select_all"))
-        assertTrue(activity.contains("menu_select_all)?.isVisible = showSoraActions"))
-        assertTrue(activity.contains("R.id.menu_select_all -> if (!useSafeEditor) editor.selectAll()"))
+        assertTrue(activity.contains("stringResource(R.string.select_all)"))
+        assertTrue(activity.contains("if (!useSafeEditor) editor.selectAll()"))
         assertTrue(activity.contains("props.maxIPCTextLength = 64 * 1024"))
     }
 

@@ -1,6 +1,5 @@
 package io.legado.app.ui.login
 
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -9,22 +8,24 @@ class SourceEditInputTouchTargetTest {
 
     @Test
     fun `shared source editor input has an accessible touch target`() {
-        val layout = readProjectFile("src/main/res/layout/item_source_edit.xml")
+        val dialog = readProjectFile(
+            "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
+        )
+        val v2 = readProjectFile(
+            "src/main/java/io/legado/app/ui/login/SourceLoginV2Delegate.kt"
+        )
 
-        assertTrue(layout.contains("android:minHeight=\"48dp\""))
-        assertTrue(layout.contains("android:paddingHorizontal=\"12dp\""))
-        assertTrue(layout.contains("android:paddingTop=\"12dp\""))
-        assertTrue(layout.contains("android:paddingBottom=\"12dp\""))
-        assertFalse(layout.contains("TouchTargetSizeCheck"))
+        assertTrue(dialog.contains("heightIn(min = 48.dp)"))
+        assertTrue(v2.contains("heightIn(min = 48.dp)"))
     }
 
     @Test
-    fun `login form reuses the shared source editor input`() {
+    fun `login form uses Compose OutlinedTextField input`() {
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         )
 
-        assertTrue(source.contains("ItemSourceEditBinding.inflate("))
+        assertTrue(source.contains("OutlinedTextField("))
     }
 
     @Test
@@ -32,16 +33,14 @@ class SourceEditInputTouchTargetTest {
         val legacy = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         )
-        val legacyPassword = legacy.substringAfter(
-            "Type.password -> ItemSourceEditBinding.inflate(",
-            missingDelimiterValue = ""
-        ).substringBefore("\n                Type.")
         val v2 = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginV2Delegate.kt"
         )
 
-        assertTrue(legacyPassword.contains("TextInputLayout.END_ICON_PASSWORD_TOGGLE"))
-        assertTrue(v2.contains("TextInputLayout.END_ICON_PASSWORD_TOGGLE"))
+        assertTrue(legacy.contains("PasswordVisualTransformation()"))
+        assertTrue(legacy.contains("Icons.Default.VisibilityOff"))
+        assertTrue(v2.contains("PasswordVisualTransformation()"))
+        assertTrue(v2.contains("Icons.Default.VisibilityOff"))
     }
 
     private fun readProjectFile(pathInApp: String): String {

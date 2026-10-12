@@ -6,36 +6,82 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
+import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.size
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppConst.imagePathKey
-import io.legado.app.databinding.ActivityWebViewBinding
-import io.legado.app.help.http.CookieStore
+import io.legado.app.constant.AppLog
+import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.WebCacheManager
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.http.CookieManager as AppCookieManager
+import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.SourceVerificationHelp
+import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.WebJsExtensions
+import io.legado.app.help.webView.WebJsExtensions.Companion.basicJs
+import io.legado.app.help.webView.WebJsExtensions.Companion.nameBasic
+import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
+import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
+import io.legado.app.help.webView.WebViewPool
+import io.legado.app.help.webView.WebViewPool.BLANK_HTML
+import io.legado.app.help.webView.WebViewPool.DATA_HTML
+import io.legado.app.help.webView.toWebViewRequestConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.accentColor
+import io.legado.app.model.Download
 import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ACache
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
 import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
@@ -43,35 +89,14 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toggleSystemBar
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
-import android.webkit.JavascriptInterface
-import android.webkit.URLUtil
-import io.legado.app.constant.AppLog
-import io.legado.app.help.webView.WebJsExtensions
-import io.legado.app.help.webView.WebJsExtensions.Companion.basicJs
-import io.legado.app.help.webView.WebJsExtensions.Companion.nameBasic
-import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
-import io.legado.app.help.http.CookieManager as AppCookieManager
-import androidx.core.net.toUri
-import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.webView.PooledWebView
-import io.legado.app.help.webView.WebViewPool
-import io.legado.app.help.webView.WebViewPool.BLANK_HTML
-import io.legado.app.help.webView.WebViewPool.DATA_HTML
-import io.legado.app.help.webView.toWebViewRequestConfig
-import io.legado.app.model.Download
 import splitties.systemservices.powerManager
 import splitties.views.bottomPadding
 import java.lang.ref.WeakReference
 import java.net.URLDecoder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit.SECONDS
-import androidx.core.graphics.createBitmap
-import io.legado.app.help.WebCacheManager
-import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
 
-class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
+class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
     companion object {
         // 是否输出日志
         var sessionShowWebLog = false
@@ -80,15 +105,22 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
 
-    override val binding by viewBinding(ActivityWebViewBinding::inflate)
     override val viewModel by viewModels<WebViewModel>()
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
+    private var customWebViewContainer: FrameLayout? = null
+    private var customViewState by mutableStateOf<View?>(null)
     private var webPic: String? = null
     private var isCloudflareChallenge = false
-    private var isFullScreen = false
-    private var isfullscreen = false
+    private var isFullScreen by mutableStateOf(false)
+    private var isfullscreen by mutableStateOf(false)
     private var wasScreenOff = false
     private var needClearHistory = true
+    private var titleState by mutableStateOf("")
+    private var subtitleState by mutableStateOf<String?>(null)
+    private var progressState by mutableIntStateOf(100)
+    private var showWebLogState by mutableStateOf(sessionShowWebLog)
+    private var hasSourceOriginState by mutableStateOf(false)
+
     private val saveImage = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
@@ -101,14 +133,9 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
-            view.bottomPadding = windowInsets.getInsets(typeMask).bottom
-            windowInsets
-        }
         pooledWebView = WebViewPool.acquire(this)
         currentWebView = pooledWebView.realWebView
-        binding.webViewContainer.addView(currentWebView)
+        (currentWebView.parent as? ViewGroup)?.removeView(currentWebView)
         if (!SourceVerificationHelp.attachVerificationUi(
                 intent.getStringExtra("verificationResultKey"),
                 ::finishVerificationUi,
@@ -120,9 +147,10 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         currentWebView.post {
             currentWebView.clearHistory()
         }
-        binding.titleBar.title = intent.getStringExtra("title") ?: getString(R.string.loading)
-        binding.titleBar.subtitle = intent.getStringExtra("sourceName")
+        titleState = intent.getStringExtra("title") ?: getString(R.string.loading)
+        subtitleState = intent.getStringExtra("sourceName")
         viewModel.initData(intent) {
+            hasSourceOriginState = viewModel.sourceOrigin.isNotEmpty()
             val url = viewModel.baseUrl
             val headerMap = viewModel.headerMap
             val requestConfig = headerMap.toWebViewRequestConfig(AppConfig.userAgent)
@@ -143,7 +171,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         }
         currentWebView.clearHistory()
         onBackPressedDispatcher.addCallback(this) {
-            if (binding.customWebView.size > 0) { //网页全屏
+            if ((customWebViewContainer?.size ?: 0) > 0 || customViewState != null) { //网页全屏
                 customWebViewCallback?.onCustomViewHidden()
                 return@addCallback
             }
@@ -189,75 +217,200 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.web_view, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
+    @Composable
+    override fun Content() {
+        var showMenu by remember { mutableStateOf(false) }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        if (viewModel.sourceOrigin.isNotEmpty()) {
-            menu.findItem(R.id.menu_disable_source)?.isVisible = true
-            menu.findItem(R.id.menu_delete_source)?.isVisible = true
-        }
-        menu.findItem(R.id.menu_show_web_log)?.isChecked = sessionShowWebLog
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_web_refresh -> refresh()
-            R.id.menu_open_in_browser -> openUrl(viewModel.baseUrl)
-            R.id.menu_copy_url -> sendToClip(viewModel.baseUrl)
-            R.id.menu_ok -> {
-                if (viewModel.sourceVerificationEnable) {
-                    viewModel.saveVerificationResult(currentWebView) {
-                        finish()
-                    }
-                } else {
-                    finish()
+        Scaffold(
+            topBar = {
+                if (!isFullScreen && !isfullscreen) {
+                    LegadoTopAppBar(
+                        title = titleState,
+                        subtitle = subtitleState,
+                        onNavigationClick = { finish() },
+                        actions = {
+                            IconButton(onClick = { refresh() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = stringResource(R.string.refresh)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (viewModel.sourceVerificationEnable) {
+                                        viewModel.saveVerificationResult(currentWebView) {
+                                            finish()
+                                        }
+                                    } else {
+                                        finish()
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = stringResource(R.string.ok)
+                                )
+                            }
+                            Box {
+                                IconButton(onClick = { showMenu = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = stringResource(R.string.more_menu)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.open_in_browser)) },
+                                        onClick = {
+                                            showMenu = false
+                                            openUrl(viewModel.baseUrl)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.copy_url)) },
+                                        onClick = {
+                                            showMenu = false
+                                            sendToClip(viewModel.baseUrl)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.full_screen)) },
+                                        onClick = {
+                                            showMenu = false
+                                            toggleFullScreen()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.show_web_log)) },
+                                        trailingIcon = {
+                                            Checkbox(
+                                                checked = showWebLogState,
+                                                onCheckedChange = null
+                                            )
+                                        },
+                                        onClick = {
+                                            sessionShowWebLog = !sessionShowWebLog
+                                            showWebLogState = sessionShowWebLog
+                                            showMenu = false
+                                        }
+                                    )
+                                    if (hasSourceOriginState) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.disable_source)) },
+                                            onClick = {
+                                                showMenu = false
+                                                viewModel.disableSource {
+                                                    finish()
+                                                }
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = stringResource(R.string.delete_source),
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            },
+                                            onClick = {
+                                                showMenu = false
+                                                alert(R.string.draw) {
+                                                    setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
+                                                    noButton()
+                                                    yesButton {
+                                                        viewModel.deleteSource {
+                                                            finish()
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    )
                 }
             }
-
-            R.id.menu_full_screen -> toggleFullScreen()
-            R.id.menu_show_web_log -> {
-                sessionShowWebLog = !sessionShowWebLog
-                item.isChecked = sessionShowWebLog
-            }
-            R.id.menu_disable_source -> {
-                viewModel.disableSource {
-                    finish()
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
+            ) {
+                if (::currentWebView.isInitialized) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            FrameLayout(ctx).apply {
+                                setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
+                                    val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
+                                    view.bottomPadding = windowInsets.getInsets(typeMask).bottom
+                                    windowInsets
+                                }
+                                (currentWebView.parent as? ViewGroup)?.removeView(currentWebView)
+                                addView(
+                                    currentWebView,
+                                    FrameLayout.LayoutParams(
+                                        FrameLayout.LayoutParams.MATCH_PARENT,
+                                        FrameLayout.LayoutParams.MATCH_PARENT
+                                    )
+                                )
+                            }
+                        },
+                        update = { container ->
+                            container.visibility = if (isfullscreen) View.INVISIBLE else View.VISIBLE
+                        }
+                    )
                 }
-            }
 
-            R.id.menu_delete_source -> {
-                alert(R.string.draw) {
-                    setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
-                    noButton()
-                    yesButton {
-                        viewModel.deleteSource {
-                            finish()
+                if (progressState < 100 && !isfullscreen) {
+                    LinearProgressIndicator(
+                        progress = { progressState / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .align(Alignment.TopCenter)
+                    )
+                }
+
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        FrameLayout(ctx).also {
+                            customWebViewContainer = it
+                        }
+                    },
+                    update = { container ->
+                        val customView = customViewState
+                        if (customView != null) {
+                            if (customView.parent !== container) {
+                                (customView.parent as? ViewGroup)?.removeView(customView)
+                                container.removeAllViews()
+                                container.addView(customView)
+                            }
+                            container.visibility = View.VISIBLE
+                        } else {
+                            container.removeAllViews()
+                            container.visibility = View.GONE
                         }
                     }
-                }
+                )
             }
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     //实现starBrowser调起页面全屏
     private fun toggleFullScreen() {
         isFullScreen = !isFullScreen
         toggleSystemBar(!isFullScreen)
-        if (isFullScreen) {
-            supportActionBar?.hide()
-        } else {
-            supportActionBar?.show()
-        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun initWebView(url: String, userAgent: String) {
-        binding.progressBar.fontColor = accentColor
         currentWebView.webChromeClient = CustomWebChromeClient()
         // 添加 JavaScript 接口
         currentWebView.addJavascriptInterface(JSInterface(this), nameBasic)
@@ -342,8 +495,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 viewModel.saveVerificationResult(currentWebView) {
                     finish()
                 }
-            }
-            else {
+            } else {
                 finish()
             }
         }
@@ -353,7 +505,9 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         super.onPause()
         if (powerManager.isInteractive) {
             wasScreenOff = false
-            currentWebView.onPause()
+            if (::currentWebView.isInitialized) {
+                currentWebView.onPause()
+            }
         } else {
             wasScreenOff = true
         }
@@ -361,13 +515,15 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
     override fun onResume() {
         super.onResume()
-        if (!wasScreenOff) {
+        if (!wasScreenOff && ::currentWebView.isInitialized) {
             currentWebView.onResume()
         }
     }
 
     override fun onDestroy() {
-        WebViewPool.release(pooledWebView)
+        if (::pooledWebView.isInitialized) {
+            WebViewPool.release(pooledWebView)
+        }
         super.onDestroy()
     }
 
@@ -377,7 +533,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         @JavascriptInterface
         fun lockOrientation(orientation: String) {
             val ctx = activityRef.get()
-            if (ctx != null && ctx.isfullscreen  && !ctx.isFinishing && !ctx.isDestroyed) {
+            if (ctx != null && ctx.isfullscreen && !ctx.isFinishing && !ctx.isDestroyed) {
                 ctx.runOnUiThread {
                     ctx.requestedOrientation = when (orientation) {
                         "portrait", "portrait-primary" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -410,14 +566,12 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
         override fun onProgressChanged(view: WebView?, newProgress: Int) {
             super.onProgressChanged(view, newProgress)
-            binding.progressBar.setDurProgress(newProgress)
-            binding.progressBar.gone(newProgress == 100)
+            progressState = newProgress
         }
 
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
             isfullscreen = true
-            binding.llView.invisible()
-            binding.customWebView.addView(view)
+            customViewState = view
             customWebViewCallback = callback
             keepScreenOn(true)
             toggleSystemBar(false)
@@ -425,8 +579,8 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
         override fun onHideCustomView() {
             isfullscreen = false
-            binding.customWebView.removeAllViews()
-            binding.llView.visible()
+            customViewState = null
+            customWebViewContainer?.removeAllViews()
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
             toggleSystemBar(true)
@@ -443,14 +597,15 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 if (sessionShowWebLog) {
                     val messageLevel = consoleMessage.messageLevel().name
                     val message = consoleMessage.message()
-                    AppLog.put("${source.getTag()}${messageLevel}: $message",
-                        NoStackTraceException("\n${message}\n- Line ${consoleMessage.lineNumber()} of ${consoleMessage.sourceId()}"))
+                    AppLog.put(
+                        "${source.getTag()}${messageLevel}: $message",
+                        NoStackTraceException("\n${message}\n- Line ${consoleMessage.lineNumber()} of ${consoleMessage.sourceId()}")
+                    )
                     return true
                 }
             }
             return false
         }
-        
     }
 
     inner class CustomWebViewClient : WebViewClient() {
@@ -480,7 +635,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             super.onPageStarted(view, url, favicon)
             currentWebView.evaluateJavascript(basicJs, null)
         }
-        
+
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
             val cookieManager = CookieManager.getInstance()
@@ -489,9 +644,9 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             }
             view?.title?.let { title ->
                 if (title != url && title != view.url && title.isNotBlank()) {
-                    binding.titleBar.title = title
+                    titleState = title
                 } else {
-                    binding.titleBar.title = intent.getStringExtra("title")
+                    titleState = intent.getStringExtra("title") ?: ""
                 }
                 view.evaluateJavascript("!!window._cf_chl_opt") {
                     if (it == "true") {
@@ -516,7 +671,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 }
 
                 else -> {
-                    binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
+                    currentWebView.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
                         openUrl(url)
                     }
                     true
@@ -532,7 +687,5 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         ) {
             handler?.proceed()
         }
-
     }
-
 }

@@ -1,10 +1,34 @@
 package io.legado.app.ui.code.config
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.rosemoe.sora.widget.CodeEditor.FLAG_DRAW_LINE_SEPARATOR
 import io.github.rosemoe.sora.widget.CodeEditor.FLAG_DRAW_WHITESPACE_FOR_EMPTY_LINE
 import io.github.rosemoe.sora.widget.CodeEditor.FLAG_DRAW_WHITESPACE_INNER
@@ -12,101 +36,165 @@ import io.github.rosemoe.sora.widget.CodeEditor.FLAG_DRAW_WHITESPACE_IN_SELECTIO
 import io.github.rosemoe.sora.widget.CodeEditor.FLAG_DRAW_WHITESPACE_LEADING
 import io.github.rosemoe.sora.widget.CodeEditor.FLAG_DRAW_WHITESPACE_TRAILING
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogEditSettingsBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 class SettingsDialog(private val context: Context, private val callBack: CallBack) :
-    BaseDialogFragment(R.layout.dialog_edit_settings) {
-    private val binding by viewBinding(DialogEditSettingsBinding::bind)
-    private val editNonPrintable = AppConfig.editNonPrintable
+    BaseComposeDialogFragment() {
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        initData()
-        initView()
-    }
+    private val initialEditNonPrintable = AppConfig.editNonPrintable
+    private var fontSizeState by mutableIntStateOf(AppConfig.editFontScale)
+    private var autoCompleteState by mutableStateOf(AppConfig.editAutoComplete)
+    private var nonPrintableFlagsState by mutableIntStateOf(AppConfig.editNonPrintable)
 
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
 
-    @SuppressLint("SetTextI18n")
-    private fun initData() {
-        binding.run {
-            tvFontSize.text = AppConfig.editFontScale.toFontSizeStr()
-            cbAutoComplete.isChecked = AppConfig.editAutoComplete
-            FLAGDRAWWHITESPACELEADING.isChecked = editNonPrintable and FLAG_DRAW_WHITESPACE_LEADING != 0
-            FLAGDRAWWHITESPACEINNER.isChecked = editNonPrintable and FLAG_DRAW_WHITESPACE_INNER != 0
-            FLAGDRAWWHITESPACETRAILING.isChecked = editNonPrintable and FLAG_DRAW_WHITESPACE_TRAILING != 0
-            FLAGDRAWWHITESPACEFOREMPTYLINE.isChecked = editNonPrintable and FLAG_DRAW_WHITESPACE_FOR_EMPTY_LINE != 0
-            FLAGDRAWLINESEPARATOR.isChecked = editNonPrintable and FLAG_DRAW_LINE_SEPARATOR != 0
-            FLAGDRAWWHITESPACEINSELECTION.isChecked = editNonPrintable and FLAG_DRAW_WHITESPACE_IN_SELECTION != 0
-        }
-    }
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
+    override fun Content() {
+        val flagItems = listOf(
+            FLAG_DRAW_WHITESPACE_LEADING to stringResource(R.string.whitespace_leading),
+            FLAG_DRAW_WHITESPACE_INNER to stringResource(R.string.whitespace_inner),
+            FLAG_DRAW_WHITESPACE_TRAILING to stringResource(R.string.whitespace_trailing),
+            FLAG_DRAW_WHITESPACE_FOR_EMPTY_LINE to stringResource(R.string.whitespace_empty),
+            FLAG_DRAW_LINE_SEPARATOR to stringResource(R.string.line_separator),
+            FLAG_DRAW_WHITESPACE_IN_SELECTION to stringResource(R.string.whitespace_selection)
+        )
 
-    @SuppressLint("SetTextI18n")
-    private fun initView() {
-        binding.run {
-            tvFontSize.setOnClickListener {
-                NumberPickerDialog(requireContext())
-                    .setTitle(getString(R.string.font_scale))
-                    .setMaxValue(36)
-                    .setMinValue(9)
-                    .setValue(AppConfig.editFontScale)
-                    .setCustomButton((R.string.btn_default_s)) {
-                        putPrefInt(PreferKey.editFontScale, 16)
-                        callBack.upEdit(fontSize = 16)
-                        tvFontSize.text = 16.toFontSizeStr()
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.config_settings),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                Text(
+                    text = fontSizeState.toFontSizeStr(),
+                    fontSize = 16.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            NumberPickerDialog(requireContext())
+                                .setTitle(getString(R.string.font_scale))
+                                .setMaxValue(36)
+                                .setMinValue(9)
+                                .setValue(AppConfig.editFontScale)
+                                .setCustomButton(R.string.btn_default_s) {
+                                    putPrefInt(PreferKey.editFontScale, 16)
+                                    callBack.upEdit(fontSize = 16)
+                                    fontSizeState = 16
+                                }
+                                .show {
+                                    putPrefInt(PreferKey.editFontScale, it)
+                                    callBack.upEdit(fontSize = it)
+                                    fontSizeState = it
+                                }
+                        }
+                        .padding(vertical = 12.dp)
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val next = !autoCompleteState
+                            autoCompleteState = next
+                            putPrefBoolean(PreferKey.editAutoComplete, next)
+                            callBack.upEdit(autoComplete = next)
+                        }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.auto_complete),
+                        fontSize = 16.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Checkbox(
+                        checked = autoCompleteState,
+                        onCheckedChange = { isChecked ->
+                            autoCompleteState = isChecked
+                            putPrefBoolean(PreferKey.editAutoComplete, isChecked)
+                            callBack.upEdit(autoComplete = isChecked)
+                        }
+                    )
+                }
+
+                Text(
+                    text = stringResource(R.string.non_printable_set),
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                )
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    flagItems.forEach { (flag, label) ->
+                        val checked = nonPrintableFlagsState and flag != 0
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                nonPrintableFlagsState = if (checked) {
+                                    nonPrintableFlagsState and flag.inv()
+                                } else {
+                                    nonPrintableFlagsState or flag
+                                }
+                            }
+                        ) {
+                            Text(text = label, fontSize = 16.sp)
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { isChecked ->
+                                    nonPrintableFlagsState = if (isChecked) {
+                                        nonPrintableFlagsState or flag
+                                    } else {
+                                        nonPrintableFlagsState and flag.inv()
+                                    }
+                                }
+                            )
+                        }
                     }
-                    .show {
-                        putPrefInt(PreferKey.editFontScale, it)
-                        callBack.upEdit(fontSize = it)
-                        tvFontSize.text = it.toFontSizeStr()
-                    }
-            }
-            cbAutoComplete.setOnCheckedChangeListener { _, isChecked ->
-                putPrefBoolean(PreferKey.editAutoComplete, isChecked)
-                callBack.upEdit(autoComplete = isChecked)
+                }
             }
         }
     }
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        binding.run {
-            var editNonPrintable = 0
-            if (FLAGDRAWWHITESPACELEADING.isChecked) {
-                editNonPrintable = editNonPrintable or FLAG_DRAW_WHITESPACE_LEADING
-            }
-            if (FLAGDRAWWHITESPACEINNER.isChecked) {
-                editNonPrintable = editNonPrintable or FLAG_DRAW_WHITESPACE_INNER
-            }
-            if (FLAGDRAWWHITESPACETRAILING.isChecked) {
-                editNonPrintable = editNonPrintable or FLAG_DRAW_WHITESPACE_TRAILING
-            }
-            if (FLAGDRAWWHITESPACEFOREMPTYLINE.isChecked) {
-                editNonPrintable = editNonPrintable or FLAG_DRAW_WHITESPACE_FOR_EMPTY_LINE
-            }
-            if (FLAGDRAWLINESEPARATOR.isChecked) {
-                editNonPrintable = editNonPrintable or FLAG_DRAW_LINE_SEPARATOR
-            }
-            if (FLAGDRAWWHITESPACEINSELECTION.isChecked) {
-                editNonPrintable = editNonPrintable or FLAG_DRAW_WHITESPACE_IN_SELECTION
-            }
-            if (editNonPrintable != this@SettingsDialog.editNonPrintable) {
-                putPrefInt(PreferKey.editNonPrintable, editNonPrintable)
-                callBack.upEdit(editNonPrintable = editNonPrintable)
-            }
+        if (nonPrintableFlagsState != initialEditNonPrintable) {
+            putPrefInt(PreferKey.editNonPrintable, nonPrintableFlagsState)
+            callBack.upEdit(editNonPrintable = nonPrintableFlagsState)
         }
     }
 
     private fun Int.toFontSizeStr(): String {
         return context.getString(R.string.font_size, this)
     }
+
     interface CallBack {
-        fun upEdit(fontSize: Int? = null, autoComplete: Boolean? = null, autoWarp: Boolean? = null, editNonPrintable: Int? = null)
+        fun upEdit(
+            fontSize: Int? = null,
+            autoComplete: Boolean? = null,
+            autoWarp: Boolean? = null,
+            editNonPrintable: Int? = null
+        )
     }
 
 }

@@ -88,23 +88,19 @@ class JsSourceDirectDebugTest {
 
     @Test
     fun `source editor wires hidden optional action and persisted flow state`() {
-        val codeEditorMenu = projectFile("app/src/main/res/menu/code_edit_activity.xml").readText()
+        val codeEditor = projectFile(
+            "app/src/main/java/io/legado/app/ui/code/CodeEditActivity.kt"
+        ).readText()
         val sourceEditor = projectFile(
             "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditActivity.kt"
         ).readText()
         val editorLauncher = sourceEditor.indexOf("private val editorResult")
         val loginLauncher = sourceEditor.indexOf("private val loginResult")
-        val loginMenuItem = codeEditorMenu
-            .substringAfter("android:id=\"@+id/menu_login\"")
-            .substringBefore("/>")
-        val syntaxMenuItem = codeEditorMenu
-            .substringAfter("android:id=\"@+id/menu_check_javascript_syntax\"")
-            .substringBefore("/>")
 
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_login\""))
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_check_javascript_syntax\""))
-        assertTrue(loginMenuItem.contains("android:visible=\"false\""))
-        assertTrue(syntaxMenuItem.contains("android:visible=\"false\""))
+        assertTrue(codeEditor.contains("shouldShowLoginSourceAction("))
+        assertTrue(codeEditor.contains("shouldShowJavaScriptSyntaxAction("))
+        assertTrue(codeEditor.contains("stringResource(R.string.login)"))
+        assertTrue(codeEditor.contains("stringResource(R.string.check_javascript_syntax)"))
         assertTrue(editorLauncher in 0 until loginLauncher)
         assertTrue(
             sourceEditor.contains(

@@ -120,30 +120,22 @@ class LoginUiScriptEvaluatorTest {
 
     @Test
     fun `dynamic login layout starts with a hidden loading indicator`() {
-        val layout = readProjectFile("src/main/res/layout/dialog_login.xml")
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         )
-        val loadingStart = layout.indexOf(
-            "<io.legado.app.ui.widget.anima.RotateLoading"
-        )
-        require(loadingStart >= 0) { "Missing login UI loading indicator" }
-        val loadingEnd = layout.indexOf("/>", loadingStart)
-        require(loadingEnd > loadingStart) { "Unclosed login UI loading indicator" }
-        val loadingView = layout.substring(loadingStart, loadingEnd)
-
-        assertTrue(loadingView.contains("android:id=\"@+id/rotate_loading\""))
-        assertTrue(loadingView.contains("android:visibility=\"gone\""))
+        assertTrue(source.contains("private var isRenderingLoginUi by mutableStateOf(false)"))
+        assertTrue(source.contains("if (isRenderingLoginUi)"))
+        assertTrue(source.contains("CircularProgressIndicator("))
         assertTrue(source.contains("viewLifecycleOwner.lifecycleScope.launch"))
         val delegate = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginV2Delegate.kt"
         )
         assertTrue(delegate.contains("private var firstRender = true"))
         assertTrue(delegate.contains("val showLoading = firstRender"))
-        assertTrue(delegate.contains("if (showLoading) binding.rotateLoading.visible()"))
+        assertTrue(delegate.contains("if (showLoading) isLoading = true"))
         assertTrue(delegate.contains("if (showLoading) {"))
         assertTrue(delegate.contains("firstRender = false"))
-        assertTrue(delegate.contains("binding.rotateLoading.gone()"))
+        assertTrue(delegate.contains("isLoading = false"))
         val decision = source.indexOf(
             "val renderDecision = resolveLoginUiRender(rowUis, renderedRowsResult)"
         )
@@ -172,16 +164,7 @@ class LoginUiScriptEvaluatorTest {
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         )
-        val menuInflation = source.indexOf(
-            "binding.toolBar.inflateMenu(R.menu.source_login)"
-        )
-        val actionInstallation = source.indexOf(
-            "installToolbarActions(source)",
-            menuInflation,
-        )
-
-        assertTrue(menuInflation >= 0)
-        assertTrue(actionInstallation > menuInflation)
+        assertTrue(source.contains("LegadoTopAppBar("))
         assertTrue(source.contains("if (!isRenderingLoginUi && rowUis != null)"))
     }
 
@@ -190,11 +173,10 @@ class LoginUiScriptEvaluatorTest {
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         )
-        val menu = readProjectFile("src/main/res/menu/source_login.xml")
-        val actionStart = source.indexOf("R.id.menu_clear_login_info -> alert(")
-        val actionEnd = source.indexOf("R.id.menu_log", actionStart)
+        val actionStart = source.indexOf("private fun clearLoginInfo(source: BaseSource) {")
+        val actionEnd = source.indexOf("override fun onFragmentCreated", actionStart)
 
-        assertTrue(menu.contains("android:id=\"@+id/menu_clear_login_info\""))
+        assertTrue(source.contains("stringResource(R.string.clear_login_info)"))
         assertTrue(actionStart >= 0)
         assertTrue(actionEnd > actionStart)
         val action = source.substring(actionStart, actionEnd)
@@ -248,8 +230,7 @@ class LoginUiScriptEvaluatorTest {
         assertTrue(firstRestore > resultError)
         assertTrue(actionResult.contains("render(nextState, errors, action)"))
         assertTrue(delegate.contains("restoreActionOnFailure?.let { setActionEnabled(it, true) }"))
-        assertTrue(delegate.contains("setOnCheckedChangeListener { _, _ -> dispatch(action, null) }"))
-        assertFalse(delegate.contains("setOnUserCheckedChangeListener"))
+        assertTrue(delegate.contains("row.action?.let { action -> dispatch(action, null) }"))
 
         val destroyDelegate = dialog.indexOf("v2Delegate?.destroy()")
         val destroyView = dialog.indexOf("super.onDestroyView()", destroyDelegate)

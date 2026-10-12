@@ -8,34 +8,17 @@ class Issue1008MenuContractTest {
 
     @Test
     fun sourceIconsFollowReportedMenuContract() {
-        assertItemIcon(
-            "src/main/res/menu/source_login.xml",
-            "menu_show_login_header",
-            "ic_add_online"
+        val sourceLoginDialog = readProjectFile(
+            "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         )
+        assertTrue(sourceLoginDialog.contains("stringResource(R.string.show_login_header)"))
+        assertTrue(sourceLoginDialog.contains("painterResource(R.drawable.ic_add_online)"))
+
         val bookSourceActivity = readProjectFile(
             "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
         )
         assertTrue(bookSourceActivity.contains("stringResource(R.string.group_sources_by_domain)"))
         assertTrue(bookSourceActivity.contains("iconRes = R.drawable.ic_add_online"))
-    }
-
-    private fun assertItemIcon(path: String, id: String, drawable: String) {
-        val item = itemBlock(readProjectFile(path), id)
-        assertContains(path, item, """android:icon="@drawable/$drawable"""")
-    }
-
-    private fun itemBlock(source: String, id: String): String {
-        val marker = """android:id="@+id/$id""""
-        val start = source.indexOf(marker)
-        assertTrue("$id should exist", start >= 0)
-        val end = source.indexOf("/>", start)
-        assertTrue("$id should have a complete item", end > start)
-        return source.substring(start, end)
-    }
-
-    private fun assertContains(path: String, source: String, expected: String) {
-        assertTrue("$path should contain $expected", source.contains(expected))
     }
 
     private fun readProjectFile(pathInApp: String): String =

@@ -5,74 +5,155 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.fragment.app.activityViewModels
+import android.widget.FrameLayout
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.activityViewModels
 import io.legado.app.R
-import io.legado.app.base.BaseFragment
+import io.legado.app.base.BaseComposeFragment
 import io.legado.app.data.entities.BaseSource
-import io.legado.app.databinding.FragmentWebViewLoginBinding
-import io.legado.app.help.http.CookieStore
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.http.CookieStore
 import io.legado.app.help.webView.PooledWebView
-import io.legado.app.lib.theme.accentColor
+import io.legado.app.help.webView.WebViewPool
+import io.legado.app.help.webView.toWebViewRequestConfig
 import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.utils.NetworkUtils
-import io.legado.app.utils.gone
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.snackbar
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import androidx.core.net.toUri
-import io.legado.app.help.webView.WebViewPool
-import io.legado.app.help.webView.toWebViewRequestConfig
 import splitties.views.bottomPadding
 
-class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
+class WebViewLoginFragment : BaseComposeFragment() {
 
-    private val binding by viewBinding(FragmentWebViewLoginBinding::bind)
     private val viewModel by activityViewModels<SourceLoginViewModel>()
     private var pooledWebView: PooledWebView? = null
     private var currentWebView: WebView? = null
+    private var titleState by mutableStateOf("")
+    private var progressState by mutableIntStateOf(100)
 
     private var checking = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.root.setBackgroundColor(requireContext().backgroundColor)
-        binding.root.setOnApplyWindowInsetsListenerCompat { root, windowInsets ->
+        view.setBackgroundColor(requireContext().backgroundColor)
+        view.setOnApplyWindowInsetsListenerCompat { root, windowInsets ->
             val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
             root.bottomPadding = windowInsets.getInsets(typeMask).bottom
             windowInsets
         }
-        setSupportToolbar(binding.titleBar.toolbar)
         viewModel.source?.let {
-            binding.titleBar.title = getString(R.string.login_source, it.getTag())
+            titleState = getString(R.string.login_source, it.getTag())
             initWebView(it)
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.source_webview_login, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_ok -> {
-                if (!checking) {
-                    checking = true
-                    binding.titleBar.snackbar(R.string.check_host_cookie)
-                    viewModel.source?.let {
-                        loadUrl(it)
+    @Composable
+    override fun Content() {
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = titleState,
+                    onNavigationClick = { activity?.finish() },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                if (!checking) {
+                                    checking = true
+                                    view?.snackbar(R.string.check_host_cookie)
+                                    viewModel.source?.let {
+                                        loadUrl(it)
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = stringResource(R.string.ok)
+                            )
+                        }
                     }
+                )
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
+            ) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        FrameLayout(ctx).apply {
+                            setBackgroundColor(requireContext().backgroundColor)
+                            currentWebView?.let { webView ->
+                                (webView.parent as? ViewGroup)?.removeView(webView)
+                                addView(
+                                    webView,
+                                    FrameLayout.LayoutParams(
+                                        FrameLayout.LayoutParams.MATCH_PARENT,
+                                        FrameLayout.LayoutParams.MATCH_PARENT
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    update = { container ->
+                        currentWebView?.let { webView ->
+                            if (webView.parent !== container) {
+                                (webView.parent as? ViewGroup)?.removeView(webView)
+                                container.removeAllViews()
+                                container.addView(
+                                    webView,
+                                    FrameLayout.LayoutParams(
+                                        FrameLayout.LayoutParams.MATCH_PARENT,
+                                        FrameLayout.LayoutParams.MATCH_PARENT
+                                    )
+                                )
+                            }
+                        }
+                    }
+                )
+                if (progressState < 100) {
+                    LinearProgressIndicator(
+                        progress = { progressState / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .align(Alignment.TopCenter)
+                    )
                 }
             }
         }
@@ -84,10 +165,9 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
             pooledWebView = it
             it.realWebView
         }
+        (webView.parent as? ViewGroup)?.removeView(webView)
         webView.onResume()
-        binding.webViewContainer.addView(webView)
         currentWebView = webView
-        binding.progressBar.fontColor = accentColor
         val requestConfig = viewModel.headerMap.toWebViewRequestConfig(AppConfig.userAgent)
         webView.settings.apply {
             useWideViewPort = true
@@ -130,7 +210,7 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
                     }
 
                     else -> {
-                        binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
+                        view?.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
                             context?.openUrl(url)
                         }
                         return true
@@ -151,8 +231,7 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
 
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
-                binding.progressBar.setDurProgress(newProgress)
-                binding.progressBar.gone(newProgress == 100)
+                progressState = newProgress
             }
 
         }
