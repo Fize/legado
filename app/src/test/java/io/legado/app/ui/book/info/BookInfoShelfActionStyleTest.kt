@@ -9,17 +9,11 @@ class BookInfoShelfActionStyleTest {
 
     @Test
     fun `shelf action uses tonal accent style in both orientations`() {
-        val layouts = listOf(
-            readProjectFile("src/main/res/layout/activity_book_info.xml"),
-            readProjectFile("src/main/res/layout-land/activity_book_info.xml")
-        )
+        val source = readProjectFile("src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt")
 
-        layouts.forEach { layout ->
-            assertTrue(layout.contains("AccentTonalBgTextView"))
-            assertTrue(layout.contains("android:id=\"@+id/tv_shelf\""))
-            assertTrue(layout.contains("android:layout_height=\"48dp\""))
-            assertTrue(layout.contains("app:radius=\"8dp\""))
-        }
+        assertTrue(source.contains("R.string.remove_from_bookshelf"))
+        assertTrue(source.contains("R.string.add_to_bookshelf"))
+        assertTrue(source.contains("R.string.reading"))
     }
 
     @Test

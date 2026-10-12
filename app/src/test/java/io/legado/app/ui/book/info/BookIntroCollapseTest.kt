@@ -76,18 +76,7 @@ class BookIntroCollapseTest {
         assertTrue(scrollTextView.contains("setMeasuredDimension(measuredWidth, heightLimit)"))
         assertTrue(scrollTextView.contains("if (internalScrollEnabled) min(y, mOffsetHeight) else 0"))
 
-        listOf(
-            "src/main/res/layout/activity_book_info.xml",
-            "src/main/res/layout-land/activity_book_info.xml",
-        ).forEach { layoutPath ->
-            val layout = readProjectFile(layoutPath)
-            val toggleStart = layout.indexOf("@+id/tv_intro_toggle")
-            val toggleEnd = layout.indexOf("/>", toggleStart)
-            val toggle = layout.substring(toggleStart, toggleEnd)
-
-            assertTrue(toggle.contains("android:layout_height=\"48dp\""))
-            assertTrue(toggle.contains("android:minWidth=\"48dp\""))
-        }
+        assertTrue(activity.contains("defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)"))
     }
 
     private fun hasOverflow(

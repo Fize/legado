@@ -12,19 +12,14 @@ class LabelsBarLayoutTest {
 
     @Test
     fun `book details wrap and center labels without a horizontal scroller`() {
-        listOf(
-            "app/src/main/res/layout/activity_book_info.xml",
-            "app/src/main/res/layout-land/activity_book_info.xml"
-        ).forEach { path ->
-            val labels = labelsBar(path, "lb_kind")
+        val bookInfoSource = File(
+            repositoryRoot,
+            "app/src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
+        ).readText()
 
-            assertEquals("match_parent", labels.androidAttribute("layout_width"))
-            assertEquals("row", labels.appAttribute("flexDirection"))
-            assertEquals("wrap", labels.appAttribute("flexWrap"))
-            assertEquals("center", labels.appAttribute("justifyContent"))
-            assertEquals("center", labels.appAttribute("alignItems"))
-            assertFalse(labels.hasAncestor("HorizontalScrollView"))
-        }
+        assertTrue(bookInfoSource.contains("FlowRow("))
+        assertTrue(bookInfoSource.contains("Alignment.CenterHorizontally"))
+        assertFalse(bookInfoSource.contains("horizontalScroll("))
     }
 
     @Test

@@ -5,9 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class HighlightTocIntegrationTest {
 
@@ -47,14 +45,10 @@ class HighlightTocIntegrationTest {
         val viewModel = projectFile(
             "src/main/java/io/legado/app/ui/book/toc/TocViewModel.kt"
         ).readText()
-        val activityLayout = parseLayout("activity_chapter_list.xml")
 
-        assertEquals(
-            1,
-            activityLayout.getElementsByTagName("androidx.viewpager.widget.ViewPager").length
-        )
+        assertTrue(activity.contains("ViewPager(ctx)"))
         assertTrue(activity.contains("FragmentPagerAdapter"))
-        assertTrue(activity.contains("tabLayout.setupWithViewPager(binding.viewPager)"))
+        assertTrue(activity.contains("TabRow("))
         assertTrue(activity.contains("2 -> HighlightFragment()"))
         assertTrue(activity.contains("return 3"))
         assertTrue(activity.contains("viewModel.startHighlightSearch(searchKey)"))
@@ -70,7 +64,7 @@ class HighlightTocIntegrationTest {
         assertTrue(fragment.contains("bookData.observe(viewLifecycleOwner)"))
         assertTrue(fragment.contains("viewLifecycleOwner.lifecycleScope.launch"))
         assertTrue(fragment.countMatches("highlightJob?.cancel()") >= 2)
-        assertTrue(fragment.contains("binding.recyclerView.adapter = null"))
+        assertTrue(fragment.contains("highlightsState = emptyList()"))
         assertTrue(fragment.contains("clearCallbackIfOwned"))
         assertTrue(fragment.contains("upHighlight(viewModel.searchKey)"))
         assertTrue(fragment.contains("if (!supportsHighlightPosition(book))"))
@@ -85,7 +79,7 @@ class HighlightTocIntegrationTest {
         assertTrue(fragment.contains("bookData.observe(viewLifecycleOwner)"))
         assertTrue(fragment.contains("viewLifecycleOwner.lifecycleScope.launch"))
         assertTrue(fragment.countMatches("bookmarkJob?.cancel()") >= 2)
-        assertTrue(fragment.contains("binding.recyclerView.adapter = null"))
+        assertTrue(fragment.contains("bookmarksState = emptyList()"))
         assertTrue(fragment.contains("upBookmark(viewModel.searchKey)"))
     }
 
@@ -186,44 +180,22 @@ class HighlightTocIntegrationTest {
 
     @Test
     fun `highlight item keeps card styling and bindings`() {
-        val root = parseLayout("item_highlight.xml")
+        val fragment = projectFile(
+            "src/main/java/io/legado/app/ui/book/toc/HighlightFragment.kt"
+        ).readText()
 
-        assertEquals("androidx.cardview.widget.CardView", root.tagName)
-        assertEquals("8dp", root.appAttribute("cardCornerRadius"))
-        val fields = root.getElementsByTagName("TextView")
-        val ids = (0 until fields.length)
-            .map { fields.item(it) as Element }
-            .map { it.androidAttribute("id") }
-            .toSet()
-        assertEquals(
-            setOf("@+id/tv_chapter_name", "@+id/tv_book_text", "@+id/tv_note"),
-            ids
-        )
+        assertTrue(fragment.contains("Card("))
+        assertTrue(fragment.contains("RoundedCornerShape(8.dp)"))
+        assertTrue(fragment.contains("item.chapterName"))
+        assertTrue(fragment.contains("item.bookText"))
+        assertTrue(fragment.contains("item.note"))
     }
-
-    private fun parseLayout(name: String): Element =
-        DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }.newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/$name"))
-            .documentElement
 
     private fun projectFile(pathInApp: String): File =
         listOf(File(pathInApp), File("app/$pathInApp"))
             .firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
 
-    private fun Element.androidAttribute(name: String): String =
-        getAttributeNS(androidNamespace, name)
-
-    private fun Element.appAttribute(name: String): String =
-        getAttributeNS(appNamespace, name)
-
     private fun String.countMatches(value: String): Int =
         windowed(value.length).count { it == value }
-
-    private companion object {
-        const val androidNamespace = "http://schemas.android.com/apk/res/android"
-        const val appNamespace = "http://schemas.android.com/apk/res-auto"
-    }
 }

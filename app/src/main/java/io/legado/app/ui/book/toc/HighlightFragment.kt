@@ -3,29 +3,62 @@ package io.legado.app.ui.book.toc
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookHighlight
-import io.legado.app.databinding.FragmentBookmarkBinding
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.book.read.HighlightNoteDialog
-import io.legado.app.ui.widget.recycler.UpLinearLayoutManager
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
@@ -49,21 +82,34 @@ internal fun highlightBodyPosition(highlight: BookHighlight): Int {
         .coerceAtLeast(0)
 }
 
-class HighlightFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_bookmark),
-    HighlightAdapter.Callback,
+class HighlightFragment : VMBaseFragment<TocViewModel>(),
     TocViewModel.HighlightCallBack {
 
     override val viewModel by activityViewModels<TocViewModel>()
-    private val binding by viewBinding(FragmentBookmarkBinding::bind)
-    private var layoutManager: UpLinearLayoutManager? = null
-    private var adapter: HighlightAdapter? = null
     private var highlightJob: Job? = null
     private var chapterIndexes = emptyMap<String, Int>()
     private var durChapterIndex = 0
+    private var highlightsState by mutableStateOf<List<BookHighlight>>(emptyList())
+    private var scrollTargetIndex by mutableIntStateOf(0)
+    private var scrollTargetNonce by mutableLongStateOf(0L)
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    HighlightScreen()
+                }
+            }
+        }
+    }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         viewModel.highlightCallBack = this
-        initRecyclerView()
         viewModel.bookData.observe(viewLifecycleOwner) {
             durChapterIndex = it.durChapterIndex
             upHighlight(viewModel.searchKey)
@@ -73,9 +119,7 @@ class HighlightFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_bookmar
     override fun onDestroyView() {
         highlightJob?.cancel()
         highlightJob = null
-        binding.recyclerView.adapter = null
-        adapter = null
-        layoutManager = null
+        highlightsState = emptyList()
         chapterIndexes = emptyMap()
         viewModel.highlightCallBack = clearCallbackIfOwned(
             viewModel.highlightCallBack,
@@ -84,24 +128,12 @@ class HighlightFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_bookmar
         super.onDestroyView()
     }
 
-    private fun initRecyclerView() {
-        val layoutManager = UpLinearLayoutManager(requireContext())
-        val adapter = HighlightAdapter(requireContext(), this)
-        this.layoutManager = layoutManager
-        this.adapter = adapter
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.layoutManager = layoutManager
-        binding.recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.applyNavigationBarPadding()
-    }
-
     override fun upHighlight(searchKey: String?) {
         highlightJob?.cancel()
         val book = viewModel.bookData.value ?: return
         if (!supportsHighlightPosition(book)) {
             chapterIndexes = emptyMap()
-            adapter?.setItems(emptyList())
+            highlightsState = emptyList()
             return
         }
         highlightJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -124,19 +156,20 @@ class HighlightFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_bookmar
                         BookHighlight::time
                     )
                 )
-                adapter?.setItems(orderedHighlights)
+                highlightsState = orderedHighlights
                 val scrollPosition = orderedHighlights
                     .indexOfLast {
                         resolveHighlightChapterIndex(it, chapterIndexes)
                             ?.let { chapterIndex -> chapterIndex < durChapterIndex } == true
                     }
                     .coerceAtLeast(0)
-                layoutManager?.scrollToPositionWithOffset(scrollPosition, 0)
+                scrollTargetIndex = scrollPosition
+                scrollTargetNonce++
             }
         }
     }
 
-    override fun onClick(highlight: BookHighlight) {
+    fun onClick(highlight: BookHighlight) {
         val book = viewModel.bookData.value ?: return
         if (!supportsHighlightPosition(book)) return
         val chapterIndex = resolveHighlightChapterIndex(highlight, chapterIndexes) ?: return
@@ -159,12 +192,111 @@ class HighlightFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_bookmar
         }
     }
 
-    override fun onLongClick(highlight: BookHighlight) {
+    fun onLongClick(highlight: BookHighlight) {
         showDialogFragment(HighlightNoteDialog(highlight))
     }
 
     private fun supportsHighlightPosition(book: Book): Boolean {
         return !book.isAudio && !book.isVideo &&
             (book.isLocal || !book.isImage || !AppConfig.showMangaUi)
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
+    @Composable
+    private fun HighlightScreen() {
+        val listState = rememberLazyListState()
+        LaunchedEffect(scrollTargetNonce) {
+            if (scrollTargetNonce > 0L && highlightsState.isNotEmpty()) {
+                listState.scrollToItem(scrollTargetIndex.coerceIn(0, highlightsState.lastIndex))
+            }
+        }
+
+        LazyColumn(
+            state = listState,
+            contentPadding = WindowInsets.navigationBars.asPaddingValues(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            items(
+                items = highlightsState,
+                key = { item -> item.time },
+            ) { item ->
+                HighlightCardItem(
+                    item = item,
+                    onClick = { onClick(item) },
+                    onLongClick = { onLongClick(item) },
+                )
+            }
+        }
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
+    @Composable
+    private fun HighlightCardItem(
+        item: BookHighlight,
+        onClick: () -> Unit,
+        onLongClick: () -> Unit,
+    ) {
+        val style = item.styleObj()
+        val colorInt = style.fill.takeIf { it != 0 }
+            ?: style.textColor.takeIf { it != 0 }
+            ?: style.underline?.color?.takeIf { it != 0 }
+            ?: style.strike?.color?.takeIf { it != 0 }
+            ?: style.box?.color?.takeIf { it != 0 }
+            ?: style.emphasis?.color?.takeIf { it != 0 }
+            ?: 0
+
+        Card(
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                ),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .background(if (colorInt != 0) Color(colorInt) else Color.Transparent),
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = item.chapterName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (item.bookText.isNotEmpty()) {
+                        Text(
+                            text = item.bookText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    if (item.note.isNotEmpty()) {
+                        Text(
+                            text = item.note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

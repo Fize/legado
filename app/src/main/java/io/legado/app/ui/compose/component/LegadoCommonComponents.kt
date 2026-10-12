@@ -651,6 +651,42 @@ fun LegadoNumberPickerDialog(
     )
 }
 
+@Composable
+fun LegadoSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String = stringResource(R.string.search),
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text(placeholder, maxLines = 1) },
+        singleLine = true,
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = stringResource(R.string.search),
+            )
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                    )
+                }
+            }
+        },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = {}),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun Modifier.combinedClickableCompat(
@@ -662,3 +698,4 @@ internal fun Modifier.combinedClickableCompat(
     onLongClick = onLongClick,
     onClick = onClick,
 )
+

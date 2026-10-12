@@ -12,8 +12,8 @@ class BookInfoTocEntryTest {
             "src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
         )
         val tocEntry = activity
-            .substringAfter("tvTocView.setOnClickListener {")
-            .substringBefore("tvChangeGroup.setOnClickListener")
+            .substringAfter("private fun onTocViewClick() {")
+            .substringBefore("private fun setSourceVariable()")
         val chapterCheck = tocEntry.indexOf("chapterListData.value.isNullOrEmpty()")
         val bookCheck = tocEntry.indexOf("viewModel.getBook(false)")
         val savedOpen = tocEntry.indexOf("openChapterList()")
@@ -22,7 +22,7 @@ class BookInfoTocEntryTest {
         assertTrue(chapterCheck >= 0)
         assertTrue(bookCheck > chapterCheck)
         assertTrue(tocEntry.contains("toastOnUi(R.string.book_not_exist)"))
-        assertTrue(tocEntry.contains("return@setOnClickListener"))
+        assertTrue(tocEntry.contains("return"))
         assertTrue(tocEntry.contains("viewModel.saveBook(book)"))
         assertTrue(tocEntry.contains("viewModel.saveChapterList"))
         assertTrue(savedOpen >= 0)

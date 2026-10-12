@@ -213,3 +213,35 @@ abstract class VMBaseComposeActivity<VM : androidx.lifecycle.ViewModel>(
 
 }
 
+abstract class BaseComposeDialogFragment(
+    adaptationSoftKeyboard: Boolean = false
+) : BaseDialogFragment(0, adaptationSoftKeyboard) {
+
+    override fun onCreateView(
+        inflater: android.view.LayoutInflater,
+        container: android.view.ViewGroup?,
+        savedInstanceState: Bundle?
+    ): android.view.View {
+        return androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(
+                androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                LegadoTheme {
+                    Content()
+                }
+            }
+        }
+    }
+
+    @Composable
+    protected open fun Content() {
+        DialogContent()
+    }
+
+    @Composable
+    protected open fun DialogContent() {}
+
+}
+
+

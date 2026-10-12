@@ -24,8 +24,8 @@ class TocReverseNoDiffTest {
 
         assertTrue(activity.contains("replaceAll = true"))
         assertTrue(fragment.contains("if (replaceAll)"))
-        assertTrue(fragment.contains("adapter.setItemsNoDiff(items)"))
-        assertTrue(fragment.contains("adapter.setItems(items)"))
+        assertTrue(fragment.contains("setChapterItemsNoDiff(items)"))
+        assertTrue(fragment.contains("setChapterItems(items)"))
         assertTrue(viewModel.contains("replaceAll: Boolean = false"))
     }
 

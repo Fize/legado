@@ -1,36 +1,50 @@
 package io.legado.app.ui.book.group
 
-import android.content.Context
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemBookGroupManageBinding
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyTint
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
@@ -40,12 +54,10 @@ import kotlinx.coroutines.launch
 /**
  * 书籍分组管理
  */
-class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
-    Toolbar.OnMenuItemClickListener {
+class GroupManageDialog : BaseComposeDialogFragment() {
 
     private val viewModel: GroupViewModel by viewModels()
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val adapter by lazy { GroupAdapter(requireContext()) }
+    private var groupsState by mutableStateOf<List<BookGroup>>(emptyList())
 
     override fun onStart() {
         super.onStart()
@@ -53,25 +65,7 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.setTitle(R.string.group_manage)
-        initView()
         initData()
-        initMenu()
-    }
-
-    private fun initView() {
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        binding.recyclerView.adapter = adapter
-        val itemTouchCallback = ItemTouchCallback(adapter)
-        itemTouchCallback.isCanDrag = true
-        ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
-        binding.tvOk.setTextColor(requireContext().accentColor)
-        binding.tvOk.visible()
-        binding.tvOk.setOnClickListener {
-            dismissAllowingStateLoss()
-        }
     }
 
     private fun initData() {
@@ -79,85 +73,126 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
             appDb.bookGroupDao.flowAll().catch {
                 AppLog.put("书籍分组管理界面获取分组数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect {
-                adapter.setItems(it)
+                groupsState = it
             }
         }
     }
 
-    private fun initMenu() {
-        binding.toolBar.setOnMenuItemClickListener(this)
-        binding.toolBar.inflateMenu(R.menu.book_group_manage)
-        binding.toolBar.menu.applyTint(requireContext())
+    private fun moveGroup(fromIndex: Int, toIndex: Int) {
+        if (fromIndex !in groupsState.indices || toIndex !in groupsState.indices) return
+        val mutable = groupsState.toMutableList()
+        val moved = mutable.removeAt(fromIndex)
+        mutable.add(toIndex, moved)
+        mutable.forEachIndexed { idx, item ->
+            item.order = idx + 1
+        }
+        groupsState = mutable
+        viewModel.upGroup(*mutable.toTypedArray())
     }
 
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_add -> {
-                if (appDb.bookGroupDao.canAddGroup) {
-                    showDialogFragment(GroupEditDialog())
-                } else {
-                    toastOnUi("分组已达上限(63个)")
+    @Composable
+    override fun DialogContent() {
+        val context = LocalContext.current
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.group_manage),
+                    onNavigationClick = { dismissAllowingStateLoss() },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                if (appDb.bookGroupDao.canAddGroup) {
+                                    showDialogFragment(GroupEditDialog())
+                                } else {
+                                    toastOnUi("分组已达上限(63个)")
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = stringResource(R.string.add),
+                            )
+                        }
+                    },
+                )
+            },
+            bottomBar = {
+                Surface(tonalElevation = 2.dp) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { dismissAllowingStateLoss() }) {
+                            Text(stringResource(R.string.ok))
+                        }
+                    }
                 }
-            }
-        }
-        return true
-    }
-
-    private inner class GroupAdapter(context: Context) :
-        RecyclerAdapter<BookGroup, ItemBookGroupManageBinding>(context),
-        ItemTouchCallback.Callback {
-
-        private var isMoved = false
-
-        override fun getViewBinding(parent: ViewGroup): ItemBookGroupManageBinding {
-            return ItemBookGroupManageBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemBookGroupManageBinding,
-            item: BookGroup,
-            payloads: MutableList<Any>
-        ) {
-            binding.run {
-                root.setBackgroundColor(context.backgroundColor)
-                tvGroup.text = item.getManageName(context)
-                swShow.isChecked = item.show
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemBookGroupManageBinding) {
-            binding.run {
-                tvEdit.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let { bookGroup ->
-                        showDialogFragment(
-                            GroupEditDialog(bookGroup)
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                itemsIndexed(
+                    items = groupsState,
+                    key = { _, item -> item.groupId },
+                ) { index, item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = item.getManageName(context),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = { moveGroup(index, index - 1) },
+                            enabled = index > 0,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = { moveGroup(index, index + 1) },
+                            enabled = index < groupsState.lastIndex,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = { showDialogFragment(GroupEditDialog(item)) },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = stringResource(R.string.edit),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Switch(
+                            checked = item.show,
+                            onCheckedChange = { isChecked ->
+                                viewModel.upGroup(item.copy(show = isChecked))
+                            },
                         )
                     }
-                }
-                swShow.setOnUserCheckedChangeListener { isChecked ->
-                    getItem(holder.layoutPosition)?.let {
-                        viewModel.upGroup(it.copy(show = isChecked))
-                    }
+                    HorizontalDivider()
                 }
             }
-        }
-
-        override fun swap(srcPosition: Int, targetPosition: Int): Boolean {
-            swapItem(srcPosition, targetPosition)
-            isMoved = true
-            return true
-        }
-
-        override fun onClearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
-            if (isMoved) {
-                for ((index, item) in getItems().withIndex()) {
-                    item.order = index + 1
-                }
-                viewModel.upGroup(*getItems().toTypedArray())
-            }
-            isMoved = false
         }
     }
-
 }

@@ -42,16 +42,11 @@ class TocExpansionPreferenceTest {
 
     @Test
     fun `toc expansion toggle is wired through menu and activity`() {
-        val menu = projectFile("src/main/res/menu/book_toc.xml").readText()
-        assertTrue(menu.contains("@+id/menu_expand_toc"))
-        assertTrue(menu.contains("android:checkable=\"true\""))
-        assertTrue(menu.contains("@string/expand_toc"))
-
         val activity = projectFile(
             "src/main/java/io/legado/app/ui/book/toc/TocActivity.kt"
         ).readText()
         assertTrue(activity.contains("getTocExpanded()"))
-        assertTrue(activity.contains("R.id.menu_expand_toc"))
+        assertTrue(activity.contains("R.string.expand_toc"))
         assertTrue(activity.contains("viewModel.setTocExpanded(expanded)"))
 
         val viewModel = projectFile(

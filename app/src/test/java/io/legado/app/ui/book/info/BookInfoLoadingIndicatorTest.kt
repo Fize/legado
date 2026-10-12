@@ -64,25 +64,11 @@ class BookInfoLoadingIndicatorTest {
 
     @Test
     fun `loading indicator overlays the content in both orientations`() {
-        LAYOUTS.forEach { layoutPath ->
-            val document = DocumentBuilderFactory.newInstance().apply {
-                isNamespaceAware = true
-            }.newDocumentBuilder().parse(projectFile(layoutPath))
-            val indicators = document.getElementsByTagName(PROGRESS_TAG)
-
-            assertEquals(layoutPath, 1, indicators.length)
-            val indicator = indicators.item(0) as Element
-            assertEquals("@+id/refresh_progress_bar", indicator.androidAttribute("id"))
-            assertEquals("match_parent", indicator.androidAttribute("layout_width"))
-            assertEquals("2dp", indicator.androidAttribute("layout_height"))
-            assertEquals("top", indicator.androidAttribute("layout_gravity"))
-
-            val parent = indicator.parentNode as Element
-            assertEquals("FrameLayout", parent.tagName)
-            assertEquals("0dp", parent.androidAttribute("layout_height"))
-            assertEquals("1", parent.androidAttribute("layout_weight"))
-            assertSame(indicator, parent.elementChildren().last())
-        }
+        val activity = projectFile(ACTIVITY_PATH).readText()
+        assertTrue(activity.contains("if (isLoadingState)"))
+        assertTrue(activity.contains("LinearProgressIndicator("))
+        assertTrue(activity.contains(".height(2.dp)"))
+        assertTrue(activity.contains(".align(Alignment.TopCenter)"))
     }
 
     @Test
@@ -90,8 +76,7 @@ class BookInfoLoadingIndicatorTest {
         val activity = projectFile(ACTIVITY_PATH).readText()
         val viewModel = projectFile(VIEW_MODEL_PATH).readText()
 
-        assertTrue(activity.contains("refreshProgressBar.secondColor = accentColor"))
-        assertTrue(activity.contains("refreshProgressBar.isAutoLoading = isLoading"))
+        assertTrue(activity.contains("isLoadingState = isLoading"))
         assertTrue(activity.contains("upLoading(viewModel.loadingData.value == true, it)"))
         assertTrue(
             activity.contains(
