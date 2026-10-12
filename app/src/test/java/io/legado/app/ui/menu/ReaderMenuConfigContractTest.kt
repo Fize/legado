@@ -31,22 +31,18 @@ class ReaderMenuConfigContractTest {
             "src/main/java/io/legado/app/ui/book/read/config/ReaderMenuConfigDialog.kt"
         )
         listOf(
-            "R.id.menu_reader_select_all",
-            "R.id.menu_reader_select_none",
-            "R.id.menu_reader_reset",
-            "DragSelectTouchHelper",
-            ".activeSlideSelect()",
-            "ItemTouchHelper",
-            "SimpleCallback",
+            "R.string.reader_menu_select_all",
+            "R.string.reader_menu_select_none",
+            "R.string.restore_default",
+            "setAllPrimary(true)",
+            "setAllPrimary(false)",
+            "reset()",
             "swapWithinGroup",
-            "swapItem(srcPosition, targetPosition)",
-            "canDropOver",
+            "canSwapWithinGroup",
             "source.primary == target.primary",
             "regroupAndPersist",
-            "setOnUserCheckedChangeListener",
-            "ivDrag",
-            "startDrag(holder)",
-            "event.actionMasked == MotionEvent.ACTION_DOWN",
+            "detectDragGestures",
+            "R.drawable.ic_menu",
             "saveReaderMenuConfig"
         ).forEach { expected -> assertTrue("missing $expected", source.contains(expected)) }
         assertTrue(source.contains("val orderedKeys = config.primary + config.more"))

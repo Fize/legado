@@ -32,14 +32,9 @@ class ReadControlVisualStateTest {
 
     @Test
     fun httpTtsDeleteActionIsVerticallyCentered() {
-        val layout = parseXml("src/main/res/layout/item_http_tts.xml")
-        val delete = layout.getElementsByTagName("*").asSequence()
-            .filterIsInstance<Element>()
-            .first { it.androidAttribute("id") == "@+id/iv_menu_delete" }
-
-        assertEquals("parent", delete.appAttribute("layout_constraintTop_toTopOf"))
-        assertEquals("parent", delete.appAttribute("layout_constraintBottom_toBottomOf"))
-        assertEquals("", delete.appAttribute("layout_constraintVertical_bias"))
+        val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/config/SpeakEngineDialog.kt")
+        assertTrue(source.contains("verticalAlignment = Alignment.CenterVertically"))
+        assertTrue(source.contains("R.drawable.ic_outline_delete"))
     }
 
     private fun parseXml(pathInApp: String): Element =

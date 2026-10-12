@@ -60,8 +60,8 @@ class ReadAloudManualPagePolicyTest {
         val dialog = readProjectFile(
             "src/main/java/io/legado/app/ui/book/read/config/ReadAloudDialog.kt"
         )
-        val chapterControls = dialog.substringAfter("tvPre.setOnClickListener")
-            .substringBefore("ivStop.setOnClickListener")
+        val chapterControls = dialog.substringAfter("private fun onPrevChapter()")
+            .substringBefore("private fun onStopClick()")
 
         listOf(
             "if (ReadAloud.followReadAloudPosition)",

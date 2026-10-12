@@ -16,12 +16,10 @@ class ReadAloudAccessibilityTest {
 
         val pauseLabel = upPlayState.indexOf("R.string.pause")
         val playLabel = upPlayState.indexOf("R.string.audio_play")
-        val tooltipUpdate = upPlayState.indexOf("TooltipCompat.setTooltipText(")
         assertTrue(pauseLabel >= 0)
         assertTrue(playLabel >= 0)
-        assertTrue(tooltipUpdate > pauseLabel)
-        assertTrue(tooltipUpdate > playLabel)
-        assertTrue(upPlayState.contains("binding.ivPlayPause.contentDescription,"))
+        assertTrue(upPlayState.contains("playPauseDescription ="))
+        assertTrue(source.contains("contentDescription = playPauseDescription"))
     }
 
     private fun projectFile(pathInApp: String): String {

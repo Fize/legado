@@ -38,10 +38,10 @@ class LoginHeaderDialogContractTest {
 
     private fun loginHeaderAction(source: String): String =
         source.substringAfter(
-            "R.id.menu_show_login_header -> alert {",
+            "private fun showLoginHeader() = alert {",
             missingDelimiterValue = ""
         ).substringBefore(
-            "R.id.menu_del_login_header",
+            "private fun clearLoginHeader()",
             missingDelimiterValue = ""
         )
 

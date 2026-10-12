@@ -11,7 +11,7 @@ class ClickActionConfigDialogInsetTest {
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/book/read/config/ClickActionConfigDialog.kt"
         )
-        val applyPadding = "binding.rootView.applyNavigationBarPadding(withInitialPadding = true)"
+        val applyPadding = "view.applyNavigationBarPadding(withInitialPadding = true)"
 
         assertTrue(source.contains("import io.legado.app.utils.applyNavigationBarPadding"))
         assertTrue(source.contains(applyPadding))
@@ -20,12 +20,13 @@ class ClickActionConfigDialogInsetTest {
 
     @Test
     fun `click action dialog keeps a padded full screen root`() {
-        val layout = readProjectFile("src/main/res/layout/dialog_click_action_config.xml")
+        val source = readProjectFile(
+            "src/main/java/io/legado/app/ui/book/read/config/ClickActionConfigDialog.kt"
+        )
 
-        assertTrue(layout.contains("android:id=\"@+id/root_view\""))
-        assertTrue(layout.contains("android:layout_width=\"match_parent\""))
-        assertTrue(layout.contains("android:layout_height=\"match_parent\""))
-        assertTrue(layout.contains("android:padding=\"3dp\""))
+        assertTrue(source.contains(".fillMaxSize()"))
+        assertTrue(source.contains(".background(colorResource(R.color.translucent))"))
+        assertTrue(source.contains(".padding(3.dp)"))
     }
 
     private fun readProjectFile(pathInApp: String): String {

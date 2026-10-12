@@ -29,13 +29,12 @@ class HttpTtsCookieJarTest {
 
         val source = appFile("src/main/java/io/legado/app/ui/book/read/config/HttpTtsEditDialog.kt")
             .readText()
-        val layout = appFile("src/main/res/layout/dialog_http_tts_edit.xml").readText()
-        assertTrue(source.contains("tvJsLib.setText(httpTTS.jsLib)"))
-        assertTrue(source.contains("jsLib = binding.tvJsLib.text?.toString()"))
-        assertTrue(source.contains("cbIsEnableCookie.isChecked = httpTTS.enabledCookieJar == true"))
-        assertTrue(source.contains("enabledCookieJar = binding.cbIsEnableCookie.isChecked"))
-        assertTrue(layout.contains("android:id=\"@+id/tv_jsLib\""))
-        assertTrue(layout.contains("android:id=\"@+id/cb_is_enable_cookie\""))
+        assertTrue(source.contains("jsLibState = httpTTS.jsLib.orEmpty()"))
+        assertTrue(source.contains("jsLib = jsLibState"))
+        assertTrue(source.contains("enabledCookieJarState = httpTTS.enabledCookieJar == true"))
+        assertTrue(source.contains("enabledCookieJar = enabledCookieJarState"))
+        assertTrue(source.contains("label = \"jsLib\""))
+        assertTrue(source.contains("R.string.auto_save_cookie"))
     }
 
     private fun appFile(path: String): File =
