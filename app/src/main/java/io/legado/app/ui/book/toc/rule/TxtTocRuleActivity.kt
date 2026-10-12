@@ -2,46 +2,72 @@ package io.legado.app.ui.book.toc.rule
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import androidx.activity.viewModels
-import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
-import io.legado.app.databinding.ActivityTxtTocRuleBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.sourceSharePassphraseButton
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoSelectActionBar
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.widget.SelectActionBar
-import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
@@ -49,22 +75,16 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import java.io.File
 
-class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleViewModel>(),
-    TxtTocRuleAdapter.CallBack,
-    SelectActionBar.CallBack,
-    TxtTocRuleEditDialog.Callback,
-    PopupMenu.OnMenuItemClickListener {
+class TxtTocRuleActivity : VMBaseComposeActivity<TxtTocRuleViewModel>(),
+    TxtTocRuleEditDialog.Callback {
 
     override val viewModel by viewModels<TxtTocRuleViewModel>()
-    override val binding by viewBinding(ActivityTxtTocRuleBinding::inflate)
-    private val adapter: TxtTocRuleAdapter by lazy {
-        TxtTocRuleAdapter(this, this)
-    }
     private val importTocRuleKey = "tocRuleUrl"
-    private val searchView: SearchView by lazy { binding.root.findViewById(R.id.search_view) }
-    private lateinit var itemTouchCallback: ItemTouchCallback
-    private var allRules: List<TxtTocRule> = emptyList()
-    private var searchKey = ""
+
+    private var allRulesState by mutableStateOf<List<TxtTocRule>>(emptyList())
+    private var searchKeyState by mutableStateOf("")
+    private var selectedIdsState by mutableStateOf<Set<Long>>(emptySet())
+
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportTxtTocRuleDialog(it))
@@ -99,50 +119,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initView()
-        initSearchView()
-        initBottomActionBar()
         initData()
-    }
-
-    private fun initView() = binding.run {
-        recyclerView.setEdgeEffectColor(primaryColor)
-        recyclerView.addItemDecoration(VerticalDivider(this@TxtTocRuleActivity))
-        recyclerView.adapter = adapter
-        // When this page is opened, it is in selection mode
-        val dragSelectTouchHelper =
-            DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
-        dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
-        dragSelectTouchHelper.activeSlideSelect()
-        // Note: need judge selection first, so add ItemTouchHelper after it.
-        itemTouchCallback = ItemTouchCallback(adapter)
-        itemTouchCallback.isCanDrag = true
-        ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
-    }
-
-    private fun initSearchView() {
-        binding.searchBar.setBackgroundColor(primaryColor)
-        searchView.applyTint(primaryTextColor)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean = false
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                val newKey = newText.orEmpty()
-                if (newKey != searchKey) {
-                    adapter.clearSelection()
-                }
-                searchKey = newKey
-                updateAdapter()
-                return true
-            }
-        })
-    }
-
-    private fun initBottomActionBar() {
-        binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.inflateMenu(R.menu.txt_toc_rule_sel)
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
     }
 
     private fun initData() {
@@ -150,48 +127,245 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
             appDb.txtTocRuleDao.observeAll().catch {
                 AppLog.put("TXT目录规则界面获取数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect { tocRules ->
-                allRules = tocRules
-                updateAdapter()
+                allRulesState = tocRules
+                val validIds = tocRules.mapTo(hashSetOf()) { it.id }
+                selectedIdsState = selectedIdsState.intersect(validIds)
             }
         }
     }
 
-    private fun updateAdapter() {
-        itemTouchCallback.isCanDrag = searchKey.isBlank()
-        adapter.setItems(allRules.filterByKeyword(searchKey), adapter.diffItemCallBack)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        adapter.upResumed(true)
-    }
-
-    override fun onPause() {
-        adapter.upResumed(false)
-        super.onPause()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.txt_toc_rule, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add -> showDialogFragment(TxtTocRuleEditDialog())
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_import_default -> viewModel.importDefault()
+    @Composable
+    override fun Content() {
+        val displayedRules = remember(allRulesState, searchKeyState) {
+            allRulesState.filterByKeyword(searchKeyState)
         }
-        return super.onCompatOptionsItemSelected(item)
+        val selectedRules = remember(displayedRules, selectedIdsState) {
+            displayedRules.filter { it.id in selectedIdsState }
+        }
+
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.txt_toc_rule),
+                    onBack = { finish() },
+                    searchQuery = searchKeyState,
+                    onSearchQueryChange = { newText ->
+                        if (newText != searchKeyState) {
+                            selectedIdsState = emptySet()
+                        }
+                        searchKeyState = newText
+                    },
+                    menuActions = listOf(
+                        LegadoMenuAction(
+                            title = stringResource(R.string.add),
+                            iconRes = R.drawable.ic_add,
+                            showAsAction = true,
+                            onClick = { showDialogFragment(TxtTocRuleEditDialog()) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_local),
+                            iconRes = R.drawable.ic_import,
+                            onClick = {
+                                importDoc.launch {
+                                    mode = HandleFileContract.FILE
+                                    allowExtensions = arrayOf("txt", "json")
+                                }
+                            },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_on_line),
+                            iconRes = R.drawable.ic_import,
+                            onClick = ::showImportDialog,
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_by_qr_code),
+                            iconRes = R.drawable.ic_import,
+                            onClick = { qrCodeResult.launch() },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_default_rule),
+                            iconRes = R.drawable.ic_import,
+                            onClick = { viewModel.importDefault() },
+                        ),
+                    ),
+                )
+            },
+            bottomBar = {
+                LegadoSelectActionBar(
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
+                    selectedCount = selectedRules.size,
+                    totalCount = displayedRules.size,
+                    onSelectAllChange = { selectAll ->
+                        selectedIdsState = if (selectAll) {
+                            displayedRules.mapTo(linkedSetOf()) { it.id }
+                        } else {
+                            emptySet()
+                        }
+                    },
+                    onRevertSelection = {
+                        selectedIdsState = displayedRules.mapNotNullTo(linkedSetOf()) {
+                            if (it.id in selectedIdsState) null else it.id
+                        }
+                    },
+                    mainActionText = stringResource(R.string.delete),
+                    onMainActionClick = { delSourceDialog(selectedRules) },
+                    menuActions = listOf(
+                        LegadoMenuAction(
+                            title = stringResource(R.string.enable_selection),
+                            onClick = { viewModel.enableSelection(*selectedRules.toTypedArray()) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.disable_selection),
+                            onClick = { viewModel.disableSelection(*selectedRules.toTypedArray()) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.export_selection),
+                            onClick = {
+                                exportResult.launch {
+                                    mode = HandleFileContract.EXPORT
+                                    fileData = HandleFileContract.FileData(
+                                        "exportTxtTocRule.json",
+                                        GSON.toJson(selectedRules).toByteArray(),
+                                        "application/json",
+                                    )
+                                }
+                            },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.share_selected_source),
+                            onClick = { shareSelection(selectedRules) },
+                        ),
+                    ),
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                items(
+                    items = displayedRules,
+                    key = { it.id },
+                ) { source ->
+                    val isSelected = source.id in selectedIdsState
+                    var menuExpanded by remember { mutableStateOf(false) }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedIdsState = if (isSelected) {
+                                    selectedIdsState - source.id
+                                } else {
+                                    selectedIdsState + source.id
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { checked ->
+                                    selectedIdsState = if (checked) {
+                                        selectedIdsState + source.id
+                                    } else {
+                                        selectedIdsState - source.id
+                                    }
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = source.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Switch(
+                                checked = source.enable,
+                                onCheckedChange = { checked ->
+                                    viewModel.update(source.copy(enable = checked))
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(
+                                onClick = { edit(source) },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_edit),
+                                    contentDescription = stringResource(R.string.edit),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Box {
+                                IconButton(
+                                    onClick = { menuExpanded = true },
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_more_vert),
+                                        contentDescription = stringResource(R.string.more_menu),
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.to_top)) },
+                                        onClick = {
+                                            menuExpanded = false
+                                            toTop(source)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.to_bottom)) },
+                                        onClick = {
+                                            menuExpanded = false
+                                            toBottom(source)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = stringResource(R.string.delete),
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        },
+                                        onClick = {
+                                            menuExpanded = false
+                                            del(source)
+                                            selectedIdsState = selectedIdsState - source.id
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        if (!source.example.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = source.example.orEmpty(),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 12.dp),
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+            }
+        }
     }
 
-    override fun del(source: TxtTocRule) {
+    private fun del(source: TxtTocRule) {
         alert(R.string.draw) {
             setMessage(getString(R.string.sure_del) + "\n" + source.name)
             noButton()
@@ -201,54 +375,25 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
         }
     }
 
-    override fun edit(source: TxtTocRule) {
+    private fun edit(source: TxtTocRule) {
         showDialogFragment(TxtTocRuleEditDialog(source.id))
-    }
-
-    override fun onClickSelectBarMainAction() {
-        delSourceDialog()
-    }
-
-    override fun revertSelection() {
-        adapter.revertSelection()
-    }
-
-    override fun selectAll(selectAll: Boolean) {
-        if (selectAll) {
-            adapter.selectAll()
-        } else {
-            adapter.revertSelection()
-        }
     }
 
     override fun saveTxtTocRule(txtTocRule: TxtTocRule) {
         viewModel.save(txtTocRule)
     }
 
-    override fun update(vararg source: TxtTocRule) {
-        viewModel.update(*source)
-    }
-
-    override fun toTop(source: TxtTocRule) {
+    private fun toTop(source: TxtTocRule) {
         viewModel.toTop(source)
     }
 
-    override fun toBottom(source: TxtTocRule) {
+    private fun toBottom(source: TxtTocRule) {
         viewModel.toBottom(source)
     }
 
-    override fun upOrder() {
-        viewModel.upOrder()
-    }
-
-    override fun upCountView() {
-        binding.selectActionBar
-            .upCountView(adapter.selection.size, adapter.itemCount)
-    }
-
-    private fun delSourceDialog() {
+    private fun delSourceDialog(selectedRules: List<TxtTocRule>) {
         alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
-            yesButton { viewModel.del(*adapter.selection.toTypedArray()) }
+            yesButton { viewModel.del(*selectedRules.toTypedArray()) }
             noButton()
         }
     }
@@ -289,31 +434,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
         }
     }
 
-    override fun onMenuItemClick(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_enable_selection -> viewModel.enableSelection(
-                *adapter.selection.toTypedArray()
-            )
-
-            R.id.menu_disable_selection -> viewModel.disableSelection(
-                *adapter.selection.toTypedArray()
-            )
-
-            R.id.menu_share_source -> shareSelection()
-            R.id.menu_export_selection -> exportResult.launch {
-                mode = HandleFileContract.EXPORT
-                fileData = HandleFileContract.FileData(
-                    "exportTxtTocRule.json",
-                    GSON.toJson(adapter.selection).toByteArray(),
-                    "application/json"
-                )
-            }
-        }
-        return true
-    }
-
-    private fun shareSelection() {
-        val rules = adapter.selection.toList()
+    private fun shareSelection(rules: List<TxtTocRule>) {
         if (rules.isEmpty()) return
         viewModel.execute(scope = lifecycleScope) {
             File.createTempFile("txtTocRule_", ".json", cacheDir).apply {

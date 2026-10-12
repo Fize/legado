@@ -43,12 +43,8 @@ class BundlePayloadContractTest {
             "io/legado/app/ui/book/search/SearchActivity.kt",
             "io/legado/app/ui/book/source/manage/BookSourceActivity.kt",
             "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt",
-            "io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt",
-            "io/legado/app/ui/book/toc/rule/TxtTocRuleDialog.kt",
-            "io/legado/app/ui/dict/rule/DictRuleAdapter.kt",
             "io/legado/app/ui/main/bookshelf/style1/books/BaseBooksAdapter.kt",
             "io/legado/app/ui/main/bookshelf/style2/BaseBooksAdapter.kt",
-            "io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
         )
     }
 }

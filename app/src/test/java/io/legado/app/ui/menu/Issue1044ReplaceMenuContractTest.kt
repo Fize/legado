@@ -7,25 +7,23 @@ import java.io.File
 class Issue1044ReplaceMenuContractTest {
 
     @Test
-    fun `replace rule menu puts manual replacement before help with its icon`() {
-        val menu = readProjectFile("src/main/res/menu/replace_rule.xml")
+    fun `replace rule menu puts manual replacement after imports with its icon`() {
+        val activity = readProjectFile("src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt")
         val order = listOf(
-            "menu_add_replace_rule",
-            "menu_import_local",
-            "menu_import_onLine",
-            "menu_import_qr",
-            "menu_manual_replace_rule"
+            "R.string.add_replace_rule",
+            "R.string.import_local",
+            "R.string.import_on_line",
+            "R.string.import_by_qr_code",
+            "R.string.manual_replace_rule"
         ).map { id ->
-            val index = menu.indexOf("android:id=\"@+id/$id\"")
-            assertTrue("$id should exist in replace_rule.xml", index >= 0)
+            val index = activity.indexOf(id)
+            assertTrue("$id should exist in ReplaceRuleActivity.kt", index >= 0)
             index
         }
         assertTrue("replace rule actions should follow the requested order", order.zipWithNext().all { (a, b) -> a < b })
 
-        val manual = menu.substringAfter("android:id=\"@+id/menu_manual_replace_rule\"")
-            .substringBefore("/>")
-        assertTrue(manual.contains("android:icon=\"@drawable/ic_find_replace\""))
-        assertTrue(!menu.contains("@drawable/ic_manual_replace"))
+        assertTrue(activity.contains("R.drawable.ic_find_replace"))
+        assertTrue(!activity.contains("ic_manual_replace"))
 
         val zhStrings = readProjectFile("src/main/res/values-zh/strings.xml")
         assertTrue(zhStrings.contains("<string name=\"manual_replace_rule\">手动替换</string>"))

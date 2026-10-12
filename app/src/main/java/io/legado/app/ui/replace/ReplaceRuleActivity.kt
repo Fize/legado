@@ -2,22 +2,50 @@ package io.legado.app.ui.replace
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.databinding.ActivityReplaceRuleBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
@@ -27,31 +55,24 @@ import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.sourceSharePassphraseButton
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.association.ImportReplaceRuleDialog
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoSelectActionBar
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
-import io.legado.app.ui.widget.SelectActionBar
-import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.transaction
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -64,22 +85,20 @@ import java.io.File
 /**
  * 替换规则管理
  */
-class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRuleViewModel>(),
-    SearchView.OnQueryTextListener,
-    PopupMenu.OnMenuItemClickListener,
-    SelectActionBar.CallBack,
-    ReplaceRuleAdapter.CallBack {
-    override val binding by viewBinding(ActivityReplaceRuleBinding::inflate)
+class ReplaceRuleActivity : VMBaseComposeActivity<ReplaceRuleViewModel>() {
+
     override val viewModel by viewModels<ReplaceRuleViewModel>()
     private val importRecordKey = "replaceRuleRecordKey"
-    private val adapter by lazy { ReplaceRuleAdapter(this, this) }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
-    private var groups = arrayListOf<String>()
-    private var groupMenu: SubMenu? = null
+
+    private var rulesState by mutableStateOf<List<ReplaceRule>>(emptyList())
+    private var groupsState by mutableStateOf<List<String>>(emptyList())
+    private var selectedIdsState by mutableStateOf<Set<Long>>(emptySet())
+    private var searchQueryState by mutableStateOf("")
+    private var manualReplaceRuleState by mutableStateOf(AppConfig.manualReplaceRule)
+
     private var replaceRuleFlowJob: Job? = null
     private var dataInit = false
+
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportReplaceRuleDialog(it))
@@ -120,72 +139,374 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initRecyclerView()
-        initSearchView()
-        initSelectActionView()
         observeReplaceRuleData()
         observeGroupData()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.replace_rule, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
+    @Composable
+    override fun Content() {
+        var groupMenuExpanded by remember { mutableStateOf(false) }
+        var overflowExpanded by remember { mutableStateOf(false) }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_group)?.subMenu
-        menu.findItem(R.id.menu_manual_replace_rule)?.isChecked = AppConfig.manualReplaceRule
-        upGroupMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
+        val selectedRules = remember(rulesState, selectedIdsState) {
+            rulesState.filter { it.id in selectedIdsState }
+        }
 
-    private fun initRecyclerView() {
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.addItemDecoration(VerticalDivider(this))
-        val itemTouchCallback = ItemTouchCallback(adapter)
-        itemTouchCallback.isCanDrag = true
-        val dragSelectTouchHelper: DragSelectTouchHelper =
-            DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
-        dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
-        // When this page is opened, it is in selection mode
-        dragSelectTouchHelper.activeSlideSelect()
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.replace_purify),
+                    onBack = { finish() },
+                    searchQuery = searchQueryState,
+                    onSearchQueryChange = { newText ->
+                        updateSearchQuery(newText)
+                    },
+                    searchPlaceholder = stringResource(R.string.replace_purify_search),
+                    actions = {
+                        Box {
+                            IconButton(onClick = { groupMenuExpanded = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_groups),
+                                    contentDescription = stringResource(R.string.menu_action_group),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = groupMenuExpanded,
+                                onDismissRequest = { groupMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.group_manage)) },
+                                    onClick = {
+                                        groupMenuExpanded = false
+                                        showDialogFragment<GroupManageDialog>()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.enabled)) },
+                                    onClick = {
+                                        groupMenuExpanded = false
+                                        updateSearchQuery(getString(R.string.enabled))
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.disabled)) },
+                                    onClick = {
+                                        groupMenuExpanded = false
+                                        updateSearchQuery(getString(R.string.disabled))
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.no_group)) },
+                                    onClick = {
+                                        groupMenuExpanded = false
+                                        updateSearchQuery(getString(R.string.no_group))
+                                    },
+                                )
+                                if (groupsState.isNotEmpty()) {
+                                    HorizontalDivider()
+                                    groupsState.forEach { group ->
+                                        DropdownMenuItem(
+                                            text = { Text(group) },
+                                            onClick = {
+                                                groupMenuExpanded = false
+                                                updateSearchQuery("group:$group")
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
-        // Note: need judge selection first, so add ItemTouchHelper after it.
-        ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
-    }
+                        Box {
+                            IconButton(onClick = { overflowExpanded = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_more),
+                                    contentDescription = stringResource(R.string.more_menu),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = overflowExpanded,
+                                onDismissRequest = { overflowExpanded = false },
+                            ) {
+                                // menu_add_replace_rule
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.add_replace_rule)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_add),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        editActivity.launch(ReplaceEditActivity.startIntent(this@ReplaceRuleActivity))
+                                    },
+                                )
+                                // menu_import_local
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.import_local)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_import),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        importDoc.launch {
+                                            mode = HandleFileContract.FILE
+                                            allowExtensions = arrayOf("txt", "json")
+                                        }
+                                    },
+                                )
+                                // menu_import_onLine
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.import_on_line)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_import),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        showImportDialog()
+                                    },
+                                )
+                                // menu_import_qr
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.import_by_qr_code)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_import),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        qrCodeResult.launch()
+                                    },
+                                )
+                                // menu_manual_replace_rule
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.manual_replace_rule)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_find_replace),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        Checkbox(
+                                            checked = manualReplaceRuleState,
+                                            onCheckedChange = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        val next = !manualReplaceRuleState
+                                        manualReplaceRuleState = next
+                                        AppConfig.manualReplaceRule = next
+                                        setResult(RESULT_OK)
+                                    },
+                                )
+                            }
+                        }
+                    },
+                )
+            },
+            bottomBar = {
+                LegadoSelectActionBar(
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
+                    selectedCount = selectedRules.size,
+                    totalCount = rulesState.size,
+                    onSelectAllChange = { selectAll ->
+                        selectedIdsState = if (selectAll) {
+                            rulesState.mapTo(linkedSetOf()) { it.id }
+                        } else {
+                            emptySet()
+                        }
+                    },
+                    onRevertSelection = {
+                        selectedIdsState = rulesState.mapNotNullTo(linkedSetOf()) {
+                            if (it.id in selectedIdsState) null else it.id
+                        }
+                    },
+                    mainActionText = stringResource(R.string.delete),
+                    onMainActionClick = {
+                        alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
+                            yesButton { viewModel.delSelection(selectedRules) }
+                            noButton()
+                        }
+                    },
+                    menuActions = listOf(
+                        LegadoMenuAction(
+                            title = stringResource(R.string.enable_selection),
+                            onClick = { viewModel.enableSelection(selectedRules) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.disable_selection),
+                            onClick = { viewModel.disableSelection(selectedRules) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.add_group),
+                            onClick = { selectionAddToGroups(selectedRules) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.remove_group),
+                            onClick = { selectionRemoveFromGroups(selectedRules) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.selection_to_top),
+                            onClick = { viewModel.topSelect(selectedRules) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.selection_to_bottom),
+                            onClick = { viewModel.bottomSelect(selectedRules) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.export_selection),
+                            onClick = {
+                                exportResult.launch {
+                                    mode = HandleFileContract.EXPORT
+                                    fileData = HandleFileContract.FileData(
+                                        "exportReplaceRule.json",
+                                        GSON.toJson(ReplacePreviewConfig.withSamples(selectedRules)).toByteArray(),
+                                        "application/json",
+                                    )
+                                }
+                            },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.share_selected_source),
+                            onClick = { shareSelection(selectedRules) },
+                        ),
+                    ),
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                items(
+                    items = rulesState,
+                    key = { it.id },
+                ) { item ->
+                    val isSelected = item.id in selectedIdsState
+                    var rowMenuExpanded by remember { mutableStateOf(false) }
 
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.queryHint = getString(R.string.replace_purify_search)
-        searchView.setOnQueryTextListener(this)
-    }
-
-    override fun selectAll(selectAll: Boolean) {
-        if (selectAll) {
-            adapter.selectAll()
-        } else {
-            adapter.revertSelection()
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedIdsState = if (isSelected) {
+                                        selectedIdsState - item.id
+                                    } else {
+                                        selectedIdsState + item.id
+                                    }
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { checked ->
+                                    selectedIdsState = if (checked) {
+                                        selectedIdsState + item.id
+                                    } else {
+                                        selectedIdsState - item.id
+                                    }
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = item.getDisplayNameGroup(),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Switch(
+                                checked = item.isEnabled,
+                                onCheckedChange = { checked ->
+                                    enable(checked, item)
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(
+                                onClick = { edit(item) },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_edit),
+                                    contentDescription = stringResource(R.string.edit),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Box {
+                                IconButton(
+                                    onClick = { rowMenuExpanded = true },
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_more_vert),
+                                        contentDescription = stringResource(R.string.more_menu),
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = rowMenuExpanded,
+                                    onDismissRequest = { rowMenuExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.to_top)) },
+                                        onClick = {
+                                            rowMenuExpanded = false
+                                            toTop(item)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.to_bottom)) },
+                                        onClick = {
+                                            rowMenuExpanded = false
+                                            toBottom(item)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = stringResource(R.string.delete),
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        },
+                                        onClick = {
+                                            rowMenuExpanded = false
+                                            delete(item)
+                                            selectedIdsState = selectedIdsState - item.id
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    }
+                }
+            }
         }
     }
 
-    override fun revertSelection() {
-        adapter.revertSelection()
-    }
-
-    override fun onClickSelectBarMainAction() {
-        alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
-            yesButton { viewModel.delSelection(adapter.selection) }
-            noButton()
-        }
-    }
-
-    private fun initSelectActionView() {
-        binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.inflateMenu(R.menu.replace_rule_sel)
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
+    private fun updateSearchQuery(query: String) {
+        searchQueryState = query
+        observeReplaceRuleData(query)
     }
 
     private fun observeReplaceRuleData(searchKey: String? = null) {
@@ -219,98 +540,28 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
                 }
             }.catch {
                 AppLog.put("替换规则管理界面更新数据出错", it)
-            }.flowOn(IO).conflate().collect {
+            }.flowOn(IO).conflate().collect { list ->
                 if (dataInit) {
                     setResult(RESULT_OK)
                 }
-                adapter.setItems(it, adapter.diffItemCallBack)
+                rulesState = list
+                val validIds = list.mapTo(hashSetOf()) { it.id }
+                selectedIdsState = selectedIdsState.intersect(validIds)
                 dataInit = true
                 delay(100)
             }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        adapter.upResumed(true)
-    }
-
-    override fun onPause() {
-        adapter.upResumed(false)
-        super.onPause()
-    }
-
     private fun observeGroupData() {
         lifecycleScope.launch {
             appDb.replaceRuleDao.flowGroups().collect {
-                groups.clear()
-                groups.addAll(it)
-                upGroupMenu()
+                groupsState = it
             }
         }
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add_replace_rule ->
-                editActivity.launch(ReplaceEditActivity.startIntent(this))
-
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_manual_replace_rule -> {
-                AppConfig.manualReplaceRule = !AppConfig.manualReplaceRule
-                item.isChecked = AppConfig.manualReplaceRule
-                setResult(RESULT_OK)
-                invalidateOptionsMenu()
-            }
-            R.id.menu_enabled_group -> {
-                searchView.setQuery(getString(R.string.enabled), true)
-            }
-
-            R.id.menu_disabled_group -> {
-                searchView.setQuery(getString(R.string.disabled), true)
-            }
-            R.id.menu_del_selection -> viewModel.delSelection(adapter.selection)
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_group_null -> {
-                searchView.setQuery(getString(R.string.no_group), true)
-            }
-
-            else -> if (item.groupId == R.id.replace_group) {
-                searchView.setQuery("group:${item.title}", true)
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_enable_selection -> viewModel.enableSelection(adapter.selection)
-            R.id.menu_disable_selection -> viewModel.disableSelection(adapter.selection)
-            R.id.menu_add_group -> selectionAddToGroups()
-            R.id.menu_remove_group -> selectionRemoveFromGroups()
-            R.id.menu_top_sel -> viewModel.topSelect(adapter.selection)
-            R.id.menu_bottom_sel -> viewModel.bottomSelect(adapter.selection)
-            R.id.menu_share_source -> shareSelection()
-            R.id.menu_export_selection -> exportResult.launch {
-                mode = HandleFileContract.EXPORT
-                fileData = HandleFileContract.FileData(
-                    "exportReplaceRule.json",
-                    GSON.toJson(ReplacePreviewConfig.withSamples(adapter.selection)).toByteArray(),
-                    "application/json"
-                )
-            }
-        }
-        return false
-    }
-
-    private fun shareSelection() {
-        val rules = adapter.selection.toList()
+    private fun shareSelection(rules: List<ReplaceRule>) {
         if (rules.isEmpty()) return
         viewModel.execute(scope = lifecycleScope) {
             File.createTempFile("replaceRule_", ".json", cacheDir).apply {
@@ -324,18 +575,18 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
 
     @SuppressLint("InflateParams")
-    private fun selectionAddToGroups() {
+    private fun selectionAddToGroups(selectedRules: List<ReplaceRule>) {
         alert(titleResource = R.string.add_group) {
             val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                 editView.setHint(R.string.group_name)
-                editView.setFilterValues(groups.toList())
+                editView.setFilterValues(groupsState)
                 editView.dropDownHeight = 180.dpToPx()
             }
             customView { alertBinding.root }
             okButton {
                 alertBinding.editView.text?.toString()?.let {
                     if (it.isNotEmpty()) {
-                        viewModel.selectionAddToGroups(adapter.selection, it)
+                        viewModel.selectionAddToGroups(selectedRules, it)
                     }
                 }
             }
@@ -344,29 +595,22 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
 
     @SuppressLint("InflateParams")
-    private fun selectionRemoveFromGroups() {
+    private fun selectionRemoveFromGroups(selectedRules: List<ReplaceRule>) {
         alert(titleResource = R.string.remove_group) {
             val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                 editView.setHint(R.string.group_name)
-                editView.setFilterValues(groups.toList())
+                editView.setFilterValues(groupsState)
                 editView.dropDownHeight = 180.dpToPx()
             }
             customView { alertBinding.root }
             okButton {
                 alertBinding.editView.text?.toString()?.let {
                     if (it.isNotEmpty()) {
-                        viewModel.selectionRemoveFromGroups(adapter.selection, it)
+                        viewModel.selectionRemoveFromGroups(selectedRules, it)
                     }
                 }
             }
             cancelButton()
-        }
-    }
-
-    private fun upGroupMenu() = groupMenu?.transaction { menu ->
-        menu.removeGroup(R.id.replace_group)
-        groups.forEach {
-            menu.add(R.id.replace_group, Menu.NONE, Menu.NONE, it)
         }
     }
 
@@ -403,33 +647,17 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
         }
     }
 
-    override fun onQueryTextChange(newText: String?): Boolean {
-        observeReplaceRuleData(newText)
-        return false
-    }
-
-    override fun onQueryTextSubmit(query: String?): Boolean {
-        return false
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         Coroutine.async { ContentProcessor.upReplaceRules() }
     }
 
-    override fun upCountView() {
-        binding.selectActionBar.upCountView(
-            adapter.selection.size,
-            adapter.itemCount
-        )
-    }
-
-    override fun enable(enable: Boolean, rule: ReplaceRule) {
+    private fun enable(enable: Boolean, rule: ReplaceRule) {
         setResult(RESULT_OK)
         viewModel.enable(rule.id, enable)
     }
 
-    override fun delete(rule: ReplaceRule) {
+    private fun delete(rule: ReplaceRule) {
         alert(R.string.draw) {
             setMessage(getString(R.string.sure_del) + "\n" + rule.name)
             noButton()
@@ -440,25 +668,19 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
         }
     }
 
-    override fun edit(rule: ReplaceRule) {
+    private fun edit(rule: ReplaceRule) {
         setResult(RESULT_OK)
         editActivity.launch(ReplaceEditActivity.startIntent(this, rule.id))
     }
 
-    override fun toTop(rule: ReplaceRule) {
+    private fun toTop(rule: ReplaceRule) {
         setResult(RESULT_OK)
         viewModel.toTop(rule)
     }
 
-    override fun toBottom(rule: ReplaceRule) {
+    private fun toBottom(rule: ReplaceRule) {
         setResult(RESULT_OK)
         viewModel.toBottom(rule)
     }
 
-    override fun move(ruleId: Long, targetId: Long, after: Boolean, onFinally: () -> Unit) {
-        setResult(RESULT_OK)
-        viewModel.move(ruleId, targetId, after, onFinally)
-    }
-
-    override fun reload() = observeReplaceRuleData(searchView.query.toString())
 }

@@ -29,7 +29,7 @@ import kotlin.coroutines.CoroutineContext
 
 
 abstract class BaseDialogFragment(
-    @LayoutRes layoutID: Int,
+    @LayoutRes layoutID: Int = 0,
     private val adaptationSoftKeyboard: Boolean = false
 ) : DialogFragment(layoutID) {
 
@@ -91,7 +91,7 @@ abstract class BaseDialogFragment(
         observeLiveBus()
     }
 
-    abstract fun onFragmentCreated(view: View, savedInstanceState: Bundle?)
+    open fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
 
     override fun show(manager: FragmentManager, tag: String?) {
         if (showRequested || isAdded) return

@@ -4,34 +4,58 @@ import android.app.Activity.RESULT_OK
 import android.app.Application
 import android.content.Intent
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.DictRule
-import io.legado.app.databinding.DialogDictRuleEditBinding
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.ui.widget.code.addJsPattern
-import io.legado.app.ui.widget.code.addJsonPattern
-import io.legado.app.ui.widget.code.addLegadoPattern
-import io.legado.app.utils.*
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTopAppBar
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.getClipText
+import io.legado.app.utils.sendToClip
+import io.legado.app.utils.setLayout
+import io.legado.app.utils.toastOnUi
 
-class DictRuleEditDialog() : BaseDialogFragment(R.layout.dialog_dict_rule_edit, true),
-    Toolbar.OnMenuItemClickListener {
+class DictRuleEditDialog() : BaseDialogFragment(adaptationSoftKeyboard = true) {
 
     val viewModel by viewModels<DictRuleEditViewModel>()
-    val binding by viewBinding(DialogDictRuleEditBinding::bind)
-    private var focusedEditText: EditText? = null
+
+    private var nameState by mutableStateOf("")
+    private var urlRuleState by mutableStateOf("")
+    private var showRuleState by mutableStateOf("")
+    private var focusedFieldState by mutableStateOf<String?>(null)
 
     constructor(name: String) : this() {
         arguments = Bundle().apply {
@@ -41,90 +65,158 @@ class DictRuleEditDialog() : BaseDialogFragment(R.layout.dialog_dict_rule_edit, 
 
     override fun onStart() {
         super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.inflateMenu(R.menu.dict_rule_edit)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
+    private val textEditLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                val edited = result.data?.getStringExtra("text") ?: return@registerForActivityResult
+                when (focusedFieldState) {
+                    "name" -> nameState = edited
+                    "urlRule" -> urlRuleState = edited
+                    "showRule" -> showRuleState = edited
+                    else -> toastOnUi(R.string.focus_lost_on_textbox)
+                }
+            }
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
         viewModel.initData(arguments?.getString("name")) {
             upRuleView(viewModel.dictRule)
         }
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    Surface(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .widthIn(max = 560.dp)
+                            .fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 6.dp,
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            LegadoTopAppBar(
+                                title = stringResource(R.string.dict_rule),
+                                menuActions = listOf(
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.edit_content),
+                                        iconRes = R.drawable.ic_code,
+                                        showAsAction = true,
+                                        onClick = ::onFullEditClicked,
+                                    ),
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.action_save),
+                                        iconRes = R.drawable.ic_save,
+                                        showAsAction = true,
+                                        onClick = {
+                                            viewModel.save(getDictRule()) {
+                                                dismissAllowingStateLoss()
+                                            }
+                                        },
+                                    ),
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.copy_rule),
+                                        onClick = { viewModel.copyRule(getDictRule()) },
+                                    ),
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.paste_rule),
+                                        onClick = {
+                                            viewModel.pasteRule { upRuleView(it) }
+                                        },
+                                    ),
+                                ),
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                OutlinedTextField(
+                                    value = nameState,
+                                    onValueChange = { nameState = it },
+                                    label = { Text(stringResource(R.string.name)) },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onFocusChanged { if (it.isFocused) focusedFieldState = "name" },
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedTextField(
+                                    value = urlRuleState,
+                                    onValueChange = { urlRuleState = it },
+                                    label = { Text(stringResource(R.string.url_rule)) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onFocusChanged { if (it.isFocused) focusedFieldState = "urlRule" },
+                                    maxLines = 4,
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedTextField(
+                                    value = showRuleState,
+                                    onValueChange = { showRuleState = it },
+                                    label = { Text(stringResource(R.string.show_rule)) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onFocusChanged { if (it.isFocused) focusedFieldState = "showRule" },
+                                    minLines = 3,
+                                    maxLines = 8,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val view = focusedEditText
-            if (view == null) {
-                toastOnUi(R.string.focus_lost_on_textbox)
-                return@registerForActivityResult
-            }
-            view.requestFocus()
-            result.data?.getStringExtra("text")?.let {
-                view.setText(it)
-            }
-            result.data?.getIntExtra("cursorPosition", -1)?.takeIf { it in 0 ..< view.text.length }?.let {
-                view.setSelection(it)
-            }
-        }
-    }
     private fun onFullEditClicked() {
-        val view = dialog?.window?.decorView?.findFocus()
-        if (view is EditText) {
-            val hint = findParentTextInputLayout(view)?.hint?.toString()
-            focusedEditText = view
-            val currentText = view.text.toString()
-            val intent = Intent(requireActivity(), CodeEditActivity::class.java).apply {
-                putExtra("text", currentText)
-                putExtra("title", hint)
-                putExtra("cursorPosition", view.selectionStart)
-            }
-            textEditLauncher.launch(intent)
-        }
-        else {
+        val field = focusedFieldState
+        if (field == null) {
             toastOnUi(R.string.please_focus_cursor_on_textbox)
+            return
         }
-    }
-    override fun onMenuItemClick(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_fullscreen_edit -> onFullEditClicked()
-            R.id.menu_save -> viewModel.save(getDictRule()) {
-                dismissAllowingStateLoss()
-            }
-            R.id.menu_copy_rule -> viewModel.copyRule(getDictRule())
-            R.id.menu_paste_rule -> viewModel.pasteRule {
-                upRuleView(it)
-            }
+        val (title, currentText) = when (field) {
+            "name" -> getString(R.string.name) to nameState
+            "urlRule" -> getString(R.string.url_rule) to urlRuleState
+            "showRule" -> getString(R.string.show_rule) to showRuleState
+            else -> return
         }
-        return true
+        val intent = Intent(requireActivity(), CodeEditActivity::class.java).apply {
+            putExtra("text", currentText)
+            putExtra("title", title)
+            putExtra("cursorPosition", currentText.length)
+        }
+        textEditLauncher.launch(intent)
     }
 
     private fun upRuleView(dictRule: DictRule?) {
-        binding.tvRuleName.setText(dictRule?.name)
-        binding.tvUrlRule.setText(dictRule?.urlRule)
-        binding.tvShowRule.apply{
-            addLegadoPattern()
-            addJsonPattern()
-            addJsPattern()
-            setText(dictRule?.showRule)
-        }
+        nameState = dictRule?.name.orEmpty()
+        urlRuleState = dictRule?.urlRule.orEmpty()
+        showRuleState = dictRule?.showRule.orEmpty()
     }
 
     private fun getDictRule(): DictRule {
         val dictRule = viewModel.dictRule?.copy() ?: DictRule()
-        dictRule.name = binding.tvRuleName.text.toString()
-        dictRule.urlRule = binding.tvUrlRule.text.toString()
-        dictRule.showRule = binding.tvShowRule.text.toString()
+        dictRule.name = nameState
+        dictRule.urlRule = urlRuleState
+        dictRule.showRule = showRuleState
         return dictRule
     }
 
-    private fun isSame(): Boolean{
-        val dictRule = viewModel.dictRule ?: return binding.tvRuleName.text.toString().isEmpty()
-        return dictRule.name == binding.tvRuleName.text.toString() &&
-        dictRule.urlRule == binding.tvUrlRule.text.toString() &&
-        dictRule.showRule == binding.tvShowRule.text.toString()
+    private fun isSame(): Boolean {
+        val dictRule = viewModel.dictRule ?: return nameState.isEmpty()
+        return dictRule.name == nameState &&
+            dictRule.urlRule == urlRuleState &&
+            dictRule.showRule == showRuleState
     }
 
     override fun dismiss() {

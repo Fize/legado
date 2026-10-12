@@ -8,24 +8,24 @@ import java.io.File
 class FileManagePopupActionMigrationTest {
 
     @Test
-    fun `file deletion uses the shared vertical popup action menu`() {
+    fun `file deletion uses the Compose dropdown menu with error styling`() {
         val source = readProjectFile(FILE_MANAGE)
 
         assertFalse(source.contains("import android.widget.PopupMenu"))
         assertFalse(source.contains("PopupMenu(context, view)"))
-        assertContains(source, "popupActionMenu(context)")
-        assertContains(source, "item(context.getString(R.string.delete), \"delete\")")
-        assertContains(source, "danger(\"delete\")")
-        assertContains(source, "\"delete\" -> viewModel.delFile(file)")
+        assertContains(source, "DropdownMenu(")
+        assertContains(source, "stringResource(R.string.delete)")
+        assertContains(source, "color = MaterialTheme.colorScheme.error")
+        assertContains(source, "viewModel.delFile(item)")
     }
 
     @Test
     fun `parent directory remains excluded from the deletion menu`() {
         val source = readProjectFile(FILE_MANAGE)
-        val longClick = source.indexOf("binding.root.setOnLongClickListener")
+        val longClick = source.indexOf("onLongClick = {")
         val guard = source.indexOf("if (item == viewModel.lastDir)", longClick + 1)
-        val guardReturn = source.indexOf("return@setOnLongClickListener true", guard + 1)
-        val menu = source.indexOf("showFileMenu(view, item)", guard + 1)
+        val guardReturn = source.indexOf("return@combinedClickable", guard + 1)
+        val menu = source.indexOf("menuExpanded = true", guard + 1)
 
         assertTrue("file rows should define a long-click listener", longClick >= 0)
         assertTrue("parent directory guard should remain before the menu call", guard >= 0)

@@ -1,63 +1,65 @@
 package io.legado.app.ui.file
 
-import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppConst
-import io.legado.app.databinding.ActivityFileManageBinding
-import io.legado.app.databinding.ItemFileBinding
-import io.legado.app.databinding.ItemPathPickerBinding
-import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.utils.FilePickerIcon
-import io.legado.app.ui.widget.popupActionMenu
-import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ConvertUtils
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.openFileUri
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.io.File
 
-class FileManageActivity : VMBaseActivity<ActivityFileManageBinding, FileManageViewModel>() {
+class FileManageActivity : VMBaseComposeActivity<FileManageViewModel>() {
 
-    override val binding by viewBinding(ActivityFileManageBinding::inflate)
     override val viewModel by viewModels<FileManageViewModel>()
     private val dirParent = ".."
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
-    private val pathAdapter by lazy {
-        PathAdapter()
-    }
-    private val fileAdapter by lazy {
-        FileAdapter()
-    }
-    private val currentFiles = arrayListOf<File>()
+
+    private var currentFilesState by mutableStateOf<List<File>>(emptyList())
+    private var subDocsState by mutableStateOf<List<File>>(emptyList())
+    private var searchQueryState by mutableStateOf("")
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initView()
-        initSearchView()
-        viewModel.upFiles(viewModel.rootDoc)
-    }
-
-    private fun initView() {
-        binding.rvPath.layoutManager = LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
-        binding.rvPath.adapter = pathAdapter
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.addItemDecoration(VerticalDivider(this))
-        binding.recyclerView.adapter = fileAdapter
-        binding.recyclerView.applyNavigationBarPadding()
         onBackPressedDispatcher.addCallback(this) {
             if (viewModel.lastDir != viewModel.rootDoc) {
                 gotoLastDir()
@@ -65,167 +67,200 @@ class FileManageActivity : VMBaseActivity<ActivityFileManageBinding, FileManageV
             }
             finish()
         }
+        viewModel.upFiles(viewModel.rootDoc)
     }
 
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.queryHint = getString(R.string.screen) + " • " + getString(R.string.file_manage)
-        searchView.isSubmitButtonEnabled = true
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                updateFiles()
-                return false
-            }
-        })
-    }
-
-    private fun updateFiles() {
-        if (searchView.query.isNotEmpty()) {
-            currentFiles.filter {
-                it.name == dirParent || it.name.contains(searchView.query)
-            }.let {
-                fileAdapter.setItems(it)
-            }
-        } else {
-            fileAdapter.setItems(currentFiles)
+    override fun observeLiveBus() {
+        viewModel.filesLiveData.observe(this) {
+            searchQueryState = ""
+            currentFilesState = it
+            subDocsState = viewModel.subDocs.toList()
         }
     }
 
     private fun gotoLastDir() {
         viewModel.subDocs.removeLastOrNull()
-        pathAdapter.setItems(viewModel.subDocs)
+        subDocsState = viewModel.subDocs.toList()
         viewModel.upFiles(viewModel.lastDir)
     }
 
-    override fun observeLiveBus() {
-        viewModel.filesLiveData.observe(this) {
-            searchView.setQuery("", false)
-            currentFiles.clear()
-            currentFiles.addAll(it)
-            updateFiles()
-        }
-    }
+    @OptIn(ExperimentalFoundationApi::class)
+    @Composable
+    override fun Content() {
+        val arrowBitmap = remember { ConvertUtils.toBitmap(FilePickerIcon.getArrow())!!.asImageBitmap() }
+        val upBitmap = remember { ConvertUtils.toBitmap(FilePickerIcon.getUpDir())!!.asImageBitmap() }
+        val folderBitmap = remember { ConvertUtils.toBitmap(FilePickerIcon.getFolder())!!.asImageBitmap() }
+        val fileBitmap = remember { ConvertUtils.toBitmap(FilePickerIcon.getFile())!!.asImageBitmap() }
 
-    @SuppressLint("SetTextI18n")
-    inner class PathAdapter :
-        RecyclerAdapter<File, ItemPathPickerBinding>(this@FileManageActivity) {
-
-        private val arrowIcon = ConvertUtils.toDrawable(FilePickerIcon.getArrow())
-
-        init {
-            addHeaderView {
-                ItemPathPickerBinding.inflate(inflater, it, false).apply {
-                    textView.text = "root"
-                    imageView.setImageDrawable(arrowIcon)
-                    root.setOnClickListener {
-                        viewModel.subDocs.clear()
-                        setItems(viewModel.subDocs)
-                        viewModel.upFiles(viewModel.rootDoc)
-                    }
+        val displayedFiles = remember(currentFilesState, searchQueryState) {
+            if (searchQueryState.isNotEmpty()) {
+                currentFilesState.filter {
+                    it.name == dirParent || it.name.contains(searchQueryState)
                 }
-            }
-        }
-
-        override fun getViewBinding(parent: ViewGroup): ItemPathPickerBinding {
-            return ItemPathPickerBinding.inflate(inflater, parent, false).apply {
-                imageView.setImageDrawable(arrowIcon)
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemPathPickerBinding) {
-            binding.root.setOnClickListener {
-                viewModel.subDocs = viewModel.subDocs.subList(0, holder.layoutPosition)
-                setItems(viewModel.subDocs)
-                viewModel.upFiles(viewModel.subDocs.lastOrNull())
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemPathPickerBinding,
-            item: File,
-            payloads: MutableList<Any>
-        ) {
-            binding.textView.text = item.name
-        }
-
-    }
-
-    inner class FileAdapter : RecyclerAdapter<File, ItemFileBinding>(this@FileManageActivity) {
-        private val upIcon = ConvertUtils.toDrawable(FilePickerIcon.getUpDir())!!
-        private val folderIcon = ConvertUtils.toDrawable(FilePickerIcon.getFolder())!!
-        private val fileIcon = ConvertUtils.toDrawable(FilePickerIcon.getFile())!!
-
-        override fun getViewBinding(parent: ViewGroup): ItemFileBinding {
-            return ItemFileBinding.inflate(inflater, parent, false)
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemFileBinding) {
-            binding.root.setOnClickListener {
-                val item = getItemByLayoutPosition(holder.layoutPosition)
-                item?.let {
-                    if (item == viewModel.lastDir) {
-                        gotoLastDir()
-                    } else if (item.isDirectory) {
-                        viewModel.subDocs.add(item)
-                        pathAdapter.setItems(viewModel.subDocs)
-                        viewModel.upFiles(item)
-                    } else {
-                        openFileUri(
-                            FileProvider.getUriForFile(
-                                this@FileManageActivity,
-                                AppConst.authority,
-                                item
-                            )
-                        )
-                    }
-                }
-            }
-            binding.root.setOnLongClickListener { view ->
-                val item = getItemByLayoutPosition(holder.layoutPosition)
-                if (item == viewModel.lastDir) {
-                    return@setOnLongClickListener true
-                }
-                item?.let {
-                    showFileMenu(view, item)
-                }
-                return@setOnLongClickListener true
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemFileBinding,
-            item: File,
-            payloads: MutableList<Any>
-        ) {
-            if (item == viewModel.lastDir) {
-                binding.imageView.setImageDrawable(upIcon)
-                binding.textView.text = dirParent
-            } else if (item.isDirectory) {
-                binding.imageView.setImageDrawable(folderIcon)
-                binding.textView.text = item.name
             } else {
-                binding.imageView.setImageDrawable(fileIcon)
-                binding.textView.text = item.name
+                currentFilesState
             }
         }
 
-        private fun showFileMenu(view: View, file: File) {
-            popupActionMenu(context) {
-                item(context.getString(R.string.delete), "delete")
-                danger("delete")
-            }.show(view) { action ->
-                when (action) {
-                    "delete" -> viewModel.delFile(file)
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.file_manage),
+                    onBack = { finish() },
+                    searchQuery = searchQueryState,
+                    onSearchQueryChange = { searchQueryState = it },
+                    searchPlaceholder = stringResource(R.string.screen) + " • " + stringResource(R.string.file_manage),
+                )
+            },
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .windowInsetsPadding(WindowInsets.navigationBars),
+            ) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    item(key = "root_breadcrumb") {
+                        Row(
+                            modifier = Modifier
+                                .clickable {
+                                    viewModel.subDocs.clear()
+                                    subDocsState = emptyList()
+                                    viewModel.upFiles(viewModel.rootDoc)
+                                }
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "root",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Image(
+                                bitmap = arrowBitmap,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                    itemsIndexed(
+                        items = subDocsState,
+                        key = { _, file -> file.absolutePath },
+                    ) { index, file ->
+                        Row(
+                            modifier = Modifier
+                                .clickable {
+                                    viewModel.subDocs = viewModel.subDocs.subList(0, index + 1)
+                                    subDocsState = viewModel.subDocs.toList()
+                                    viewModel.upFiles(viewModel.subDocs.lastOrNull())
+                                }
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = file.name,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Image(
+                                bitmap = arrowBitmap,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(
+                        items = displayedFiles,
+                        key = { "${it.absolutePath}_${it == viewModel.lastDir}" },
+                    ) { item ->
+                        var menuExpanded by remember { mutableStateOf(false) }
+                        val isParentEntry = item == viewModel.lastDir
+
+                        Box {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {
+                                            if (item == viewModel.lastDir) {
+                                                gotoLastDir()
+                                            } else if (item.isDirectory) {
+                                                viewModel.subDocs.add(item)
+                                                subDocsState = viewModel.subDocs.toList()
+                                                viewModel.upFiles(item)
+                                            } else {
+                                                openFileUri(
+                                                    FileProvider.getUriForFile(
+                                                        this@FileManageActivity,
+                                                        AppConst.authority,
+                                                        item,
+                                                    )
+                                                )
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (item == viewModel.lastDir) {
+                                                return@combinedClickable
+                                            }
+                                            menuExpanded = true
+                                        },
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                val iconBitmap = when {
+                                    isParentEntry -> upBitmap
+                                    item.isDirectory -> folderBitmap
+                                    else -> fileBitmap
+                                }
+                                Image(
+                                    bitmap = iconBitmap,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (isParentEntry) dirParent else item.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = stringResource(R.string.delete),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.delFile(item)
+                                    },
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    }
                 }
             }
         }
-
     }
 
 }

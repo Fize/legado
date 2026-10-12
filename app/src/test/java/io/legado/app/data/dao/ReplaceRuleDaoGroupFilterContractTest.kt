@@ -61,7 +61,7 @@ class ReplaceRuleDaoGroupFilterContractTest {
         assertTrue(activitySource.contains("replaceRuleDao.flowGroupSearch(groupName)"))
         assertFalse(activitySource.contains("flowGroupSearch(\"%"))
         assertTrue(
-            activitySource.contains("searchView.setQuery(\"group:\${item.title}\", true)")
+            activitySource.contains("updateSearchQuery(\"group:\$group\")")
         )
     }
 

@@ -57,6 +57,16 @@ class SelectActionBarPopupActionMigrationTest {
         expectedMenuIds.forEach { (path, expected) ->
             assertEquals(path, expected, readMenuItemIds(path))
         }
+        expectedComposeMenuLabels.forEach { (path, expected) ->
+            val source = readProjectFile(path)
+                .substringAfter("LegadoSelectActionBar(")
+            var previous = -1
+            expected.forEach { snippet ->
+                val current = source.indexOf(snippet, previous + 1)
+                assertTrue("$path should contain $snippet in order", current > previous)
+                previous = current
+            }
+        }
     }
 
     @Test
@@ -125,28 +135,31 @@ class SelectActionBarPopupActionMigrationTest {
                 "@+id/menu_check_source",
                 "@+id/menu_check_selected_interval"
             ),
-            "txt_toc_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
+        )
+
+        val expectedComposeMenuLabels = mapOf(
+            "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleActivity.kt" to listOf(
+                "R.string.enable_selection",
+                "R.string.disable_selection",
+                "R.string.export_selection",
+                "R.string.share_selected_source"
             ),
-            "dict_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
+            "src/main/java/io/legado/app/ui/dict/rule/DictRuleActivity.kt" to listOf(
+                "R.string.enable_selection",
+                "R.string.disable_selection",
+                "R.string.export_selection",
+                "R.string.share_selected_source"
             ),
-            "replace_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_add_group",
-                "@+id/menu_remove_group",
-                "@+id/menu_top_sel",
-                "@+id/menu_bottom_sel",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
-            )
+            "src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt" to listOf(
+                "R.string.enable_selection",
+                "R.string.disable_selection",
+                "R.string.add_group",
+                "R.string.remove_group",
+                "R.string.selection_to_top",
+                "R.string.selection_to_bottom",
+                "R.string.export_selection",
+                "R.string.share_selected_source"
+            ),
         )
     }
 }

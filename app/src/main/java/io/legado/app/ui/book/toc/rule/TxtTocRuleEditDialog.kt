@@ -2,10 +2,30 @@ package io.legado.app.ui.book.toc.rule
 
 import android.app.Application
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
@@ -13,21 +33,23 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
-import io.legado.app.databinding.DialogTocRegexEditBinding
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.widget.code.addJsPattern
-import io.legado.app.ui.widget.code.addJsonPattern
-import io.legado.app.utils.*
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTopAppBar
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.getClipText
+import io.legado.app.utils.printOnDebug
+import io.legado.app.utils.sendToClip
+import io.legado.app.utils.setLayout
+import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import java.util.regex.Pattern
 import java.util.regex.PatternSyntaxException
-import kotlin.toString
 
-class TxtTocRuleEditDialog() : BaseDialogFragment(R.layout.dialog_toc_regex_edit, true),
-    Toolbar.OnMenuItemClickListener {
+class TxtTocRuleEditDialog() : BaseDialogFragment(adaptationSoftKeyboard = true) {
 
     constructor(id: Long?) : this() {
         id ?: return
@@ -36,44 +58,114 @@ class TxtTocRuleEditDialog() : BaseDialogFragment(R.layout.dialog_toc_regex_edit
         }
     }
 
-    private val binding by viewBinding(DialogTocRegexEditBinding::bind)
     private val viewModel by viewModels<ViewModel>()
     private val callback get() = (parentFragment as? Callback) ?: activity as? Callback
 
+    private var nameState by mutableStateOf("")
+    private var ruleRegexState by mutableStateOf("")
+    private var replacementState by mutableStateOf("")
+    private var exampleState by mutableStateOf("")
+
     override fun onStart() {
         super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        initMenu()
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
         viewModel.initData(arguments?.getLong("id")) {
             upRuleView(it)
         }
-    }
-
-    private fun initMenu() {
-        binding.toolBar.inflateMenu(R.menu.txt_toc_rule_edit)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_save -> {
-                val tocRule = getRuleFromView()
-                if (checkValid(tocRule)) {
-                    callback?.saveTxtTocRule(tocRule)
-                    dismissAllowingStateLoss()
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    Surface(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .widthIn(max = 560.dp)
+                            .fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 6.dp,
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            LegadoTopAppBar(
+                                title = stringResource(R.string.txt_toc_rule),
+                                menuActions = listOf(
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.action_save),
+                                        iconRes = R.drawable.ic_save,
+                                        showAsAction = true,
+                                        onClick = {
+                                            val tocRule = getRuleFromView()
+                                            if (checkValid(tocRule)) {
+                                                callback?.saveTxtTocRule(tocRule)
+                                                dismissAllowingStateLoss()
+                                            }
+                                        },
+                                    ),
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.copy_rule),
+                                        onClick = {
+                                            context?.sendToClip(GSON.toJson(getRuleFromView()))
+                                        },
+                                    ),
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.paste_rule),
+                                        onClick = {
+                                            viewModel.pasteRule { upRuleView(it) }
+                                        },
+                                    ),
+                                ),
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                OutlinedTextField(
+                                    value = nameState,
+                                    onValueChange = { nameState = it },
+                                    label = { Text(stringResource(R.string.name)) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedTextField(
+                                    value = ruleRegexState,
+                                    onValueChange = { ruleRegexState = it },
+                                    label = { Text(stringResource(R.string.regex)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 4,
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedTextField(
+                                    value = replacementState,
+                                    onValueChange = { replacementState = it },
+                                    label = { Text(stringResource(R.string.replace_to_js)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 2,
+                                    maxLines = 6,
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedTextField(
+                                    value = exampleState,
+                                    onValueChange = { exampleState = it },
+                                    label = { Text(stringResource(R.string.example)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 4,
+                                )
+                            }
+                        }
+                    }
                 }
             }
-            R.id.menu_copy_rule -> context?.sendToClip(GSON.toJson(getRuleFromView()))
-            R.id.menu_paste_rule -> viewModel.pasteRule {
-                upRuleView(it)
-            }
         }
-        return true
     }
 
     private fun checkValid(tocRule: TxtTocRule): Boolean {
@@ -93,37 +185,29 @@ class TxtTocRuleEditDialog() : BaseDialogFragment(R.layout.dialog_toc_regex_edit
     }
 
     private fun upRuleView(tocRule: TxtTocRule?) {
-        binding.tvRuleName.setText(tocRule?.name)
-        binding.tvRuleRegex.setText(tocRule?.rule)
-        binding.tvRuleReplacement.apply{
-            addJsonPattern()
-            addJsPattern()
-            setText(tocRule?.replacement)
-        }
-        binding.tvRuleExample.setText(tocRule?.example)
+        nameState = tocRule?.name.orEmpty()
+        ruleRegexState = tocRule?.rule.orEmpty()
+        replacementState = tocRule?.replacement.orEmpty()
+        exampleState = tocRule?.example.orEmpty()
     }
 
     private fun getRuleFromView(): TxtTocRule {
         val tocRule = viewModel.tocRule ?: TxtTocRule().apply {
             viewModel.tocRule = this
         }
-        binding.run {
-            tocRule.name = tvRuleName.text.toString()
-            tocRule.rule = tvRuleRegex.text.toString()
-            tocRule.replacement = tvRuleReplacement.text.toString()
-            tocRule.example = tvRuleExample.text.toString()
-        }
+        tocRule.name = nameState
+        tocRule.rule = ruleRegexState
+        tocRule.replacement = replacementState
+        tocRule.example = exampleState
         return tocRule
     }
 
-    private fun isSame(): Boolean{
-        val tocRule = viewModel.tocRule ?: return binding.tvRuleName.text.toString().isEmpty()
-        return binding.run {
-            tocRule.name == tvRuleName.text.toString() &&
-            tocRule.rule == tvRuleRegex.text.toString() &&
-            tocRule.replacement == tvRuleReplacement.text.toString() &&
-            tocRule.example == tvRuleExample.text.toString()
-        }
+    private fun isSame(): Boolean {
+        val tocRule = viewModel.tocRule ?: return nameState.isEmpty()
+        return tocRule.name == nameState &&
+            tocRule.rule == ruleRegexState &&
+            tocRule.replacement.orEmpty() == replacementState &&
+            tocRule.example.orEmpty() == exampleState
     }
 
     override fun dismiss() {

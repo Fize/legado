@@ -1,77 +1,129 @@
 package io.legado.app.ui.replace
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.appDb
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemGroupManageBinding
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyTint
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTopAppBar
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.requestInputMethod
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
-
-class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
-    Toolbar.OnMenuItemClickListener {
+class GroupManageDialog : BaseDialogFragment() {
 
     private val viewModel: ReplaceRuleViewModel by activityViewModels()
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val adapter by lazy { GroupAdapter(requireContext()) }
+    private var groupsState by mutableStateOf<List<String>>(emptyList())
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, 0.9f)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        view.setBackgroundColor(backgroundColor)
-        initView()
-        initData()
-    }
-
-    private fun initView() = binding.run {
-        toolBar.setBackgroundColor(primaryColor)
-        toolBar.title = getString(R.string.group_manage)
-        toolBar.inflateMenu(R.menu.group_manage)
-        toolBar.menu.applyTint(requireContext())
-        toolBar.setOnMenuItemClickListener(this@GroupManageDialog)
-        recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        recyclerView.adapter = adapter
-    }
-
-    private fun initData() {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
         lifecycleScope.launch {
             appDb.replaceRuleDao.flowGroups().conflate().collect {
-                adapter.setItems(it)
+                groupsState = it
             }
         }
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_add -> addGroup()
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            LegadoTopAppBar(
+                                title = stringResource(R.string.group_manage),
+                                onBack = { dismiss() },
+                                menuActions = listOf(
+                                    LegadoMenuAction(
+                                        title = stringResource(R.string.add_group),
+                                        iconRes = R.drawable.ic_add,
+                                        showAsAction = true,
+                                        onClick = ::addGroup,
+                                    ),
+                                ),
+                            )
+                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                items(
+                                    items = groupsState,
+                                    key = { it },
+                                ) { group ->
+                                    Column {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = group,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            TextButton(onClick = { editGroup(group) }) {
+                                                Text(stringResource(R.string.edit))
+                                            }
+                                            TextButton(onClick = { viewModel.delGroup(group) }) {
+                                                Text(
+                                                    text = stringResource(R.string.delete),
+                                                    color = MaterialTheme.colorScheme.error,
+                                                )
+                                            }
+                                        }
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        return true
     }
 
     @SuppressLint("InflateParams")
@@ -105,40 +157,6 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
             }
             cancelButton()
         }.requestInputMethod()
-    }
-
-    private inner class GroupAdapter(context: Context) :
-        RecyclerAdapter<String, ItemGroupManageBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemGroupManageBinding {
-            return ItemGroupManageBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemGroupManageBinding,
-            item: String,
-            payloads: MutableList<Any>
-        ) {
-            binding.run {
-                root.setBackgroundColor(context.backgroundColor)
-                tvGroup.text = item
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemGroupManageBinding) {
-            binding.apply {
-                tvEdit.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let {
-                        editGroup(it)
-                    }
-                }
-
-                tvDel.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let { viewModel.delGroup(it) }
-                }
-            }
-        }
     }
 
 }

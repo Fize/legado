@@ -1,46 +1,71 @@
 package io.legado.app.ui.book.toc.rule
 
-import android.annotation.SuppressLint
-import android.content.Context
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.SearchView
-import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogTocRegexBinding
-import io.legado.app.databinding.ItemTocRegexBinding
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.ACache
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
@@ -50,8 +75,7 @@ import kotlinx.coroutines.launch
 /**
  * txt目录规则
  */
-class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
-    Toolbar.OnMenuItemClickListener,
+class TxtTocRuleDialog() : BaseDialogFragment(),
     TxtTocRuleEditDialog.Callback {
 
     constructor(tocRegex: String?) : this() {
@@ -62,14 +86,12 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
 
     private val importTocRuleKey = "tocRuleUrl"
     private val viewModel: TxtTocRuleViewModel by viewModels()
-    private val binding by viewBinding(DialogTocRegexBinding::bind)
-    private val adapter by lazy { TocRegexAdapter(requireContext()) }
-    var selectedName: String? = null
+    var selectedName: String? by mutableStateOf(null)
     private var durRegex: String? = null
-    private val searchView: SearchView by lazy { binding.root.findViewById(R.id.search_view) }
-    private lateinit var itemTouchCallback: ItemTouchCallback
-    private var allRules: List<TxtTocRule> = emptyList()
-    private var searchKey = ""
+    private var allRulesState by mutableStateOf<List<TxtTocRule>>(emptyList())
+    private var searchKeyState by mutableStateOf("")
+    private var showOnlineImportDialog by mutableStateOf(false)
+
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportTxtTocRuleDialog(it))
@@ -85,51 +107,21 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
         setLayout(0.9f, 0.8f)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
         durRegex = arguments?.getString("tocRegex")
-        binding.toolBar.setTitle(R.string.txt_toc_rule)
-        binding.toolBar.inflateMenu(R.menu.txt_toc_rule)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
-        initView()
-        initSearchView()
         initData()
-    }
-
-    private fun initView() = binding.run {
-        recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        recyclerView.adapter = adapter
-        itemTouchCallback = ItemTouchCallback(adapter)
-        itemTouchCallback.isCanDrag = true
-        ItemTouchHelper(itemTouchCallback).attachToRecyclerView(recyclerView)
-        tvCancel.setOnClickListener {
-            dismissAllowingStateLoss()
-        }
-        tvOk.setOnClickListener {
-            allRules.forEach { tocRule ->
-                if (selectedName == tocRule.name) {
-                    val callBack = activity as? CallBack
-                    callBack?.onTocRegexDialogResult(tocRule.rule + TextFile.spaceChars + tocRule.replacement)
-                    dismissAllowingStateLoss()
-                    return@setOnClickListener
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    DialogContent()
                 }
             }
         }
-    }
-
-    private fun initSearchView() {
-        binding.searchBar.setBackgroundColor(primaryColor)
-        searchView.applyTint(primaryTextColor)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean = false
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                searchKey = newText.orEmpty()
-                updateAdapter()
-                return true
-            }
-        })
     }
 
     private fun initData() {
@@ -137,26 +129,10 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
             appDb.txtTocRuleDao.observeAll().catch {
                 AppLog.put("TXT目录规则对话框获取数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect { tocRules ->
-                allRules = tocRules
+                allRulesState = tocRules
                 initSelectedName(tocRules)
-                updateAdapter()
             }
         }
-    }
-
-    private fun updateAdapter() {
-        itemTouchCallback.isCanDrag = searchKey.isBlank()
-        adapter.setItems(allRules.filterByKeyword(searchKey), adapter.diffItemCallBack)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        adapter.upResumed(true)
-    }
-
-    override fun onPause() {
-        adapter.upResumed(false)
-        super.onPause()
     }
 
     private fun initSelectedName(tocRules: List<TxtTocRule>) {
@@ -173,185 +149,256 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
         }
     }
 
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_add -> showDialogFragment(TxtTocRuleEditDialog())
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_import_default -> viewModel.importDefault()
-        }
-        return false
-    }
-
     override fun saveTxtTocRule(txtTocRule: TxtTocRule) {
         viewModel.save(txtTocRule)
     }
 
-    @SuppressLint("InflateParams")
-    private fun showImportDialog() {
-        val aCache = ACache.get(cacheDir = false)
-        val defaultUrl = "https://gitee.com/fisher52/YueDuJson/raw/master/myTxtChapterRule.json"
-        val cacheUrls: MutableList<String> = aCache
-            .getAsString(importTocRuleKey)
-            ?.splitNotBlank(",")
-            ?.toMutableList()
-            ?: mutableListOf()
-        if (!cacheUrls.contains(defaultUrl)) {
-            cacheUrls.add(0, defaultUrl)
-        }
-        requireContext().alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
-                    cacheUrls.remove(it)
-                    aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
-                }
-            }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
-                        aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
-                    }
-                    showDialogFragment(ImportTxtTocRuleDialog(it))
-                }
-            }
-            cancelButton()
-        }
-    }
-
-    inner class TocRegexAdapter(context: Context) :
-        RecyclerAdapter<TxtTocRule, ItemTocRegexBinding>(context),
-        ItemTouchCallback.Callback {
-
-        val diffItemCallBack = object : DiffUtil.ItemCallback<TxtTocRule>() {
-
-            override fun areItemsTheSame(oldItem: TxtTocRule, newItem: TxtTocRule): Boolean {
-                return oldItem.id == newItem.id
-            }
-
-            override fun areContentsTheSame(oldItem: TxtTocRule, newItem: TxtTocRule): Boolean {
-                if (oldItem.name != newItem.name) {
-                    return false
-                }
-                if (oldItem.enable != newItem.enable) {
-                    return false
-                }
-                if (oldItem.example != newItem.example) {
-                    return false
-                }
-                return true
-            }
-
-            override fun getChangePayload(oldItem: TxtTocRule, newItem: TxtTocRule): Any? {
-                val payload = Bundle()
-                if (oldItem.name != newItem.name) {
-                    payload.putBoolean("upName", true)
-                }
-                if (oldItem.enable != newItem.enable) {
-                    payload.putBoolean("enabled", newItem.enable)
-                }
-                if (oldItem.example != newItem.example) {
-                    payload.putBoolean("upExample", true)
-                }
-                if (payload.isEmpty) {
-                    return null
-                }
-                return payload
-            }
+    @Composable
+    private fun DialogContent() {
+        val displayedRules = remember(allRulesState, searchKeyState) {
+            allRulesState.filterByKeyword(searchKeyState)
         }
 
-        override fun getViewBinding(parent: ViewGroup): ItemTocRegexBinding {
-            return ItemTocRegexBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemTocRegexBinding,
-            item: TxtTocRule,
-            payloads: MutableList<Any>
-        ) {
-            binding.apply {
-                if (payloads.isEmpty()) {
-                    root.setBackgroundColor(context.backgroundColor)
-                    rbRegexName.text = item.name
-                    titleExample.text = item.example
-                    rbRegexName.isChecked = item.name == selectedName
-                    swtEnabled.isChecked = item.enable
-                } else {
-                    for (i in payloads.indices) {
-                        val bundle = payloads[i] as Bundle
-                        bundle.keySet().forEach {
-                            when (it) {
-                                "upName" -> rbRegexName.text = item.name
-                                "upExample" -> titleExample.text = item.example
-                                "enabled" -> swtEnabled.isChecked = item.enable
-                                "upSelect" -> rbRegexName.isChecked = item.name == selectedName
-                            }
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.txt_toc_rule),
+                    onBack = { dismissAllowingStateLoss() },
+                    searchQuery = searchKeyState,
+                    onSearchQueryChange = { searchKeyState = it },
+                    searchPlaceholder = stringResource(R.string.screen) + " • " + stringResource(R.string.txt_toc_rule),
+                    menuActions = listOf(
+                        LegadoMenuAction(
+                            title = stringResource(R.string.add),
+                            iconRes = R.drawable.ic_add,
+                            showAsAction = true,
+                            onClick = { showDialogFragment(TxtTocRuleEditDialog()) },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_local),
+                            iconRes = R.drawable.ic_import,
+                            onClick = {
+                                importDoc.launch {
+                                    mode = HandleFileContract.FILE
+                                    allowExtensions = arrayOf("txt", "json")
+                                }
+                            },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_on_line),
+                            iconRes = R.drawable.ic_import,
+                            onClick = { showOnlineImportDialog = true },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_by_qr_code),
+                            iconRes = R.drawable.ic_import,
+                            onClick = { qrCodeResult.launch() },
+                        ),
+                        LegadoMenuAction(
+                            title = stringResource(R.string.import_default_rule),
+                            iconRes = R.drawable.ic_import,
+                            onClick = { viewModel.importDefault() },
+                        ),
+                    ),
+                )
+            },
+            bottomBar = {
+                Column {
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = { dismissAllowingStateLoss() }) {
+                            Text(text = stringResource(R.string.cancel))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(
+                            onClick = {
+                                allRulesState.forEach { tocRule ->
+                                    if (selectedName == tocRule.name) {
+                                        val callBack = activity as? CallBack
+                                        callBack?.onTocRegexDialogResult(tocRule.rule + TextFile.spaceChars + tocRule.replacement)
+                                        dismissAllowingStateLoss()
+                                        return@TextButton
+                                    }
+                                }
+                            },
+                        ) {
+                            Text(text = stringResource(R.string.ok))
                         }
                     }
                 }
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                items(
+                    items = displayedRules,
+                    key = { it.id },
+                ) { item ->
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedName = item.name }
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = item.name == selectedName,
+                                onClick = { selectedName = item.name },
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 4.dp),
+                            ) {
+                                Text(
+                                    text = item.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (!item.example.isNullOrBlank()) {
+                                    Text(
+                                        text = item.example.orEmpty(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = item.enable,
+                                onCheckedChange = { checked ->
+                                    item.enable = checked
+                                    viewModel.update(item)
+                                },
+                            )
+                            IconButton(
+                                onClick = { showDialogFragment(TxtTocRuleEditDialog(item.id)) },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = stringResource(R.string.edit),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    alert(R.string.draw) {
+                                        setMessage(getString(R.string.sure_del) + "\n" + item.name)
+                                        noButton()
+                                        yesButton {
+                                            viewModel.del(item)
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.delete),
+                                )
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                }
             }
         }
 
-        override fun registerListener(holder: ItemViewHolder, binding: ItemTocRegexBinding) {
-            binding.apply {
-                rbRegexName.setOnUserCheckedChangeListener { isChecked ->
-                    if (isChecked) {
-                        selectedName = getItem(holder.layoutPosition)?.name
-                        updateItems(0, itemCount - 1, Bundle().apply {
-                            putString("upSelect", null)
-                        })
-                    }
+        if (showOnlineImportDialog) {
+            val aCache = remember { ACache.get(cacheDir = false) }
+            val defaultUrl = "https://gitee.com/fisher52/YueDuJson/raw/master/myTxtChapterRule.json"
+            val initialUrls = remember {
+                val list = aCache.getAsString(importTocRuleKey)
+                    ?.splitNotBlank(",")
+                    ?.toMutableList()
+                    ?: mutableListOf()
+                if (!list.contains(defaultUrl)) {
+                    list.add(0, defaultUrl)
                 }
-                swtEnabled.setOnUserCheckedChangeListener { isChecked ->
-                    getItem(holder.layoutPosition)?.let {
-                        it.enable = isChecked
-                        viewModel.update(it)
-                    }
-                }
-                ivEdit.setOnClickListener {
-                    showDialogFragment(TxtTocRuleEditDialog(getItem(holder.layoutPosition)?.id))
-                }
-                ivDelete.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let { item ->
-                        alert(R.string.draw) {
-                            setMessage(getString(R.string.sure_del) + "\n" + item.name)
-                            noButton()
-                            yesButton {
-                                viewModel.del(item)
+                list
+            }
+            var cacheUrls by remember { mutableStateOf(initialUrls.toList()) }
+            var urlInput by remember { mutableStateOf("") }
+
+            AlertDialog(
+                onDismissRequest = { showOnlineImportDialog = false },
+                title = { Text(text = stringResource(R.string.import_on_line)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = urlInput,
+                            onValueChange = { urlInput = it },
+                            label = { Text(text = "url") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (cacheUrls.isNotEmpty()) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 180.dp)) {
+                                items(cacheUrls) { cachedUrl ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { urlInput = cachedUrl }
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = cachedUrl,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                val updated = cacheUrls.toMutableList().apply { remove(cachedUrl) }
+                                                cacheUrls = updated
+                                                aCache.put(importTocRuleKey, updated.joinToString(","))
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = stringResource(R.string.delete),
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-        }
-
-        private var isMoved = false
-
-        override fun swap(srcPosition: Int, targetPosition: Int): Boolean {
-            swapItem(srcPosition, targetPosition)
-            isMoved = true
-            return super.swap(srcPosition, targetPosition)
-        }
-
-        override fun onClearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
-            super.onClearView(recyclerView, viewHolder)
-            if (isMoved) {
-                for ((index, item) in getItems().withIndex()) {
-                    item.serialNumber = index + 1
-                }
-                viewModel.update(*getItems().toTypedArray())
-            }
-            isMoved = false
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showOnlineImportDialog = false
+                            val text = urlInput.trim()
+                            if (text.isNotEmpty()) {
+                                if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                                    val updated = cacheUrls.toMutableList().apply { add(0, text) }
+                                    aCache.put(importTocRuleKey, updated.joinToString(","))
+                                }
+                                showDialogFragment(ImportTxtTocRuleDialog(text))
+                            }
+                        },
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showOnlineImportDialog = false }) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                },
+            )
         }
     }
 

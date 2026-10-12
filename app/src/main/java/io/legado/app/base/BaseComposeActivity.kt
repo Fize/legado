@@ -200,3 +200,16 @@ abstract class BaseComposeActivity(
         super.finish()
     }
 }
+
+abstract class VMBaseComposeActivity<VM : androidx.lifecycle.ViewModel>(
+    fullScreen: Boolean = true,
+    theme: Theme = Theme.Auto,
+    toolBarTheme: Theme = Theme.Auto,
+    transparent: Boolean = false,
+    imageBg: Boolean = true
+) : BaseComposeActivity(fullScreen, theme, toolBarTheme, transparent, imageBg) {
+
+    protected abstract val viewModel: VM
+
+}
+

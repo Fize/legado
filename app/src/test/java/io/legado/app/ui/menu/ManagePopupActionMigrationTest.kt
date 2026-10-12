@@ -100,28 +100,29 @@ class ManagePopupActionMigrationTest {
     }
 
     @Test
-    fun `dialog overflow menus use the shared vertical bridge`() {
-        listOf(
-            "src/main/java/io/legado/app/ui/about/AppLogDialog.kt",
-            "src/main/java/io/legado/app/ui/about/CrashLogsDialog.kt",
-            "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
-        ).forEach { path ->
-            val source = readProjectFile(path)
-            assertContains(path, source, "installMd3OverflowMenu(")
-            assertContains(path, source, "showIcons = true")
-            assertContains(
-                path,
-                source,
-                "onOpenCustomMenu = { it.applyOpenTint(requireContext()) }"
-            )
-        }
+    fun `dialog overflow menus use the shared vertical bridge or Compose TopAppBar`() {
+        val sourceLogin = readProjectFile("src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt")
+        assertContains("SourceLoginDialog.kt", sourceLogin, "installMd3OverflowMenu(")
+        assertContains("SourceLoginDialog.kt", sourceLogin, "showIcons = true")
+        assertContains(
+            "SourceLoginDialog.kt",
+            sourceLogin,
+            "onOpenCustomMenu = { it.applyOpenTint(requireContext()) }"
+        )
+
+        val appLog = readProjectFile("src/main/java/io/legado/app/ui/about/AppLogDialog.kt")
+        assertContains("AppLogDialog.kt", appLog, "LegadoTopAppBar(")
+        assertContains("AppLogDialog.kt", appLog, "iconRes = R.drawable.ic_clear_all")
+        assertContains("AppLogDialog.kt", appLog, "iconRes = R.drawable.ic_export")
+
+        val crashLog = readProjectFile("src/main/java/io/legado/app/ui/about/CrashLogsDialog.kt")
+        assertContains("CrashLogsDialog.kt", crashLog, "LegadoTopAppBar(")
+        assertContains("CrashLogsDialog.kt", crashLog, "iconRes = R.drawable.ic_clear_all")
     }
 
     @Test
     fun `dialog menu actions provide icons for the vertical menu`() {
         val menus = mapOf(
-            "app_log.xml" to listOf("menu_clear", "menu_export"),
-            "crash_log.xml" to listOf("menu_clear"),
             "source_login.xml" to listOf(
                 "menu_ok",
                 "menu_show_login_header",
@@ -144,60 +145,48 @@ class ManagePopupActionMigrationTest {
     }
 
     @Test
-    fun `dialog action icons use the shared toolbar tint`() {
-        mapOf(
-            "src/main/java/io/legado/app/ui/about/AppLogDialog.kt" to
-                "toolBar.menu.applyTint(requireContext())",
-            "src/main/java/io/legado/app/ui/about/CrashLogsDialog.kt" to
-                "binding.toolBar.menu.applyTint(requireContext())",
-        ).forEach { (path, expected) ->
-            assertContains(path, readProjectFile(path), expected)
-        }
-    }
-
-    @Test
-    fun `management adapters use the shared vertical menu`() {
-        adapterFiles.forEach { path ->
+    fun `management screens use Compose DropdownMenu`() {
+        listOf(RULE_SUB_ACTIVITY, REPLACE_RULE_ACTIVITY, TXT_TOC_RULE_ACTIVITY).forEach { path ->
             val source = readProjectFile(path)
             assertFalse("$path should not import PopupMenu", source.contains("import android.widget.PopupMenu"))
             assertFalse("$path should not import AppCompat PopupMenu", source.contains("import androidx.appcompat.widget.PopupMenu"))
-            assertContains(path, source, "popupActionMenu(context)")
-            assertContains(path, source, "danger(\"delete\")")
+            assertContains(path, source, "DropdownMenu(")
+            assertContains(path, source, "color = MaterialTheme.colorScheme.error")
         }
     }
 
     @Test
     fun `management menu actions keep their current callbacks and side effects`() {
-        assertActions(RULE_SUB, "callBack.delSubscription(source)")
+        assertActions(RULE_SUB_ACTIVITY, "delSubscription(item)")
         assertActions(
-            REPLACE_RULE,
-            "\"top\" -> callBack.toTop(item)",
-            "\"bottom\" -> callBack.toBottom(item)",
-            "callBack.delete(item)",
-            "selected.remove(item)"
+            REPLACE_RULE_ACTIVITY,
+            "toTop(item)",
+            "toBottom(item)",
+            "delete(item)",
+            "selectedIdsState = selectedIdsState - item.id"
         )
         assertActions(
-            TXT_TOC_RULE,
-            "\"top\" -> callBack.toTop(source)",
-            "\"bottom\" -> callBack.toBottom(source)",
-            "callBack.del(source)",
-            "selected.remove(source)"
+            TXT_TOC_RULE_ACTIVITY,
+            "toTop(source)",
+            "toBottom(source)",
+            "del(source)",
+            "selectedIdsState = selectedIdsState - source.id"
         )
     }
 
     @Test
     fun `management menu labels keep their previous order`() {
-        listOf(REPLACE_RULE, TXT_TOC_RULE).forEach { path ->
+        listOf(REPLACE_RULE_ACTIVITY, TXT_TOC_RULE_ACTIVITY).forEach { path ->
             assertOrdered(
                 path,
-                "item(context.getString(R.string.to_top), \"top\")",
-                "item(context.getString(R.string.to_bottom), \"bottom\")",
-                "item(context.getString(R.string.delete), \"delete\")"
+                "stringResource(R.string.to_top)",
+                "stringResource(R.string.to_bottom)",
+                "stringResource(R.string.delete)"
             )
         }
         assertOrdered(
-            RULE_SUB,
-            "item(context.getString(R.string.delete), \"delete\")"
+            RULE_SUB_ACTIVITY,
+            "stringResource(R.string.delete)"
         )
     }
 
@@ -227,9 +216,8 @@ class ManagePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val RULE_SUB = "src/main/java/io/legado/app/ui/rulesub/RuleSubAdapter.kt"
-        const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
-        const val TXT_TOC_RULE = "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt"
-        val adapterFiles = listOf(RULE_SUB, REPLACE_RULE, TXT_TOC_RULE)
+        const val RULE_SUB_ACTIVITY = "src/main/java/io/legado/app/ui/rulesub/RuleSubActivity.kt"
+        const val REPLACE_RULE_ACTIVITY = "src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt"
+        const val TXT_TOC_RULE_ACTIVITY = "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleActivity.kt"
     }
 }
