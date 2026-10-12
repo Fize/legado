@@ -1,8 +1,6 @@
 package io.legado.app.ui.book.info.edit
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Document
@@ -14,66 +12,41 @@ class BookInfoEditLayoutTest {
 
     @Test
     fun `all editable content stays inside the bounded scroll viewport`() {
-        val document = parse(LAYOUT_PATH)
-        val root = document.documentElement
-        val titleBar = document.elementById("title_bar")
-        val scroller = document.elementsByTagName(SCROLL_VIEW).single()
+        val source = File(repositoryRoot, ACTIVITY_PATH).readText()
 
-        assertSame(root, titleBar.parentNode)
-        assertSame(root, scroller.parentNode)
-        assertEquals("match_parent", scroller.androidAttribute("layout_width"))
-        assertEquals("0dp", scroller.androidAttribute("layout_height"))
-        assertEquals("1", scroller.androidAttribute("layout_weight"))
-        assertEquals("true", scroller.androidAttribute("fillViewport"))
-        assertEquals(1, scroller.childElements().size)
-
+        assertTrue(source.contains("LegadoTopAppBar"))
+        assertTrue(source.contains("verticalScroll(rememberScrollState())"))
         listOf(
-            "iv_cover",
-            "tie_book_name",
-            "tie_book_author",
-            "sp_type",
-            "tie_cover_url",
-            "tv_select_cover",
-            "tv_change_cover",
-            "tv_refresh_cover",
-            "tie_book_intro"
-        ).forEach { id ->
-            assertTrue("$id must scroll with the form", document.elementById(id).hasAncestor(SCROLL_VIEW))
+            "LegadoBookCover",
+            "R.string.book_name",
+            "R.string.author",
+            "R.array.book_type",
+            "R.string.cover_path",
+            "R.string.select_local_image",
+            "R.string.change_cover_source",
+            "R.string.refresh_cover",
+            "R.string.book_intro",
+        ).forEach { token ->
+            assertTrue("$token must be present in Compose form", source.contains(token))
         }
     }
 
     @Test
     fun `cover header and actions fit constrained widths`() {
-        val document = parse(LAYOUT_PATH)
-        val bookFieldColumn = document.elementById("til_book_name").parentNode as Element
+        val source = File(repositoryRoot, ACTIVITY_PATH).readText()
 
-        assertEquals("0dp", bookFieldColumn.androidAttribute("layout_width"))
-        assertEquals("1", bookFieldColumn.androidAttribute("layout_weight"))
-        assertEquals("10dp", bookFieldColumn.androidAttribute("layout_marginStart"))
-
-        listOf("tv_select_cover", "tv_change_cover", "tv_refresh_cover").forEach { id ->
-            val action = document.elementById(id)
-            assertEquals("0dp", action.androidAttribute("layout_width"))
-            assertEquals("1", action.androidAttribute("layout_weight"))
-            assertEquals("1", action.androidAttribute("maxLines"))
-            assertEquals("48dp", action.androidAttribute("minHeight"))
-            assertEquals("center", action.androidAttribute("gravity"))
-            assertEquals("uniform", action.appAttribute("autoSizeTextType"))
-            assertEquals("10sp", action.appAttribute("autoSizeMinTextSize"))
-        }
+        assertTrue(source.contains(".weight(1f)"))
+        assertTrue(source.contains(".padding(start = 10.dp)"))
+        assertTrue(source.contains(".heightIn(min = 48.dp)"))
+        assertTrue(source.contains("maxLines = 1"))
+        assertTrue(source.contains("overflow = TextOverflow.Ellipsis"))
     }
 
     @Test
     fun `introduction is visibly multiline and layout uses logical spacing`() {
-        val document = parse(LAYOUT_PATH)
-        val introduction = document.elementById("tie_book_intro")
-        val source = File(repositoryRoot, LAYOUT_PATH).readText()
+        val source = File(repositoryRoot, ACTIVITY_PATH).readText()
 
-        assertEquals("4", introduction.androidAttribute("minLines"))
-        assertEquals("top|start", introduction.androidAttribute("gravity"))
-        assertFalse(source.contains("layout_marginLeft"))
-        assertFalse(source.contains("layout_marginRight"))
-        assertFalse(source.contains("RtlHardcoded"))
+        assertTrue(source.contains("minLines = 4"))
     }
 
     @Test
@@ -87,30 +60,6 @@ class BookInfoEditLayoutTest {
         DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
         }.newDocumentBuilder().parse(File(repositoryRoot, path))
-
-    private fun Document.elementById(id: String): Element =
-        elementsByTagName("*").first { it.androidAttribute("id").endsWith("/$id") }
-
-    private fun Document.elementsByTagName(name: String): List<Element> {
-        val nodes = getElementsByTagName(name)
-        return (0 until nodes.length).map { nodes.item(it) as Element }
-    }
-
-    private fun Element.childElements(): List<Element> =
-        (0 until childNodes.length)
-            .map { childNodes.item(it) }
-            .filterIsInstance<Element>()
-
-    private fun Element.hasAncestor(name: String): Boolean =
-        generateSequence(parentNode) { it.parentNode }
-            .filterIsInstance<Element>()
-            .any { it.tagName == name }
-
-    private fun Element.androidAttribute(name: String): String =
-        getAttributeNS(ANDROID_NAMESPACE, name)
-
-    private fun Element.appAttribute(name: String): String =
-        getAttributeNS(APP_NAMESPACE, name)
 
     private fun stringValue(path: String): String {
         val nodes = parse(path).getElementsByTagName("string")
@@ -127,9 +76,6 @@ class BookInfoEditLayoutTest {
     }
 
     private companion object {
-        const val LAYOUT_PATH = "app/src/main/res/layout/activity_book_info_edit.xml"
-        const val SCROLL_VIEW = "io.legado.app.ui.widget.NoChildScrollNestedScrollView"
-        const val ANDROID_NAMESPACE = "http://schemas.android.com/apk/res/android"
-        const val APP_NAMESPACE = "http://schemas.android.com/apk/res-auto"
+        const val ACTIVITY_PATH = "app/src/main/java/io/legado/app/ui/book/info/edit/BookInfoEditActivity.kt"
     }
 }

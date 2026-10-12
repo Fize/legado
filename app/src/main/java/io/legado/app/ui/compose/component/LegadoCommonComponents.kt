@@ -62,14 +62,45 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
+import io.legado.app.ui.widget.image.CoverImageView
 import kotlin.math.roundToInt
+
+@Composable
+fun LegadoBookCover(
+    path: String?,
+    name: String?,
+    author: String?,
+    modifier: Modifier = Modifier,
+    loadOnlyWifi: Boolean = false,
+    sourceOrigin: String? = null,
+    onLoadFinish: (() -> Unit)? = null,
+) {
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            CoverImageView(context)
+        },
+        update = { view ->
+            view.load(
+                path = path,
+                name = name,
+                author = author,
+                loadOnlyWifi = loadOnlyWifi,
+                sourceOrigin = sourceOrigin,
+                onLoadFinish = onLoadFinish,
+            )
+        },
+    )
+}
 
 data class LegadoMenuAction(
     val title: String,
     @DrawableRes val iconRes: Int? = null,
     val iconVector: ImageVector? = null,
     val showAsAction: Boolean = false,
+    val checked: Boolean? = null,
     val onClick: () -> Unit,
 )
 
@@ -211,6 +242,16 @@ fun LegadoTopAppBar(
                                         }
                                     }
                                     else -> null
+                                },
+                                trailingIcon = if (item.checked != null) {
+                                    {
+                                        Checkbox(
+                                            checked = item.checked,
+                                            onCheckedChange = null,
+                                        )
+                                    }
+                                } else {
+                                    null
                                 },
                                 onClick = {
                                     overflowExpanded = false

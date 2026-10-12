@@ -1,87 +1,76 @@
 package io.legado.app.ui.book.manage
 
-import android.content.Context
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.SearchView
-import androidx.appcompat.widget.Toolbar
-import androidx.core.view.setPadding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
-import io.legado.app.databinding.DialogSourcePickerBinding
-import io.legado.app.databinding.Item1lineTextBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTopAppBar
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
-import splitties.views.onClick
 
 /**
  * 书源选择
  */
-class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
-    Toolbar.OnMenuItemClickListener {
+class SourcePickerDialog : BaseDialogFragment() {
 
-    private val binding by viewBinding(DialogSourcePickerBinding::bind)
-    private val searchView: SearchView by lazy {
-        binding.toolBar.findViewById(R.id.search_view)
-    }
-    private val toolBar: Toolbar by lazy {
-        binding.toolBar.toolbar
-    }
-    private val adapter by lazy {
-        SourceAdapter(requireContext())
-    }
     private var sourceFlowJob: Job? = null
+    private var sourcesState by mutableStateOf<List<BookSourcePart>>(emptyList())
+    private var searchKeyState by mutableStateOf("")
 
     override fun onStart() {
         super.onStart()
         setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        initView()
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
         initData()
-        initMenu()
-    }
-
-    private fun initView() {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.title = "选择书源"
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.adapter = adapter
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.search_book_source)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    DialogContent()
+                }
             }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                initData(newText)
-                return false
-            }
-        })
+        }
     }
 
     private fun initData(searchKey: String? = null) {
@@ -93,60 +82,70 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
             }.catch {
                 AppLog.put("书源选择界面获取书源数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).collect {
-                adapter.setItems(it)
+                sourcesState = it
             }
         }
     }
 
-    private fun initMenu() {
-        toolBar.setOnMenuItemClickListener(this)
-        toolBar.inflateMenu(R.menu.source_picker)
-        toolBar.menu.applyTint(requireContext())
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_change_source_delay -> NumberPickerDialog(requireContext())
-                .setTitle(getString(R.string.change_source_delay))
-                .setMaxValue(9999)
-                .setMinValue(0)
-                .setValue(AppConfig.batchChangeSourceDelay)
-                .show {
-                    AppConfig.batchChangeSourceDelay = it
-                }
-        }
-        return true
-    }
-
-    inner class SourceAdapter(context: Context) :
-        RecyclerAdapter<BookSourcePart, Item1lineTextBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): Item1lineTextBinding {
-            return Item1lineTextBinding.inflate(inflater, parent, false).apply {
-                root.setPadding(16.dpToPx())
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: Item1lineTextBinding,
-            item: BookSourcePart,
-            payloads: MutableList<Any>
-        ) {
-            binding.textView.text = item.getDisPlayNameGroup()
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: Item1lineTextBinding) {
-            binding.root.onClick {
-                getItemByLayoutPosition(holder.layoutPosition)?.let {
-                    it.getBookSource()?.let { source ->
-                        callback?.sourceOnClick(source)
+    @Composable
+    private fun DialogContent() {
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = "选择书源",
+                    onBack = { dismissAllowingStateLoss() },
+                    searchQuery = searchKeyState,
+                    onSearchQueryChange = {
+                        searchKeyState = it
+                        initData(it)
+                    },
+                    searchPlaceholder = stringResource(R.string.search_book_source),
+                    menuActions = listOf(
+                        LegadoMenuAction(
+                            title = stringResource(R.string.change_source_delay),
+                            onClick = {
+                                NumberPickerDialog(requireContext())
+                                    .setTitle(getString(R.string.change_source_delay))
+                                    .setMaxValue(9999)
+                                    .setMinValue(0)
+                                    .setValue(AppConfig.batchChangeSourceDelay)
+                                    .show {
+                                        AppConfig.batchChangeSourceDelay = it
+                                    }
+                            },
+                        ),
+                    ),
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                items(
+                    items = sourcesState,
+                    key = { it.bookSourceUrl },
+                ) { item ->
+                    Column {
+                        Text(
+                            text = item.getDisPlayNameGroup(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    item.getBookSource()?.let { source ->
+                                        callback?.sourceOnClick(source)
+                                    }
+                                    dismissAllowingStateLoss()
+                                }
+                                .padding(16.dp),
+                        )
+                        HorizontalDivider()
                     }
-                    dismissAllowingStateLoss()
                 }
             }
         }
-
     }
 
     private val callback: Callback?

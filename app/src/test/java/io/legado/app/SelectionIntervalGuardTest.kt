@@ -10,7 +10,7 @@ class SelectionIntervalGuardTest {
     fun `selection interval returns before reading empty bounds`() {
         sources.forEach { relativePath ->
             val source = File(sourceRoot, relativePath).readText()
-            val methodStart = source.indexOf("fun checkSelectedInterval()")
+            val methodStart = source.indexOf("fun checkSelectedInterval(")
             val guard = source.indexOf("if (selectedPosition.isEmpty()) return", methodStart)
             val min = source.indexOf("Collections.min(selectedPosition)", methodStart)
 
@@ -24,11 +24,10 @@ class SelectionIntervalGuardTest {
     fun `book selection uses stable book urls`() {
         val source = File(
             sourceRoot,
-            "io/legado/app/ui/book/manage/BookAdapter.kt"
+            "io/legado/app/ui/book/manage/BookshelfManageActivity.kt"
         ).readText()
-        assertTrue(source.contains("HashSet<String>"))
-        assertTrue(source.contains("AdvanceCallback<String>"))
-        assertTrue(source.contains("selectedBookUrls.contains(it.bookUrl)"))
+        assertTrue(source.contains("Set<String>"))
+        assertTrue(source.contains("it.bookUrl in selectedBookUrlsState"))
     }
 
     private val sourceRoot: File by lazy {
@@ -38,7 +37,7 @@ class SelectionIntervalGuardTest {
 
     private companion object {
         val sources = listOf(
-            "io/legado/app/ui/book/manage/BookAdapter.kt",
+            "io/legado/app/ui/book/manage/BookshelfManageActivity.kt",
             "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
         )
     }

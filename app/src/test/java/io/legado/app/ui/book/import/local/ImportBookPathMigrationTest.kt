@@ -78,7 +78,7 @@ class ImportBookPathMigrationTest {
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/book/import/local/ImportBookActivity.kt"
         )
-        val startRead = source.substringAfter("override fun startRead(fileDoc: FileDoc)")
+        val startRead = source.substringAfter("fun startRead(fileDoc: FileDoc)")
 
         assertTrue(startRead.contains("startReadJob?.isActive == true"))
         assertTrue(startRead.contains("startReadJob = lifecycleScope.launch(IO)"))
@@ -142,8 +142,8 @@ class ImportBookPathMigrationTest {
             .substringBefore("fun deleteDoc(")
         val activity = readProjectFile(
             "src/main/java/io/legado/app/ui/book/import/local/ImportBookActivity.kt"
-        ).substringAfter("override fun onClickSelectBarMainAction()")
-            .substringBefore("private fun initView()")
+        ).substringAfter("fun onClickSelectBarMainAction()")
+            .substringBefore("private fun alertDirectoryGroup")
 
         assertTrue(localBook.contains("val importedUris = linkedSetOf<Uri>()"))
         assertTrue(localBook.contains("onBookImported = importedBooks::add"))

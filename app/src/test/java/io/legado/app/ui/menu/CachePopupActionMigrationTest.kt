@@ -8,7 +8,7 @@ import java.io.File
 class CachePopupActionMigrationTest {
 
     @Test
-    fun `cache long press uses the shared vertical popup action menu`() {
+    fun `cache long press uses Compose DropdownMenu`() {
         val source = readProjectFile(CACHE_ACTIVITY)
 
         assertFalse(source.contains("import androidx.appcompat.widget.PopupMenu"))
@@ -20,15 +20,15 @@ class CachePopupActionMigrationTest {
             "Legacy cache menu resource should be removed",
             sequenceOf(File(LEGACY_MENU), File("app/$LEGACY_MENU")).any(File::isFile)
         )
-        assertContains(source, "showDownloadMenu(it)")
-        assertContains(source, "popupActionMenu(this)")
+        assertContains(source, "combinedClickable")
+        assertContains(source, "DropdownMenu")
         assertOrdered(
             source,
-            "item(getString(R.string.menu_download_after), \"download_after\")",
-            "item(getString(R.string.menu_download_all), \"download_all\")"
+            "R.string.menu_download_after",
+            "startDownloadAfterCurrent()",
+            "R.string.menu_download_all",
+            "startDownloadAll()"
         )
-        assertContains(source, "\"download_after\" -> startDownloadAfterCurrent()")
-        assertContains(source, "\"download_all\" -> startDownloadAll()")
     }
 
     @Test
@@ -42,19 +42,16 @@ class CachePopupActionMigrationTest {
         val all = section(
             source,
             "private fun startDownloadAll()",
-            "override fun onMenuOpened"
+            "private fun initBookData()"
         )
 
-        assertContains(source, "R.id.menu_download -> startDownloadAfterCurrent()")
-        assertFalse(source.contains("R.id.menu_download_after"))
-        assertFalse(source.contains("R.id.menu_download_all"))
         assertContains(afterCurrent, "sureCacheBook")
-        assertContains(afterCurrent, "adapter.getItems().forEach")
+        assertContains(afterCurrent, "booksState.forEach")
         assertContains(afterCurrent, "book.durChapterIndex")
         assertContains(afterCurrent, "book.lastChapterIndex")
         assertContains(afterCurrent, "CacheBook.stop(this@CacheActivity)")
         assertContains(all, "sureCacheBook")
-        assertContains(all, "adapter.getItems().forEach")
+        assertContains(all, "booksState.forEach")
         assertTrue(Regex("""book,\s+0,\s+book\.lastChapterIndex""").containsMatchIn(all))
         assertContains(all, "CacheBook.stop(this@CacheActivity)")
     }
@@ -62,11 +59,6 @@ class CachePopupActionMigrationTest {
     @Test
     fun `cache toolbar download state updates the action view accessibility label`() {
         val source = readProjectFile(CACHE_ACTIVITY)
-        val prepare = section(
-            source,
-            "override fun onPrepareOptionsMenu",
-            "private fun showDownloadMenu"
-        )
         val state = section(
             source,
             "private fun updateDownloadMenuState()",
@@ -78,20 +70,12 @@ class CachePopupActionMigrationTest {
             "observeEvent<Pair<Book, BookChapter>>(EventBus.SAVE_CONTENT)"
         )
 
-        assertContains(prepare, "updateDownloadMenuState()")
         assertContains(observer, "updateDownloadMenuState()")
-        assertOrdered(
-            state,
-            "item.setTitle(R.string.stop)",
-            "item.setIconCompat(R.drawable.ic_stop_black_24dp)",
-            "item.actionView?.contentDescription = item.title"
-        )
-        assertOrdered(
-            state,
-            "item.setTitle(R.string.download_start)",
-            "item.setIconCompat(R.drawable.ic_play_24dp)",
-            "item.actionView?.contentDescription = item.title"
-        )
+        assertContains(state, "isCacheRunningState = CacheBook.isRun")
+        assertContains(source, "if (isCacheRunningState) R.string.stop else R.string.download_start")
+        assertContains(source, "R.drawable.ic_stop_black_24dp")
+        assertContains(source, "R.drawable.ic_play_24dp")
+        assertContains(source, "contentDescription = downloadTitle")
     }
 
     private fun section(source: String, start: String, end: String): String {

@@ -190,15 +190,13 @@ class TocUpdateRequestsTest {
             "app/src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt"
         )
         val mainActivity = source("app/src/main/java/io/legado/app/ui/main/MainActivity.kt")
-        val menu = source("app/src/main/res/menu/bookshelf_menage_sel.xml")
 
-        assertTrue(menu.contains("android:id=\"@+id/menu_update_toc\""))
-        assertTrue(manageActivity.contains("R.id.menu_update_toc -> updateBooksToc()"))
+        assertTrue(manageActivity.contains("R.string.update_book_info_toc"))
+        assertTrue(manageActivity.contains("::updateBooksToc"))
         assertTrue(manageActivity.contains("postEvent(EventBus.UP_BOOKS_TOC, books)"))
         assertTrue(mainActivity.contains("onlyUpdateRead = false"))
         assertTrue(mainActivity.contains("policy = TocUpdatePolicy.SKIP_PRE_DOWNLOAD"))
         assertTrue(mainActivity.contains("refreshBookInfo = true"))
-        assertTrue(menu.contains("android:title=\"@string/update_book_info_toc\""))
         assertTrue(manageActivity.contains("R.string.update_book_info_toc_submitted"))
     }
 

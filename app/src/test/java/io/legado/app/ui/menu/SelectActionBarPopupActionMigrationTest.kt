@@ -26,7 +26,6 @@ class SelectActionBarPopupActionMigrationTest {
             "if (item.isVisible)",
             "it.isEnabled && it.itemId.toString() == action",
             "menuItemClickListener?.onMenuItemClick(menuItem)",
-            "R.id.menu_del_selection",
             "R.id.menu_del"
         ).forEach { expected ->
             assertTrue("SelectActionBar should contain $expected", source.contains(expected))
@@ -106,21 +105,6 @@ class SelectActionBarPopupActionMigrationTest {
         const val VIEW_EXTENSIONS = "src/main/java/io/legado/app/utils/ViewExtensions.kt"
 
         val expectedMenuIds = mapOf(
-            "import_book_sel.xml" to listOf("@+id/menu_del_selection"),
-            "bookshelf_menage_sel.xml" to listOf(
-                "@+id/menu_del_selection",
-                "@+id/menu_update_enable",
-                "@+id/menu_update_disable",
-                "@+id/menu_add_to_group",
-                "@+id/menu_remove_to_group",
-                "@+id/menu_change_source",
-                "@+id/menu_clear_cache",
-                "@+id/menu_persist_covers",
-                "@+id/menu_restore_network_covers",
-                "@+id/menu_restore_source_covers",
-                "@+id/menu_check_selected_interval",
-                "@+id/menu_update_toc"
-            ),
             "book_source_sel.xml" to listOf(
                 "@+id/menu_enable_selection",
                 "@+id/menu_disable_selection",
@@ -138,6 +122,23 @@ class SelectActionBarPopupActionMigrationTest {
         )
 
         val expectedComposeMenuLabels = mapOf(
+            "src/main/java/io/legado/app/ui/book/import/local/ImportBookActivity.kt" to listOf(
+                "R.string.delete"
+            ),
+            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt" to listOf(
+                "R.string.delete",
+                "R.string.allow_update",
+                "R.string.disable_update",
+                "R.string.add_to_group",
+                "R.string.remove_group",
+                "R.string.change_source_batch",
+                "R.string.clear_cache",
+                "R.string.persist_network_covers",
+                "R.string.restore_network_covers",
+                "R.string.restore_source_covers",
+                "R.string.check_selected_interval",
+                "R.string.update_book_info_toc"
+            ),
             "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleActivity.kt" to listOf(
                 "R.string.enable_selection",
                 "R.string.disable_selection",

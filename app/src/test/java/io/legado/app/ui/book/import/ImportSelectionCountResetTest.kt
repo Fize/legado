@@ -18,7 +18,7 @@ class ImportSelectionCountResetTest {
         )
 
         listOf(localAction, remoteAction).forEach { action ->
-            assertTrue(action.contains("adapter.selectAll(false)"))
+            assertTrue(action.contains("selectedBooksState = emptySet()"))
             assertFalse(action.contains("adapter.selected.clear()"))
             assertFalse(action.contains("adapter.notifyDataSetChanged()"))
         }
@@ -26,7 +26,7 @@ class ImportSelectionCountResetTest {
 
     private fun mainAction(file: File, endMarker: String = "\n    private fun"): String {
         val source = file.readText()
-        val start = source.indexOf("override fun onClickSelectBarMainAction()")
+        val start = source.indexOf("fun onClickSelectBarMainAction()")
         val end = source.indexOf(endMarker, start)
         assertTrue(start >= 0)
         assertTrue(end > start)

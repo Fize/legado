@@ -35,8 +35,8 @@ class BookshelfManageOrderTest {
     @Test
     fun `bookshelf drag writes only shelf order fields`() {
         val dao = projectFile("src/main/java/io/legado/app/data/dao/BookDao.kt").readText()
-        val adapter = projectFile(
-            "src/main/java/io/legado/app/ui/book/manage/BookAdapter.kt"
+        val activity = projectFile(
+            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt"
         ).readText()
         val viewModel = projectFile(
             "src/main/java/io/legado/app/ui/book/manage/BookshelfManageViewModel.kt"
@@ -48,8 +48,7 @@ class BookshelfManageOrderTest {
             )
         )
         assertTrue(dao.contains("UPDATE books SET `order` = :order WHERE bookUrl = :bookUrl"))
-        assertTrue(adapter.contains("callBack.updateBookOrder(getItems(), needsOrderReset)"))
-        assertFalse(adapter.contains("callBack.updateBook(*getItems().toTypedArray())"))
+        assertTrue(activity.contains("viewModel.updateBookOrder(books, resetAll)"))
         assertTrue(viewModel.contains("appDb.runInTransaction"))
         assertTrue(viewModel.contains("appDb.bookDao.allShelfByOrder"))
         assertTrue(viewModel.contains("appDb.bookDao.updateOrder(reordered)"))

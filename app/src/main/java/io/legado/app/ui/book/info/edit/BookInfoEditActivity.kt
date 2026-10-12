@@ -2,15 +2,52 @@ package io.legado.app.ui.book.info.edit
 
 import android.net.Uri
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import androidx.activity.viewModels
-import androidx.core.view.WindowInsetsCompat
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.ActivityBookInfoEditBinding
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.hasEditedNetworkCover
@@ -20,22 +57,22 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.removeType
 import io.legado.app.ui.book.changecover.ChangeCoverDialog
+import io.legado.app.ui.compose.component.LegadoBookCover
+import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.readUri
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import splitties.init.appCtx
-import splitties.views.bottomPadding
 import java.io.FileOutputStream
 
 class BookInfoEditActivity :
-    VMBaseActivity<ActivityBookInfoEditBinding, BookInfoEditViewModel>(),
+    VMBaseComposeActivity<BookInfoEditViewModel>(),
     ChangeCoverDialog.CallBack {
 
     private val selectCover = registerForActivityResult(HandleFileContract()) {
@@ -44,8 +81,14 @@ class BookInfoEditActivity :
         }
     }
 
-    override val binding by viewBinding(ActivityBookInfoEditBinding::inflate)
     override val viewModel by viewModels<BookInfoEditViewModel>()
+
+    private var bookNameState by mutableStateOf("")
+    private var bookAuthorState by mutableStateOf("")
+    private var selectedTypeIndexState by mutableIntStateOf(0)
+    private var coverUrlState by mutableStateOf("")
+    private var bookIntroState by mutableStateOf("")
+    private var coverRefreshKey by mutableIntStateOf(0)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         viewModel.bookData.observe(this) { upView(it) }
@@ -54,80 +97,222 @@ class BookInfoEditActivity :
                 viewModel.loadBook(it)
             }
         }
-        initView()
-        initEvent()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_info_edit, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
+    @Composable
+    override fun Content() {
+        val bookTypes = stringArrayResource(R.array.book_type)
+        var typeMenuExpanded by remember { mutableStateOf(false) }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_save -> saveData()
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
+        Scaffold(
+            topBar = {
+                LegadoTopAppBar(
+                    title = stringResource(R.string.book_info_edit),
+                    onBack = { finish() },
+                    menuActions = listOf(
+                        LegadoMenuAction(
+                            title = stringResource(R.string.action_save),
+                            iconRes = R.drawable.ic_save,
+                            showAsAction = true,
+                            onClick = ::saveData,
+                        ),
+                    ),
+                )
+            },
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    val displayCover = remember(coverUrlState, coverRefreshKey) {
+                        coverUrlState.takeIf { it.isNotBlank() }
+                            ?: viewModel.book?.getDisplayCover()
+                    }
+                    LegadoBookCover(
+                        path = displayCover,
+                        name = bookNameState,
+                        author = bookAuthorState,
+                        modifier = Modifier
+                            .width(90.dp)
+                            .height(130.dp),
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = bookNameState,
+                            onValueChange = { bookNameState = it },
+                            label = { Text(text = stringResource(R.string.book_name)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = bookAuthorState,
+                            onValueChange = { bookAuthorState = it },
+                            label = { Text(text = stringResource(R.string.author)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
 
-    private fun initView() {
-        binding.root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
-            val insets = windowInsets.getInsets(typeMask)
-            view.bottomPadding = insets.bottom
-            windowInsets
-        }
-    }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.book_type),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .clickable { typeMenuExpanded = true }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = bookTypes.getOrElse(selectedTypeIndexState) { bookTypes.firstOrNull().orEmpty() },
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = typeMenuExpanded,
+                            onDismissRequest = { typeMenuExpanded = false },
+                        ) {
+                            bookTypes.forEachIndexed { index, label ->
+                                DropdownMenuItem(
+                                    text = { Text(text = label) },
+                                    onClick = {
+                                        selectedTypeIndexState = index
+                                        typeMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
 
-    private fun initEvent() = binding.run {
-        tvChangeCover.setOnClickListener {
-            viewModel.bookData.value?.let {
-                showDialogFragment(
-                    ChangeCoverDialog(it.name, it.author)
+                OutlinedTextField(
+                    value = coverUrlState,
+                    onValueChange = { coverUrlState = it },
+                    label = { Text(text = stringResource(R.string.cover_path)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            selectCover.launch {
+                                mode = HandleFileContract.IMAGE
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.select_local_image),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.bookData.value?.let {
+                                showDialogFragment(
+                                    ChangeCoverDialog(it.name, it.author)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.change_cover_source),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.book?.customCoverUrl = coverUrlState
+                            viewModel.book?.persistedCoverUrl = null
+                            upCover()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.refresh_cover),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = bookIntroState,
+                    onValueChange = { bookIntroState = it },
+                    label = { Text(text = stringResource(R.string.book_intro)) },
+                    minLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
-        tvSelectCover.setOnClickListener {
-            selectCover.launch {
-                mode = HandleFileContract.IMAGE
-            }
-        }
-        tvRefreshCover.setOnClickListener {
-            viewModel.book?.customCoverUrl = tieCoverUrl.text?.toString()
-            viewModel.book?.persistedCoverUrl = null
-            upCover()
-        }
     }
 
-    private fun upView(book: Book) = binding.run {
-        tieBookName.setText(book.name)
-        tieBookAuthor.setText(book.author)
-        spType.setSelection(
-            when {
-                book.isVideo -> 4
-                book.isImage -> 2
-                book.isAudio -> 1
-                else -> 0
-            }
-        )
-        tieCoverUrl.setText(book.customCoverUrl?.takeIf { it.isNotEmpty() } ?: book.coverUrl)
-        tieBookIntro.setText(book.getDisplayIntro())
+    private fun upView(book: Book) {
+        bookNameState = book.name
+        bookAuthorState = book.author
+        selectedTypeIndexState = when {
+            book.isVideo -> 4
+            book.isImage -> 2
+            book.isAudio -> 1
+            else -> 0
+        }
+        coverUrlState = (book.customCoverUrl?.takeIf { it.isNotEmpty() } ?: book.coverUrl).orEmpty()
+        bookIntroState = book.getDisplayIntro().orEmpty()
         upCover()
     }
 
     private fun upCover() {
-        viewModel.book?.let {
-            binding.ivCover.load(it, false)
-        }
+        coverRefreshKey++
     }
 
-    private fun saveData() = binding.run {
-        val book = viewModel.book ?: return@run
+    private fun saveData() {
+        val book = viewModel.book ?: return
         val oldBook = book.copy()
-        book.name = tieBookName.text?.toString() ?: ""
-        book.author = tieBookAuthor.text?.toString() ?: ""
+        book.name = bookNameState
+        book.author = bookAuthorState
         val local = if (book.isLocal) BookType.local else 0
-        val bookType = when (spType.selectedItemPosition) {
+        val bookType = when (selectedTypeIndexState) {
             4 -> BookType.video or local
             2 -> BookType.image or local
             1 -> BookType.audio or local
@@ -135,12 +320,12 @@ class BookInfoEditActivity :
         }
         book.removeType(BookType.video, BookType.local, BookType.image, BookType.audio, BookType.text)
         book.addType(bookType)
-        val customCoverUrl = tieCoverUrl.text?.toString()?.takeIf { it.isNotEmpty() }
+        val customCoverUrl = coverUrlState.takeIf { it.isNotEmpty() }
         if (hasEditedNetworkCover(customCoverUrl, book.customCoverUrl, book.coverUrl)) {
             book.persistedCoverUrl = null
         }
         book.customCoverUrl = if (customCoverUrl == book.coverUrl) null else customCoverUrl
-        val customIntro = tieBookIntro.text?.toString()
+        val customIntro = bookIntroState
         book.customIntro = if (customIntro == book.intro) null else customIntro
         BookHelp.updateCacheFolder(oldBook, book)
         viewModel.saveBook(book) {
@@ -152,7 +337,7 @@ class BookInfoEditActivity :
     override fun coverChangeTo(coverUrl: String) {
         viewModel.book?.customCoverUrl = coverUrl
         viewModel.book?.persistedCoverUrl = null
-        binding.tieCoverUrl.setText(coverUrl)
+        coverUrlState = coverUrl
         upCover()
     }
 
