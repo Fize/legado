@@ -22,7 +22,7 @@ import kotlin.math.min
 /**
  * 嵌套惯性滚动 TextView
  */
-class ScrollTextView(context: Context, attrs: AttributeSet?) :
+class ScrollTextView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
     AppCompatTextView(context, attrs) {
 
     var onTextLayoutChanged: (() -> Unit)? = null

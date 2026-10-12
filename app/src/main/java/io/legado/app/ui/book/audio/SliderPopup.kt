@@ -3,17 +3,21 @@ package io.legado.app.ui.book.audio
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
-import android.view.LayoutInflater
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.SeekBar
+import android.widget.TextView
+import androidx.core.content.ContextCompat
 import io.legado.app.R
-import io.legado.app.databinding.PopupSeekBarBinding
+import io.legado.app.lib.theme.view.ThemeSeekBar
 import io.legado.app.model.AudioPlay
 import io.legado.app.service.AudioPlayService
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.applyMd3PopupStyle
+import io.legado.app.utils.dpToPx
 import kotlin.math.roundToInt
 
 class SliderPopup(private val context: Context, private val name: Int) :
@@ -23,15 +27,38 @@ class SliderPopup(private val context: Context, private val name: Int) :
         const val SPEED = 2
     }
 
-    private val binding = PopupSeekBarBinding.inflate(LayoutInflater.from(context))
+    private val tvSeekValue = TextView(context).apply {
+        setTextColor(ContextCompat.getColor(context, R.color.secondaryText))
+    }
+    private val seekBar = ThemeSeekBar(context).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+    }
+
     init {
-        contentView = binding.root
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            val pad = 8.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            addView(
+                tvSeekValue,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            addView(seekBar)
+        }
+        contentView = root
         applyMd3PopupStyle()
         isTouchable = true
         isOutsideTouchable = false
         isFocusable = true
         setProcess()
-        binding.seekBar.setOnSeekBarChangeListener(object : SeekBarChangeListener {
+        seekBar.setOnSeekBarChangeListener(object : SeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 if (name == TIMER) {
                     setProcessTimerText(progress)
@@ -53,41 +80,41 @@ class SliderPopup(private val context: Context, private val name: Int) :
     override fun showAsDropDown(anchor: View?, xoff: Int, yoff: Int, gravity: Int) {
         super.showAsDropDown(anchor, xoff, yoff, gravity)
         if (name == TIMER) {
-            binding.seekBar.progress = AudioPlayService.timeMinute
+            seekBar.progress = AudioPlayService.timeMinute
         } else {
-            binding.seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
+            seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
         }
     }
 
     override fun showAtLocation(parent: View?, gravity: Int, x: Int, y: Int) {
         super.showAtLocation(parent, gravity, x, y)
         if (name == TIMER) {
-            binding.seekBar.progress = AudioPlayService.timeMinute
+            seekBar.progress = AudioPlayService.timeMinute
         } else {
-            binding.seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
+            seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
         }
     }
 
     private fun setProcessTimerText(process: Int) {
-        binding.tvSeekValue.text = context.getString(R.string.timer_m, process)
+        tvSeekValue.text = context.getString(R.string.timer_m, process)
     }
 
     @SuppressLint("SetTextI18n")
     private fun setProcessSpeedText(speed: Float) {
-        binding.tvSeekValue.text = "%.1fX".format(speed)
+        tvSeekValue.text = "%.1fX".format(speed)
     }
 
     private fun setProcess() {
         if (name == TIMER) {
-            binding.seekBar.max = 180
+            seekBar.max = 180
             setProcessTimerText(0)
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            binding.seekBar.min = 50
+            seekBar.min = 50
         }
-        binding.seekBar.max = 300
-        binding.seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
+        seekBar.max = 300
+        seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
         setProcessSpeedText(AudioPlayService.playSpeed)
     }
 }

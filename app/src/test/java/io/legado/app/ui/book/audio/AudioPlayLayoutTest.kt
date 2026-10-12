@@ -1,7 +1,7 @@
 package io.legado.app.ui.book.audio
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Document
 import org.w3c.dom.Element
@@ -12,26 +12,13 @@ class AudioPlayLayoutTest {
 
     @Test
     fun playButtonsUseCompatTintForTheirWhiteIcons() {
-        val layoutPaths = listOf(
-            "src/main/res/layout/activity_audio_play.xml",
-            "src/main/res/layout-land/activity_audio_play.xml",
-        )
+        val activity = projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt")
+            .readText()
 
-        layoutPaths.forEach { path ->
-            val fab = findPlayButton(parseProjectXml(path))
-
-            assertEquals(
-                path,
-                "@color/md_black_1000",
-                fab.getAttributeNS(appNamespace, "tint")
-            )
-            assertFalse(path, fab.hasAttributeNS(androidNamespace, "tint"))
-            assertEquals(
-                path,
-                "@color/md_white_1000",
-                fab.getAttributeNS(appNamespace, "backgroundTint")
-            )
-        }
+        assertTrue(activity.contains("FloatingActionButton("))
+        assertTrue(activity.contains("containerColor = Color.White"))
+        assertTrue(activity.contains("contentColor = Color.Black"))
+        assertTrue(activity.contains("tint = Color.Black"))
 
         assertEquals("#FFFFFFFF", vectorFillColor("ic_play_24dp.xml"))
         assertEquals("#FFFFFFFF", vectorFillColor("ic_pause_24dp.xml"))
@@ -39,76 +26,24 @@ class AudioPlayLayoutTest {
 
     @Test
     fun chapterInfoIsBoundedAndPresentInBothOrientations() {
-        val portraitPath = "src/main/res/layout/activity_audio_play.xml"
-        val landscapePath = "src/main/res/layout-land/activity_audio_play.xml"
-        val layouts = listOf(portraitPath, landscapePath).associateWith(::parseProjectXml)
+        val activity = projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt")
+            .readText()
+        val subtitleSection = activity.substringAfter("// Subtitle & Chapter Index area")
+            .substringBefore("// Progress bar row")
+        val portraitBranch = subtitleSection.substringAfter("if (!isLandscape) {")
+            .substringBefore("} else {")
+        val landscapeBranch = subtitleSection.substringAfter("} else {")
 
-        layouts.forEach { (path, document) ->
-            val title = findViewById(document, "@+id/tv_sub_title")
-            val chapterIndex = findViewById(document, "@+id/tv_chapter_index")
-
-            assertEquals(path, "end", title.getAttributeNS(androidNamespace, "ellipsize"))
-            assertEquals(path, "2", title.getAttributeNS(androidNamespace, "maxLines"))
-            assertEquals(path, "bold", title.getAttributeNS(androidNamespace, "textStyle"))
-            assertEquals(path, "gone", chapterIndex.getAttributeNS(androidNamespace, "visibility"))
-            assertEquals(path, "12sp", chapterIndex.getAttributeNS(androidNamespace, "textSize"))
-            assertEquals(
-                path,
-                "@color/md_dark_secondary",
-                chapterIndex.getAttributeNS(androidNamespace, "textColor"),
-            )
+        listOf(portraitBranch, landscapeBranch).forEach { branch ->
+            assertTrue(branch.contains("text = subTitleState"))
+            assertTrue(branch.contains("fontWeight = FontWeight.Bold"))
+            assertTrue(branch.contains("maxLines = 2"))
+            assertTrue(branch.contains("overflow = TextOverflow.Ellipsis"))
+            assertTrue(branch.contains("if (chapterIndexTextState.isNotEmpty())"))
+            assertTrue(branch.contains("text = chapterIndexTextState"))
+            assertTrue(branch.contains("color = colorResource(R.color.md_dark_secondary)"))
+            assertTrue(branch.contains("fontSize = 12.sp"))
         }
-
-        val portraitTitle = findViewById(layouts.getValue(portraitPath), "@+id/tv_sub_title")
-        val portraitIndex = findViewById(layouts.getValue(portraitPath), "@+id/tv_chapter_index")
-        assertEquals(
-            "@+id/tv_chapter_index",
-            portraitTitle.getAttributeNS(appNamespace, "layout_constraintBottom_toTopOf"),
-        )
-        assertEquals(
-            "@+id/tv_sub_title",
-            portraitIndex.getAttributeNS(appNamespace, "layout_constraintTop_toBottomOf"),
-        )
-        assertEquals(
-            "@+id/ll_player_progress",
-            portraitIndex.getAttributeNS(appNamespace, "layout_constraintBottom_toTopOf"),
-        )
-
-        val landscapeTitle = findViewById(layouts.getValue(landscapePath), "@+id/tv_sub_title")
-        val landscapeIndex = findViewById(layouts.getValue(landscapePath), "@+id/tv_chapter_index")
-        assertEquals(
-            "@+id/ll_player_progress",
-            landscapeTitle.getAttributeNS(appNamespace, "layout_constraintBottom_toTopOf"),
-        )
-        assertEquals(
-            "@+id/tv_chapter_index",
-            landscapeTitle.getAttributeNS(appNamespace, "layout_constraintEnd_toStartOf"),
-        )
-        assertEquals(
-            "@+id/tv_sub_title",
-            landscapeIndex.getAttributeNS(appNamespace, "layout_constraintBaseline_toBaselineOf"),
-        )
-        assertEquals(
-            "parent",
-            landscapeIndex.getAttributeNS(appNamespace, "layout_constraintEnd_toEndOf"),
-        )
-    }
-
-    private fun findPlayButton(document: Document): Element {
-        return document.getElementsByTagName(
-            "com.google.android.material.floatingactionbutton.FloatingActionButton"
-        ).let { nodes ->
-            (0 until nodes.length)
-                .map { nodes.item(it) as Element }
-                .single { it.getAttributeNS(androidNamespace, "id") == "@+id/fab_play_stop" }
-        }
-    }
-
-    private fun findViewById(document: Document, id: String): Element {
-        val nodes = document.getElementsByTagName("*")
-        return (0 until nodes.length)
-            .map { nodes.item(it) as Element }
-            .single { it.getAttributeNS(androidNamespace, "id") == id }
     }
 
     private fun vectorFillColor(fileName: String): String {
@@ -118,16 +53,19 @@ class AudioPlayLayoutTest {
     }
 
     private fun parseProjectXml(pathInApp: String): Document {
-        val file = listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
-            ?: error("Missing project file: $pathInApp")
+        val file = projectFile(pathInApp)
         return DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
         }.newDocumentBuilder().parse(file)
     }
 
+    private fun projectFile(pathInApp: String): File {
+        return listOf(File(pathInApp), File("app/$pathInApp"))
+            .firstOrNull { it.isFile }
+            ?: error("Missing project file: $pathInApp")
+    }
+
     private companion object {
         const val androidNamespace = "http://schemas.android.com/apk/res/android"
-        const val appNamespace = "http://schemas.android.com/apk/res-auto"
     }
 }

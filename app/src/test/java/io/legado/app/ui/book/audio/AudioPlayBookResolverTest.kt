@@ -100,7 +100,7 @@ class AudioPlayBookResolverTest {
             "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt"
         ).readText()
         val onNewIntent = activity.substringAfter("override fun onNewIntent(intent: Intent)")
-            .substringBefore("override fun onCompatCreateOptionsMenu")
+            .substringBefore("private fun selectAudioCacheFolder")
         val beforeInit = onNewIntent.substringBefore("viewModel.initData(")
 
         assertTrue(onNewIntent.contains("setIntent(intent)"))

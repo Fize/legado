@@ -2,31 +2,91 @@ package io.legado.app.ui.book.audio
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.SeekBar
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.doOnNextLayout
 import androidx.lifecycle.lifecycleScope
+import com.dirror.lyricviewx.LyricUtil
+import com.dirror.lyricviewx.LyricViewX
+import com.dirror.lyricviewx.OnPlayClickListener
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.Status
 import io.legado.app.constant.Theme
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
-import io.legado.app.data.entities.replaceBookAfterSourceChange
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.ActivityAudioPlayBinding
-import io.legado.app.databinding.DialogDownloadChoiceBinding
+import io.legado.app.data.entities.replaceBookAfterSourceChange
 import io.legado.app.help.audio.AudioCacheManager
 import io.legado.app.help.audio.AudioCachePolicy
 import io.legado.app.help.book.isAudio
@@ -34,22 +94,29 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.model.AudioPlay
+import io.legado.app.lib.theme.ThemeStore.Companion.accentColor
+import io.legado.app.lib.theme.view.ThemeSeekBar
 import io.legado.app.model.AudioCacheKey
 import io.legado.app.model.AudioCacheStateChanged
+import io.legado.app.model.AudioPlay
 import io.legado.app.model.BookCover
+import io.legado.app.model.SourceCallBack
 import io.legado.app.service.AudioCacheService
 import io.legado.app.service.AudioPlayService
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.book.audio.SliderPopup.Companion.SPEED
+import io.legado.app.ui.book.audio.config.AudioSkipCredits
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.widget.dialog.SleepTimerDialog
+import io.legado.app.ui.widget.image.CircleImageView
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.StartActivityContract
-import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.dpToPx
+import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeEventSticky
@@ -60,43 +127,91 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toDurationTime
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Default
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import splitties.views.onLongClick
 import java.util.Locale
-import io.legado.app.ui.book.audio.config.AudioSkipCredits
-import io.legado.app.ui.widget.dialog.SleepTimerDialog
-import com.dirror.lyricviewx.OnPlayClickListener
-import com.dirror.lyricviewx.LyricUtil
-import io.legado.app.lib.theme.ThemeStore.Companion.accentColor
-import io.legado.app.ui.book.audio.SliderPopup.Companion.SPEED
-import io.legado.app.model.SourceCallBack
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
 
 /**
  * 音频播放
  */
 @SuppressLint("ObsoleteSdkInt")
 class AudioPlayActivity :
-    VMBaseActivity<ActivityAudioPlayBinding, AudioPlayViewModel>(toolBarTheme = Theme.Dark),
+    BaseComposeActivity(toolBarTheme = Theme.Dark),
     ChangeBookSourceDialog.CallBack,
     AudioPlay.CallBack,
     SleepTimerDialog.CallBack {
 
-    override val binding by viewBinding(ActivityAudioPlayBinding::inflate)
-    override val viewModel by viewModels<AudioPlayViewModel>()
+    private val viewModel by viewModels<AudioPlayViewModel>()
     private val speedControlPopup by lazy { SliderPopup(this, SPEED) }
     private var adjustProgress = false
-    private var playMode = AudioPlay.PlayMode.LIST_END_STOP
-    private val lyricViewX by lazy { binding.lyricViewX }
+    private var playMode by mutableStateOf(AudioPlay.PlayMode.LIST_END_STOP)
+    private var titleState by mutableStateOf("")
+    private var subTitleState by mutableStateOf("")
+    private var chapterIndexTextState by mutableStateOf("")
+    private var durTimeTextState by mutableStateOf("00:00")
+    private var allTimeTextState by mutableStateOf("00:00")
+    private var timerTextState by mutableStateOf("")
+    private var speedTextState by mutableStateOf("")
+    private var playStatusState by mutableIntStateOf(AudioPlay.status)
+    private var loadingState by mutableStateOf(false)
+    private var skipPreviousEnabledState by mutableStateOf(false)
+    private var skipNextEnabledState by mutableStateOf(false)
+    private var customBtnVisibleState by mutableStateOf(false)
+    private var listenerReadyState by mutableStateOf(false)
+    private var hasLyricState by mutableStateOf(false)
+    private var showCacheRangeDialogState by mutableStateOf(false)
+    private var cacheRangeChapterCount by mutableIntStateOf(0)
+
+    private val ivBg by lazy {
+        ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }
+    }
+    private val ivCover by lazy {
+        CircleImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            borderColor = accentColor
+            borderWidth = 2.dpToPx()
+            setImageResource(R.drawable.image_rss_article)
+        }
+    }
+    private val lyricViewX by lazy {
+        LyricViewX(this).apply {
+            setCurrentColor(ContextCompat.getColor(this@AudioPlayActivity, R.color.md_white_1000))
+            val pad = 16.dpToPx()
+            setPadding(pad, 0, pad, 0)
+            gone()
+        }
+    }
+    private val playerProgress by lazy {
+        ThemeSeekBar(this).apply {
+            progressBackgroundTintList = ContextCompat.getColorStateList(
+                this@AudioPlayActivity,
+                R.color.md_dark_secondary
+            )
+            setOnSeekBarChangeListener(object : SeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                    durTimeTextState = progress.toDurationTime()
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar) {
+                    adjustProgress = true
+                }
+
+                override fun onStopTrackingTouch(seekBar: SeekBar) {
+                    adjustProgress = false
+                    AudioPlay.adjustProgress(seekBar.progress)
+                }
+            })
+        }
+    }
+    private var speedButtonAnchorView: View? = null
+
     private var lyricOn = false
     private var oldLyric: String? = null
-    private var menuCustomBtn: MenuItem? = null
     private var pendingAudioCacheAction: (() -> Unit)? = null
 
     private val tocActivityResult = registerForActivityResult(TocActivityResult()) {
@@ -139,19 +254,23 @@ class AudioPlayActivity :
         }
     }
 
+    @Composable
+    override fun Content() {
+        AudioPlayScreen()
+    }
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         onBackPressedDispatcher.addCallback(this) { finish() }
-        binding.titleBar.setBackgroundResource(R.color.transparent)
         AudioPlay.register(this)
         viewModel.titleData.observe(this) { name ->
-            binding.titleBar.title = name
+            titleState = name
             val lyric = AudioPlay.durChapter?.getVariable("lyric")?.takeIf { it.isNotBlank() }
             upLyric(lyric ?: AudioPlay.durLyric)
         }
         viewModel.coverData.observe(this) {
             upCover(it)
         }
-        viewModel.customBtnListData.observe(this) { menuCustomBtn?.isVisible = it }
+        viewModel.customBtnListData.observe(this) { customBtnVisibleState = it }
         viewModel.initData(
             intent = intent,
             success = ::initListener,
@@ -174,84 +293,6 @@ class AudioPlayActivity :
             success = ::initListener,
             error = ::finishAfterInitError,
         )
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.audio_play, menu)
-        menuCustomBtn = menu.findItem(R.id.menu_custom_btn)?.also {
-            it.isVisible = viewModel.customBtnListData.value == true
-        }
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = AudioPlay.bookSource?.hasLogin() == true
-        menu.findItem(R.id.menu_wake_lock)?.isChecked = AppConfig.audioPlayUseWakeLock
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_custom_btn -> {
-                AudioPlay.bookSource?.let {source ->
-                    AudioPlay.book?.let { book ->
-                        SourceCallBack.callBackBtn(
-                            this,
-                            SourceCallBack.CLICK_CUSTOM_BUTTON,
-                            source,
-                            book,
-                            AudioPlay.durChapter,
-                            BookType.audio
-                        )
-                    }
-                }
-            }
-            R.id.menu_change_source -> AudioPlay.book?.let {
-                showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
-            }
-
-            R.id.menu_login -> AudioPlay.bookSource?.let {
-                startActivity<SourceLoginActivity> {
-                    putExtra("bookType", BookType.audio)
-                }
-            }
-
-            R.id.menu_wake_lock -> AppConfig.audioPlayUseWakeLock = !AppConfig.audioPlayUseWakeLock
-            R.id.menu_copy_audio_url -> {
-                AudioPlay.book?.let {
-                    val url = AudioPlay.durPlayUrl.ifBlank {
-                        AudioPlay.durChapter?.resourceUrl.orEmpty()
-                    }
-                    SourceCallBack.callBackBtn(
-                        this,
-                        SourceCallBack.CLICK_COPY_PLAY_URL,
-                        AudioPlay.bookSource,
-                        it,
-                        AudioPlay.durChapter,
-                        BookType.audio,
-                        url
-                    ) {
-                        sendToClip(url)
-                    }
-                }
-            }
-            R.id.menu_audio_cache_folder -> selectAudioCacheFolder()
-            R.id.menu_audio_cache_range -> showAudioCacheRange()
-            R.id.menu_clear_current_audio_cache -> clearCurrentAudioCache()
-            R.id.menu_edit_source -> AudioPlay.bookSource?.let {
-                sourceEditResult.launch {
-                    putExtra("sourceUrl", it.bookSourceUrl)
-                }
-            }
-
-            /* 跳过片头片尾设定按钮 */
-            R.id.menu_skip_credits -> AudioPlay.book?.let {
-                showDialogFragment(AudioSkipCredits.newInstance(it))
-            }
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     private fun selectAudioCacheFolder(onSelected: (() -> Unit)? = null) {
@@ -286,36 +327,8 @@ class AudioPlayActivity :
         val chapterCount = AudioPlay.simulatedChapterSize.takeIf { it > 0 }
             ?: book.simulatedTotalChapterNum()
         if (chapterCount <= 0) return
-        alert(titleResource = R.string.audio_cache_range) {
-            val dialogBinding = DialogDownloadChoiceBinding.inflate(layoutInflater).apply {
-                editStart.setText((AudioPlay.durChapterIndex + 1).toString())
-                editEnd.setText(chapterCount.toString())
-            }
-            customView { dialogBinding.root }
-            okButton {
-                val start = dialogBinding.editStart.text?.toString()?.trim()?.toIntOrNull()
-                val end = dialogBinding.editEnd.text?.toString()?.trim()?.toIntOrNull()
-                val range = AudioCachePolicy.normalizeRange(
-                    start = start?.minus(1) ?: -1,
-                    endInclusive = end?.minus(1) ?: -1,
-                    chapterCount = chapterCount,
-                )
-                if (range == null) {
-                    toastOnUi(R.string.error_scope_input)
-                    return@okButton
-                }
-                ensureAudioCacheFolder {
-                    AudioCacheService.start(
-                        this@AudioPlayActivity,
-                        book.bookUrl,
-                        range.first,
-                        range.last,
-                    )
-                    toastOnUi(R.string.audio_cache_start_range)
-                }
-            }
-            cancelButton()
-        }
+        cacheRangeChapterCount = chapterCount
+        showCacheRangeDialogState = true
     }
 
     private fun clearCurrentAudioCache() {
@@ -354,82 +367,26 @@ class AudioPlayActivity :
     private fun initView() {
         observeEventSticky<AudioPlay.PlayMode>(EventBus.PLAY_MODE_CHANGED) {
             playMode = it
-            updatePlayModeIcon()
         }
-        binding.playerProgress.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                binding.tvDurTime.text = progress.toDurationTime()
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar) {
-                adjustProgress = true
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                adjustProgress = false
-                AudioPlay.adjustProgress(seekBar.progress)
-            }
-        })
-        /* 低于安卓6不显示调速按钮 */
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            binding.ivSpeedControl.invisible()
-        }
-        
-        binding.ivSpeedControl.setOnClickListener {
-            speedControlPopup.showAsDropDown(it, 0, (-100).dpToPx(), Gravity.TOP)
-        }
-
-        binding.ivTimer.setOnClickListener {
-            showDialogFragment(
-                SleepTimerDialog.newInstance(
-                    AudioPlayService.timeMinute,
-                    AudioPlayService.chapterToStop,
-                    useEpisodes = true,
-                )
-            )
-        }
-        binding.llPlayMenu.applyNavigationBarPadding()
     }
 
     private fun initListener() {
-        binding.ivPlayMode.setOnClickListener {
-            AudioPlay.changePlayMode()
-        }
-        binding.fabPlayStop.setOnClickListener {
-            playButton()
-        }
-        binding.fabPlayStop.onLongClick {
-            AudioPlay.stop()
-        }
-        binding.ivSkipNext.setOnClickListener {
-            AudioPlay.next()
-        }
-        binding.ivSkipPrevious.setOnClickListener {
-            AudioPlay.prev()
-        }
-        binding.ivChapter.setOnClickListener {
-            AudioPlay.book?.let {
-                tocActivityResult.launch(it.bookUrl)
-            }
-        }
-    }
-
-    private fun updatePlayModeIcon() {
-        binding.ivPlayMode.setImageResource(playMode.iconRes)
+        listenerReadyState = true
     }
 
     private fun upCover(path: String?) {
         val sourceOrigin = AudioPlay.book?.getCoverSourceOrigin()
         BookCover.load(this, path, sourceOrigin = sourceOrigin) {
             BookCover.loadBlur(this, path, sourceOrigin = sourceOrigin)
-                .into(binding.ivBg)
-        }.into(binding.ivCover)
+                .into(ivBg)
+        }.into(ivCover)
     }
 
     override fun upLyric(lyric: String?) {
         if (oldLyric == lyric) return
         oldLyric = lyric
-        binding.lyricViewX.gone()
+        hasLyricState = false
+        lyricViewX.gone()
         if (lyric.isNullOrBlank()) return
         lifecycleScope.launch {
             // Sources may return only LRC metadata when no subtitles are available.
@@ -437,6 +394,7 @@ class AudioPlayActivity :
                 LyricUtil.parseLrc(arrayOf(lyric, null))
             }
             if (oldLyric != lyric || lyricEntries.isNullOrEmpty()) return@launch
+            hasLyricState = true
             if (!lyricOn) {
                 lyricOn = true
                 lyricViewX.apply {
@@ -469,8 +427,9 @@ class AudioPlayActivity :
             lyricViewX.doOnLayout(::loadLyricWhenWide)
         }
     }
+
     override fun upLyricP(position: Int) {
-        lyricViewX.updateTime(position.toLong(),false)
+        lyricViewX.updateTime(position.toLong(), false)
     }
 
     private fun playButton(noLyr: Boolean = true) {
@@ -562,46 +521,40 @@ class AudioPlayActivity :
         }
         observeEventSticky<Int>(EventBus.AUDIO_STATE) {
             AudioPlay.status = it
-            if (it == Status.PLAY) {
-                binding.fabPlayStop.setImageResource(R.drawable.ic_pause_24dp)
-            } else {
-                binding.fabPlayStop.setImageResource(R.drawable.ic_play_24dp)
-            }
+            playStatusState = it
         }
         observeEventSticky<String>(EventBus.AUDIO_SUB_TITLE) {
-            binding.tvSubTitle.text = it
+            subTitleState = it
             val chapterSize = AudioPlay.simulatedChapterSize
             if (chapterSize > 0) {
-                binding.tvChapterIndex.text = getString(
+                chapterIndexTextState = getString(
                     R.string.audio_chapter_progress,
                     AudioPlay.durChapterIndex + 1,
                     chapterSize,
                 )
-                binding.tvChapterIndex.visible()
             } else {
-                binding.tvChapterIndex.gone()
+                chapterIndexTextState = ""
             }
-            binding.ivSkipPrevious.isEnabled = AudioPlay.durChapterIndex > 0
-            binding.ivSkipNext.isEnabled =
+            skipPreviousEnabledState = AudioPlay.durChapterIndex > 0
+            skipNextEnabledState =
                 AudioPlay.durChapterIndex < AudioPlay.simulatedChapterSize - 1
         }
         observeEventSticky<Int>(EventBus.AUDIO_SIZE) {
-            binding.playerProgress.max = it
-            binding.tvAllTime.text = it.toDurationTime()
+            playerProgress.max = it
+            allTimeTextState = it.toDurationTime()
         }
         observeEventSticky<Int>(EventBus.AUDIO_PROGRESS) {
-            if (!adjustProgress) binding.playerProgress.progress = it
-            binding.tvDurTime.text = it.toDurationTime()
+            if (!adjustProgress) playerProgress.progress = it
+            durTimeTextState = it.toDurationTime()
         }
         observeEventSticky<Int>(EventBus.AUDIO_BUFFER_PROGRESS) {
-            binding.playerProgress.secondaryProgress = it
+            playerProgress.secondaryProgress = it
         }
         observeEventSticky<Float>(EventBus.AUDIO_SPEED) {
-            if (it == 1f) {
-                binding.tvSpeed.invisible()
+            speedTextState = if (it == 1f) {
+                ""
             } else {
-                binding.tvSpeed.text = String.format(Locale.ROOT, "%.1fX", it)
-                binding.tvSpeed.visible()
+                String.format(Locale.ROOT, "%.1fX", it)
             }
         }
         observeEventSticky<Int>(EventBus.AUDIO_DS) { upTimerText() }
@@ -611,18 +564,10 @@ class AudioPlayActivity :
     private fun upTimerText() {
         val chapter = AudioPlayService.chapterToStop
         val minute = AudioPlayService.timeMinute
-        when {
-            chapter > 0 -> {
-                binding.tvTimer.text = getString(R.string.audio_stop_chapters, chapter)
-                binding.tvTimer.visible()
-            }
-
-            minute > 0 -> {
-                binding.tvTimer.text = getString(R.string.timer_m, minute)
-                binding.tvTimer.visible()
-            }
-
-            else -> binding.tvTimer.gone()
+        timerTextState = when {
+            chapter > 0 -> getString(R.string.audio_stop_chapters, chapter)
+            minute > 0 -> getString(R.string.timer_m, minute)
+            else -> ""
         }
     }
 
@@ -636,7 +581,654 @@ class AudioPlayActivity :
 
     override fun upLoading(loading: Boolean) {
         runOnUiThread {
-            binding.progressLoading.visible(loading)
+            loadingState = loading
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+    @Composable
+    private fun AudioPlayScreen() {
+        val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+        var overflowExpanded by remember { mutableStateOf(false) }
+        var wakeLockChecked by remember { mutableStateOf(AppConfig.audioPlayUseWakeLock) }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colorResource(R.color.background))
+        ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = {
+                    (ivBg.parent as? ViewGroup)?.removeView(ivBg)
+                    ivBg
+                }
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x90000000))
+            )
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = titleState,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { finish() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                                tint = Color.White
+                            )
+                        }
+                    },
+                    actions = {
+                        if (customBtnVisibleState) {
+                            IconButton(
+                                onClick = {
+                                    AudioPlay.bookSource?.let { source ->
+                                        AudioPlay.book?.let { book ->
+                                            SourceCallBack.callBackBtn(
+                                                this@AudioPlayActivity,
+                                                SourceCallBack.CLICK_CUSTOM_BUTTON,
+                                                source,
+                                                book,
+                                                AudioPlay.durChapter,
+                                                BookType.audio
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_custom),
+                                    contentDescription = stringResource(R.string.custom_button),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                AudioPlay.book?.let {
+                                    showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
+                                }
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_exchange),
+                                contentDescription = stringResource(R.string.change_origin),
+                                tint = Color.White
+                            )
+                        }
+                        Box {
+                            IconButton(
+                                onClick = {
+                                    wakeLockChecked = AppConfig.audioPlayUseWakeLock
+                                    overflowExpanded = true
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = stringResource(R.string.more_menu),
+                                    tint = Color.White
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = overflowExpanded,
+                                onDismissRequest = { overflowExpanded = false }
+                            ) {
+                                if (AudioPlay.bookSource?.hasLogin() == true) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.login)) },
+                                        onClick = {
+                                            overflowExpanded = false
+                                            AudioPlay.bookSource?.let {
+                                                startActivity<SourceLoginActivity> {
+                                                    putExtra("bookType", BookType.audio)
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.copy_play_url)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        AudioPlay.book?.let {
+                                            val url = AudioPlay.durPlayUrl.ifBlank {
+                                                AudioPlay.durChapter?.resourceUrl.orEmpty()
+                                            }
+                                            SourceCallBack.callBackBtn(
+                                                this@AudioPlayActivity,
+                                                SourceCallBack.CLICK_COPY_PLAY_URL,
+                                                AudioPlay.bookSource,
+                                                it,
+                                                AudioPlay.durChapter,
+                                                BookType.audio,
+                                                url
+                                            ) {
+                                                sendToClip(url)
+                                            }
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.audio_cache_select_folder)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        selectAudioCacheFolder()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.audio_cache_range)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        showAudioCacheRange()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.audio_cache_clear_current_chapter)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        clearCurrentAudioCache()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.edit_book_source)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        AudioPlay.bookSource?.let {
+                                            sourceEditResult.launch {
+                                                putExtra("sourceUrl", it.bookSourceUrl)
+                                            }
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.audio_play_wake_lock)) },
+                                    trailingIcon = {
+                                        Checkbox(
+                                            checked = wakeLockChecked,
+                                            onCheckedChange = null
+                                        )
+                                    },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        AppConfig.audioPlayUseWakeLock = !AppConfig.audioPlayUseWakeLock
+                                        wakeLockChecked = AppConfig.audioPlayUseWakeLock
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.skip_book_credits)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        AudioPlay.book?.let {
+                                            showDialogFragment(AudioSkipCredits.newInstance(it))
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.log)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        showDialogFragment<AppLogDialog>()
+                                    }
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    )
+                )
+
+                // Middle content area (Cover + Lyric + Timer/Speed badges)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    if (!isLandscape) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AndroidView(
+                                    modifier = Modifier.size(260.dp),
+                                    factory = {
+                                        (ivCover.parent as? ViewGroup)?.removeView(ivCover)
+                                        ivCover
+                                    }
+                                )
+                            }
+                            AndroidView(
+                                modifier = if (hasLyricState) {
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                } else {
+                                    Modifier
+                                        .height(0.dp)
+                                        .fillMaxWidth()
+                                },
+                                factory = {
+                                    (lyricViewX.parent as? ViewGroup)?.removeView(lyricViewX)
+                                    lyricViewX
+                                }
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AndroidView(
+                                    modifier = Modifier.size(260.dp),
+                                    factory = {
+                                        (ivCover.parent as? ViewGroup)?.removeView(ivCover)
+                                        ivCover
+                                    }
+                                )
+                            }
+                            AndroidView(
+                                modifier = if (hasLyricState) {
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                } else {
+                                    Modifier
+                                        .width(0.dp)
+                                        .fillMaxHeight()
+                                },
+                                factory = {
+                                    (lyricViewX.parent as? ViewGroup)?.removeView(lyricViewX)
+                                    lyricViewX
+                                }
+                            )
+                        }
+                    }
+
+                    // Timer badge (top-start) & Speed badge (top-end)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (timerTextState.isNotEmpty()) {
+                            Surface(
+                                color = Color(0x66000000),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_timer_black_24dp),
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = timerTextState,
+                                        color = Color.White,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.width(1.dp))
+                        }
+
+                        if (speedTextState.isNotEmpty()) {
+                            Surface(
+                                color = Color(0x66000000),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = speedTextState,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Subtitle & Chapter Index area
+                if (!isLandscape) {
+                    Text(
+                        text = subTitleState,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, top = 8.dp, end = 24.dp, bottom = 2.dp)
+                    )
+                    if (chapterIndexTextState.isNotEmpty()) {
+                        Text(
+                            text = chapterIndexTextState,
+                            color = colorResource(R.color.md_dark_secondary),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 24.dp, end = 24.dp, bottom = 6.dp)
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, top = 8.dp, end = 24.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = subTitleState,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (chapterIndexTextState.isNotEmpty()) {
+                            Text(
+                                text = chapterIndexTextState,
+                                color = colorResource(R.color.md_dark_secondary),
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Progress bar row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = durTimeTextState,
+                        color = Color.White
+                    )
+                    AndroidView(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(25.dp),
+                        factory = {
+                            (playerProgress.parent as? ViewGroup)?.removeView(playerProgress)
+                            playerProgress
+                        }
+                    )
+                    Text(
+                        text = allTimeTextState,
+                        color = Color.White
+                    )
+                }
+
+                // Bottom play control menu
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            showDialogFragment(
+                                SleepTimerDialog.newInstance(
+                                    AudioPlayService.timeMinute,
+                                    AudioPlayService.chapterToStop,
+                                    useEpisodes = true,
+                                )
+                            )
+                        },
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_timer_black_24dp),
+                            contentDescription = stringResource(R.string.set_timer),
+                            tint = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        Box(modifier = Modifier.size(46.dp)) {
+                            AndroidView(
+                                modifier = Modifier.size(1.dp),
+                                factory = { ctx ->
+                                    View(ctx).also { speedButtonAnchorView = it }
+                                }
+                            )
+                            IconButton(
+                                onClick = {
+                                    speedButtonAnchorView?.let { anchor ->
+                                        speedControlPopup.showAsDropDown(
+                                            anchor,
+                                            0,
+                                            (-100).dpToPx(),
+                                            Gravity.TOP
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_speed_control),
+                                    contentDescription = stringResource(R.string.speed_control),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.size(46.dp))
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    IconButton(
+                        onClick = { if (listenerReadyState) AudioPlay.prev() },
+                        enabled = skipPreviousEnabledState,
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_skip_previous),
+                            contentDescription = stringResource(R.string.skip_previous),
+                            tint = if (skipPreviousEnabledState) Color.White else Color.White.copy(alpha = 0.4f)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier.padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        FloatingActionButton(
+                            onClick = { if (listenerReadyState) playButton() },
+                            containerColor = Color.White,
+                            contentColor = Color.Black,
+                            shape = CircleShape,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .combinedClickable(
+                                    onClick = { if (listenerReadyState) playButton() },
+                                    onLongClick = { if (listenerReadyState) AudioPlay.stop() }
+                                )
+                        ) {
+                            Icon(
+                                painter = painterResource(
+                                    if (playStatusState == Status.PLAY) R.drawable.ic_pause_24dp
+                                    else R.drawable.ic_play_24dp
+                                ),
+                                contentDescription = stringResource(R.string.audio_play),
+                                tint = Color.Black
+                            )
+                        }
+                        if (loadingState) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(56.dp),
+                                color = Color(accentColor),
+                                strokeWidth = 3.dp
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { if (listenerReadyState) AudioPlay.next() },
+                        enabled = skipNextEnabledState,
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_skip_next),
+                            contentDescription = stringResource(R.string.skip_next),
+                            tint = if (skipNextEnabledState) Color.White else Color.White.copy(alpha = 0.4f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    IconButton(
+                        onClick = { if (listenerReadyState) AudioPlay.changePlayMode() },
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(playMode.iconRes),
+                            contentDescription = stringResource(R.string.play_mode),
+                            tint = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    IconButton(
+                        onClick = {
+                            if (listenerReadyState) {
+                                AudioPlay.book?.let {
+                                    tocActivityResult.launch(it.bookUrl)
+                                }
+                            }
+                        },
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_chapter_list),
+                            contentDescription = stringResource(R.string.chapter_list),
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showCacheRangeDialogState) {
+            var startInput by remember { mutableStateOf((AudioPlay.durChapterIndex + 1).toString()) }
+            var endInput by remember { mutableStateOf(cacheRangeChapterCount.toString()) }
+
+            AlertDialog(
+                onDismissRequest = { showCacheRangeDialogState = false },
+                title = { Text(stringResource(R.string.audio_cache_range)) },
+                text = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = startInput,
+                            onValueChange = { startInput = it },
+                            label = { Text(stringResource(R.string.start)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = endInput,
+                            onValueChange = { endInput = it },
+                            label = { Text(stringResource(R.string.end)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val book = AudioPlay.book
+                            if (book != null) {
+                                val start = startInput.trim().toIntOrNull()
+                                val end = endInput.trim().toIntOrNull()
+                                val range = AudioCachePolicy.normalizeRange(
+                                    start = start?.minus(1) ?: -1,
+                                    endInclusive = end?.minus(1) ?: -1,
+                                    chapterCount = cacheRangeChapterCount,
+                                )
+                                if (range == null) {
+                                    toastOnUi(R.string.error_scope_input)
+                                } else {
+                                    showCacheRangeDialogState = false
+                                    ensureAudioCacheFolder {
+                                        AudioCacheService.start(
+                                            this@AudioPlayActivity,
+                                            book.bookUrl,
+                                            range.first,
+                                            range.last,
+                                        )
+                                        toastOnUi(R.string.audio_cache_start_range)
+                                    }
+                                }
+                            } else {
+                                showCacheRangeDialogState = false
+                            }
+                        }
+                    ) {
+                        Text(stringResource(android.R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCacheRangeDialogState = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
         }
     }
 }

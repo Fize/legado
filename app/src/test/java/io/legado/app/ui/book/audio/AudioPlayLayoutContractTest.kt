@@ -8,17 +8,23 @@ class AudioPlayLayoutContractTest {
 
     @Test
     fun subtitleRemainsAnchoredWhenLyricViewIsGone() {
-        val layout = File("src/main/res/layout/activity_audio_play.xml").readText()
-        val subtitle = layout.substringAfter("android:id=\"@+id/tv_sub_title\"")
-            .substringBefore("<TextView")
+        val activity = listOf(
+            File("src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt"),
+            File("app/src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt")
+        ).first { it.isFile }.readText()
+
+        val middleIdx = activity.indexOf("// Middle content area")
+        val subtitleIdx = activity.indexOf("// Subtitle & Chapter Index area")
+        val progressIdx = activity.indexOf("// Progress bar row")
 
         assertTrue(
-            "The subtitle must stay below the lyric area when LyricViewX is GONE",
-            subtitle.contains("app:layout_constraintTop_toBottomOf=\"@+id/lyricViewX\""),
+            "The middle cover/lyric area must precede the subtitle area and fill available weight",
+            middleIdx in 0 until subtitleIdx &&
+                activity.substring(middleIdx, subtitleIdx).contains(".weight(1f)")
         )
         assertTrue(
-            "The subtitle must remain above the chapter index",
-            subtitle.contains("app:layout_constraintBottom_toTopOf=\"@+id/tv_chapter_index\""),
+            "The subtitle and chapter index must remain above the progress bar",
+            subtitleIdx in 0 until progressIdx
         )
     }
 }

@@ -39,8 +39,8 @@ class AudioEpisodeUnitTest {
         assertTrue(activity.contains("R.string.audio_stop_chapters"))
         assertTrue(activity.contains("R.string.audio_chapter_progress"))
         assertTrue(activity.contains("AudioPlay.durChapterIndex + 1"))
-        assertTrue(activity.contains("binding.tvChapterIndex.visible()"))
-        assertTrue(activity.contains("binding.tvChapterIndex.gone()"))
+        assertTrue(activity.contains("chapterIndexTextState = getString("))
+        assertTrue(activity.contains("chapterIndexTextState = \"\""))
         assertEquals(
             1,
             Regex("AudioPlay\\.upData\\(book, preserveProgress = true\\)")
@@ -110,7 +110,7 @@ class AudioEpisodeUnitTest {
         ).readText()
         val upLyric = source.substringAfter("override fun upLyric(lyric: String?)")
             .substringBefore("override fun upLyricP(position: Int)")
-        val hide = upLyric.indexOf("binding.lyricViewX.gone()")
+        val hide = upLyric.indexOf("lyricViewX.gone()")
         val background = upLyric.indexOf("withContext(Default)")
         val parse = upLyric.indexOf("LyricUtil.parseLrc(arrayOf(lyric, null))")
         val emptyOrStale = upLyric.indexOf(
