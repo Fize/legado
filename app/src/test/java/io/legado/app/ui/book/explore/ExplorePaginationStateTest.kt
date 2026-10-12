@@ -39,9 +39,9 @@ class ExplorePaginationStateTest {
             "src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"
         ).readText()
         val skip = source.indexOf("viewModel.skipPage(it)")
-        val stopTop = source.indexOf("loadMoreViewTop.stopLoad()", skip)
-        val startBottom = source.indexOf("loadMoreView.hasMore()", stopTop)
-        val clear = source.indexOf("adapter.clearItems()", startBottom)
+        val stopTop = source.indexOf("topLoadingState = false", skip)
+        val startBottom = source.indexOf("bottomHasMoreState = true", stopTop)
+        val clear = source.indexOf("booksState = emptyList()", startBottom)
         val explore = source.indexOf("viewModel.explore()", clear)
 
         assertTrue(skip >= 0)
@@ -49,7 +49,6 @@ class ExplorePaginationStateTest {
         assertTrue(startBottom > stopTop)
         assertTrue(clear > startBottom)
         assertTrue(explore > clear)
-        assertFalse(source.contains("if (!loadMoreView.hasMore)"))
     }
 
     private fun projectFile(pathInApp: String): File =

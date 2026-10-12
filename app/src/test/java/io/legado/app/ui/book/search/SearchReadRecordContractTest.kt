@@ -29,16 +29,13 @@ class SearchReadRecordContractTest {
 
     @Test
     fun `the search menu toggles the indicator and repaints the list`() {
-        val menu = projectFile("src/main/res/menu/book_search.xml").readText()
-        assertTrue(menu.contains("""android:id="@+id/menu_show_read_record""""))
-        assertTrue(menu.contains("""android:title="@string/show_search_read_record""""))
-
         val activity = projectFile(
             "src/main/java/io/legado/app/ui/book/search/SearchActivity.kt"
         ).readText().replace(Regex("\\s+"), " ")
+        assertTrue(activity.contains("R.string.show_search_read_record"))
         assertTrue(
             activity.contains(
-                "showReadRecordMenuItem?.isChecked = AppConfig.showSearchReadRecord"
+                "showReadRecordState = AppConfig.showSearchReadRecord"
             )
         )
         assertTrue(

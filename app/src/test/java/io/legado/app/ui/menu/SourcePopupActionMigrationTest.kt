@@ -18,7 +18,7 @@ class SourcePopupActionMigrationTest {
         assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "danger(\"delete\")")
         assertContains(CHANGE_BOOK, readProjectFile(CHANGE_BOOK), "danger(\"deleteSource\")")
         assertContains(CHANGE_CHAPTER, readProjectFile(CHANGE_CHAPTER), "danger(\"deleteSource\")")
-        assertContains(EXPLORE, readProjectFile(EXPLORE), "danger(\"delete\")")
+        assertContains(EXPLORE, readProjectFile(EXPLORE), "color = MaterialTheme.colorScheme.error")
         legacyMenuFiles.forEach { path ->
             assertFalse(
                 "$path should be removed",
@@ -40,7 +40,7 @@ class SourcePopupActionMigrationTest {
         assertContains(
             EXPLORE,
             readProjectFile(EXPLORE),
-            "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)"
+            "if (item.hasLoginUrl)"
         )
     }
 
@@ -112,12 +112,12 @@ class SourcePopupActionMigrationTest {
         )
         assertActions(
             EXPLORE,
-            "\"edit\" -> callBack.editSource(source.bookSourceUrl)",
-            "\"top\" -> callBack.toTop(source)",
-            "\"search\" -> callBack.searchBook(source)",
-            "\"login\" -> context.startActivity<SourceLoginActivity>",
-            "\"refresh\" -> refreshExplore(source, position, binding)",
-            "\"delete\" -> callBack.deleteSource(source)"
+            "editSource(item.bookSourceUrl)",
+            "toTop(item)",
+            "searchBook(item)",
+            "context.startActivity<SourceLoginActivity>",
+            "refreshExplore(item, index)",
+            "deleteSource(item)"
         )
     }
 
@@ -150,8 +150,8 @@ class SourcePopupActionMigrationTest {
         const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
         const val CHANGE_BOOK = "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt"
         const val CHANGE_CHAPTER = "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceAdapter.kt"
-        const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
-        val sourceMenuFiles = listOf(BOOK_SOURCE, CHANGE_BOOK, CHANGE_CHAPTER, EXPLORE)
+        const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
+        val sourceMenuFiles = listOf(BOOK_SOURCE, CHANGE_BOOK, CHANGE_CHAPTER)
         val legacyMenuFiles = listOf(
             "src/main/res/menu/book_source_item.xml",
             "src/main/res/menu/change_source_item.xml",

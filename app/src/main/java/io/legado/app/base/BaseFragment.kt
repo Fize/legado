@@ -17,7 +17,7 @@ import io.legado.app.utils.applyTint
 import io.legado.app.utils.installMd3OverflowMenu
 
 @Suppress("MemberVisibilityCanBePrivate")
-abstract class BaseFragment(@LayoutRes layoutID: Int) : Fragment(layoutID) {
+abstract class BaseFragment(@LayoutRes layoutID: Int = 0) : Fragment(layoutID) {
 
     var supportToolbar: Toolbar? = null
         private set

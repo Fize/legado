@@ -41,27 +41,15 @@ class ExploreGroupMenuStateTest {
         )
 
         listOf(
-            "upGroupsMenu(resetMissingGroup = true)",
-            "R.id.menu_group_all",
             "R.string.all_source",
-            "menu.setGroupCheckable(R.id.menu_group_text, true, true)",
-            "isExploreAllQuery(query)",
-            "searchView.setQuery(\"\", false)",
-            "item.isChecked = true"
+            "isExploreAllQuery(searchQueryState)",
+            "selectedExploreGroup(searchQueryState, groupsState)",
+            "if (requestedGroup != null && requestedGroup !in groups)",
+            "searchQueryState = \"\"",
+            "upExploreData(\"\")"
         ).forEach { expected ->
             assertTrue("ExploreFragment should contain $expected", source.contains(expected))
         }
-        val updateChecks = source.substringAfter("private fun updateGroupsMenuChecks")
-            .substringBefore("override val scope")
-        val nonExclusive = updateChecks.indexOf(
-            "menu.setGroupCheckable(R.id.menu_group_text, true, false)"
-        )
-        val checkedAssignment = updateChecks.indexOf("item.isChecked =")
-        val exclusive = updateChecks.indexOf(
-            "menu.setGroupCheckable(R.id.menu_group_text, true, true)"
-        )
-        assertTrue(nonExclusive in 0 until checkedAssignment)
-        assertTrue(exclusive > checkedAssignment)
     }
 
     @Test
@@ -69,16 +57,10 @@ class ExploreGroupMenuStateTest {
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
         )
-        val menu = readProjectFile("src/main/res/menu/main_explore.xml")
 
-        assertTrue(source.contains("item.itemId == R.id.menu_source_manage"))
         assertTrue(source.contains("startActivity<BookSourceActivity>()"))
-        assertTrue(menu.contains("android:id=\"@+id/menu_source_manage\""))
-        assertTrue(menu.contains("android:title=\"@string/book_source_manage\""))
-        assertTrue(menu.contains("android:icon=\"@drawable/ic_settings\""))
-        val sourceManageItem = menu.substringAfter("android:id=\"@+id/menu_source_manage\"")
-            .substringBefore("/>")
-        assertTrue(sourceManageItem.contains("app:showAsAction=\"always\""))
+        assertTrue(source.contains("R.drawable.ic_settings"))
+        assertTrue(source.contains("R.string.book_source_manage"))
     }
 
     private fun readProjectFile(path: String): String =

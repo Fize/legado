@@ -29,14 +29,17 @@ class LabelsBarLayoutTest {
 
     @Test
     fun `search and explore results wrap labels within the available width`() {
-        val labels = labelsBar("app/src/main/res/layout/item_search.xml", "ll_kind")
+        val searchSource = File(
+            repositoryRoot,
+            "app/src/main/java/io/legado/app/ui/book/search/SearchActivity.kt"
+        ).readText()
+        val exploreSource = File(
+            repositoryRoot,
+            "app/src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"
+        ).readText()
 
-        assertEquals("0dp", labels.androidAttribute("layout_width"))
-        assertEquals("row", labels.appAttribute("flexDirection"))
-        assertEquals("wrap", labels.appAttribute("flexWrap"))
-        assertEquals("flex_start", labels.appAttribute("justifyContent"))
-        assertEquals("center", labels.appAttribute("alignItems"))
-        assertEquals("@id/tv_author", labels.appAttribute("layout_constraintTop_toBottomOf"))
+        assertTrue(searchSource.contains("FlowRow("))
+        assertTrue(exploreSource.contains("FlowRow("))
     }
 
     @Test

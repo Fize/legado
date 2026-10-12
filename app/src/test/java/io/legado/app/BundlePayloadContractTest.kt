@@ -38,8 +38,6 @@ class BundlePayloadContractTest {
         val migratedPayloadSources = listOf(
             "io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
             "io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt",
-            "io/legado/app/ui/book/explore/ExploreShowActivity.kt",
-            "io/legado/app/ui/book/search/SearchActivity.kt",
             "io/legado/app/ui/book/source/manage/BookSourceActivity.kt",
             "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt",
             "io/legado/app/ui/main/bookshelf/style1/books/BaseBooksAdapter.kt",

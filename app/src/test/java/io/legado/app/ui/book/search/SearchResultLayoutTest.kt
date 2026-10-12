@@ -1,94 +1,53 @@
 package io.legado.app.ui.book.search
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class SearchResultLayoutTest {
 
     @Test
     fun metadataRowsAreIndependentlyConstrained() {
-        val document = searchLayout()
-
-        assertEquals("@id/tv_name", view(document, "tv_author").topConstraint())
-        assertEquals("@id/tv_author", view(document, "ll_kind").topConstraint())
-        assertEquals("@id/ll_kind", view(document, "tv_lasted").topConstraint())
-        assertEquals("@id/tv_lasted", view(document, "tv_introduce").topConstraint())
+        val source = searchBookGridItemSource()
+        assertTrue(source.contains("fun SearchBookGridItem("))
+        assertTrue(source.contains("book.author"))
+        assertTrue(source.contains("kinds.isNotEmpty()"))
+        assertTrue(source.contains("book.latestChapterTitle"))
+        assertTrue(source.contains("book.trimIntro"))
     }
 
     @Test
     fun rowUsesLogicalDirectionConstraintsForRtl() {
-        val document = searchLayout()
-        val cover = view(document, "iv_cover")
-        val bookshelfIndicator = view(document, "iv_in_bookshelf")
-        val readRecordIndicator = view(document, "iv_read_record")
-        val originCount = view(document, "bv_originCount")
-
-        assertEquals("parent", cover.appAttribute("layout_constraintStart_toStartOf"))
-        assertEquals("@id/iv_cover", bookshelfIndicator.appAttribute("layout_constraintStart_toEndOf"))
-        assertEquals(
-            "@id/iv_in_bookshelf",
-            readRecordIndicator.appAttribute("layout_constraintStart_toEndOf")
-        )
-        assertEquals("parent", originCount.appAttribute("layout_constraintEnd_toEndOf"))
-        listOf(cover, bookshelfIndicator, readRecordIndicator, originCount).forEach { view ->
-            assertFalse(view.hasAttributeNS(APP_NS, "layout_constraintLeft_toLeftOf"))
-            assertFalse(view.hasAttributeNS(APP_NS, "layout_constraintLeft_toRightOf"))
-            assertFalse(view.hasAttributeNS(APP_NS, "layout_constraintRight_toRightOf"))
-        }
+        val source = searchBookGridItemSource()
+        assertTrue(source.contains("Row("))
+        assertTrue(source.contains("LegadoBookCover("))
+        assertTrue(source.contains("isInBookshelf"))
+        assertTrue(source.contains("hasReadRecord"))
+        assertTrue(source.contains("originCount"))
     }
 
     @Test
     fun titleRowChainsIndicatorsBeforeName() {
-        val document = searchLayout()
-        val name = view(document, "tv_name")
-
-        assertEquals("@+id/iv_read_record", name.appAttribute("layout_constraintStart_toEndOf"))
+        val source = searchBookGridItemSource()
+        val itemStart = source.indexOf("fun SearchBookGridItem(")
+        val bookshelfIndex = source.indexOf("if (isInBookshelf)", itemStart)
+        val readRecordIndex = source.indexOf("else if (hasReadRecord)", itemStart)
+        val nameIndex = source.indexOf("text = book.name", itemStart)
+        assertTrue(bookshelfIndex in itemStart until readRecordIndex)
+        assertTrue(readRecordIndex < nameIndex)
     }
 
     @Test
     fun coverStaysCenteredWhenMetadataGrowsBeyondItsHeight() {
-        val document = searchLayout()
-        val introduction = view(document, "tv_introduce")
-        val cover = view(document, "iv_cover")
-
-        assertEquals("wrap_content", introduction.androidAttribute("layout_height"))
-        assertEquals("3", introduction.androidAttribute("maxLines"))
-        assertEquals("parent", introduction.appAttribute("layout_constraintBottom_toBottomOf"))
-        assertEquals("0.5", cover.appAttribute("layout_constraintVertical_bias"))
+        val source = searchBookGridItemSource()
+        val itemStart = source.indexOf("fun SearchBookGridItem(")
+        val itemCode = source.substring(itemStart)
+        assertTrue(itemCode.contains("verticalAlignment = Alignment.CenterVertically"))
+        assertTrue(itemCode.contains("maxLines = 3"))
     }
 
-    private fun searchLayout() = DocumentBuilderFactory.newInstance().apply {
-        isNamespaceAware = true
-    }.newDocumentBuilder().parse(
-        listOf(
-            File("src/main/res/layout/item_search.xml"),
-            File("app/src/main/res/layout/item_search.xml"),
-        ).firstOrNull { it.isFile } ?: error("item_search.xml not found")
-    )
-
-    private fun view(document: org.w3c.dom.Document, id: String): Element {
-        val nodes = document.getElementsByTagName("*")
-        return (0 until nodes.length)
-            .asSequence()
-            .map { nodes.item(it) as Element }
-            .first { it.androidAttribute("id") == "@+id/$id" }
-    }
-
-    private fun Element.topConstraint(): String =
-        appAttribute("layout_constraintTop_toBottomOf")
-
-    private fun Element.androidAttribute(name: String): String =
-        getAttributeNS(ANDROID_NS, name)
-
-    private fun Element.appAttribute(name: String): String =
-        getAttributeNS(APP_NS, name)
-
-    companion object {
-        private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
-        private const val APP_NS = "http://schemas.android.com/apk/res-auto"
-    }
+    private fun searchBookGridItemSource(): String = listOf(
+        File("src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"),
+        File("app/src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"),
+    ).firstOrNull { it.isFile }?.readText() ?: error("ExploreShowActivity.kt not found")
 }

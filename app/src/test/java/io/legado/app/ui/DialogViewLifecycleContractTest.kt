@@ -20,8 +20,8 @@ class DialogViewLifecycleContractTest {
         assertTrue(cover.contains("viewLifecycleOwner.lifecycleScope.launch"))
         assertFalse(cover.contains("\n        lifecycleScope.launch"))
 
-        val initData = search.section("private fun initData()", "@SuppressLint")
-        val upBookSource = search.section("private fun upBookSource", "inner class RecyclerAdapter")
+        val initData = search.section("private fun initData()", "private fun upBookSource")
+        val upBookSource = search.section("private fun upBookSource", "interface Callback")
         assertTrue(initData.contains("viewLifecycleOwner.lifecycleScope.launch"))
         assertTrue(upBookSource.contains("viewLifecycleOwner.lifecycleScope.launch"))
         assertTrue(upBookSource.contains("viewLifecycleOwner.lifecycle"))

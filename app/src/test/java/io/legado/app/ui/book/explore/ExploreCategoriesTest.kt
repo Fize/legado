@@ -60,8 +60,8 @@ class ExploreCategoriesTest {
     @Test
     fun `category rows stay compact and top scroll restores first page indicator`() {
         val activity = source("ui/book/explore/ExploreShowActivity.kt")
-        assertTrue(activity.contains("minimumHeight = 40.dpToPx()"))
-        assertTrue(activity.contains("setPadding(12.dpToPx(), 0, 12.dpToPx(), 0)"))
+        assertTrue(activity.contains("heightIn(min = 40.dp)"))
+        assertTrue(activity.contains("padding(horizontal = 12.dp)"))
         assertTrue(activity.contains("viewModel.showPage(1)"))
         assertTrue(source("ui/book/explore/ExploreShowViewModel.kt").contains("fun showPage(page: Int)"))
     }

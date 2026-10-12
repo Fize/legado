@@ -17,11 +17,6 @@ class HomeFastScrollerContractTest {
             recyclerId = "rv_bookshelf",
             constraintTarget = "refresh_layout",
         )
-        assertFastScrollerLayout(
-            layout = "fragment_explore.xml",
-            recyclerId = "rv_find",
-            constraintTarget = "rv_find",
-        )
 
         val bookshelf = projectFile(
             "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
@@ -52,37 +47,6 @@ class HomeFastScrollerContractTest {
         )
         assertDetachBeforeSuper(
             bookshelf.sourceSection("override fun onDestroyView() {", "\n}"),
-        )
-
-        val explore = projectFile(
-            "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt",
-        ).readText()
-        assertInOrder(
-            explore.sourceSection(
-                "private fun initRecyclerView() {",
-                "private fun upFastScrollerBar() {",
-            ),
-            "fastScroller.attachRecyclerView(binding.rvFind)",
-            "upFastScrollerBar()",
-        )
-        assertFastScrollerToggle(
-            explore.sourceSection(
-                "private fun upFastScrollerBar() {",
-                "private fun initGroupData() {",
-            ),
-            "AppConfig.showDiscoveryFastScroller",
-            "binding.rvFind",
-        )
-        assertInOrder(
-            explore.sourceSection("override fun onResume() {", "override fun onPause() {"),
-            "super.onResume()",
-            "upFastScrollerBar()",
-        )
-        assertDetachBeforeSuper(
-            explore.sourceSection(
-                "override fun onDestroyView() {",
-                "private fun upGroupsMenu(",
-            ),
         )
 
         val config = projectFile(

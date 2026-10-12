@@ -18,31 +18,23 @@ class ExploreAdapterBindingStateTest {
     }
 
     @Test
-    fun `empty explore kinds clear old controls before returning`() {
+    fun `empty explore kinds do not render ExploreKindsSection`() {
         val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
-        ).substringAfter("private fun upKindList").substringBefore("@Synchronized")
-        val recycleIndex = source.indexOf("recyclerFlexbox(flexbox)")
-        val hideIndex = source.indexOf("flexbox.gone()")
-        val emptyIndex = source.indexOf("if (kinds.isEmpty())")
-
-        assertTrue(recycleIndex >= 0 && recycleIndex < emptyIndex)
-        assertTrue(hideIndex >= 0 && hideIndex < emptyIndex)
+            "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
+        )
+        assertTrue(source.contains("val kinds = sourceKindsMap[item.bookSourceUrl].orEmpty()"))
+        assertTrue(source.contains("if (kinds.isNotEmpty())"))
     }
 
     @Test
-    fun `dynamic explore labels ignore callbacks after view reuse`() {
+    fun `dynamic explore labels key LaunchedEffect by sourceUrl and kindIdx`() {
         val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
+            "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
         )
 
-        assertEquals(5, source.countOccurrences("val viewNameToken = Any()"))
-        assertEquals(5, source.countOccurrences("tag = viewNameToken"))
-        assertEquals(10, source.countOccurrences("tag !== viewNameToken"))
+        assertTrue(source.contains("LaunchedEffect(sourceUrl, kindIdx, kind.viewName)"))
+        assertTrue(source.contains("isExploreBindingCurrent("))
     }
-
-    private fun String.countOccurrences(value: String): Int =
-        windowed(value.length).count { it == value }
 
     private fun readProjectFile(path: String): String =
         sequenceOf(File(path), File("app/$path"))
