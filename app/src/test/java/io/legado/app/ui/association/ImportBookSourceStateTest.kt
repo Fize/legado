@@ -80,23 +80,19 @@ class ImportBookSourceStateTest {
         )
         val errorState = dialog.substringAfter("viewModel.errorLiveData.observe")
             .substringBefore("viewModel.successLiveData.observe")
-        assertTrue(errorState.contains("binding.ivEmpty.visible()"))
+        assertTrue(errorState.contains("showEmptyIcon = true"))
         val successState = dialog.substringAfter("viewModel.successLiveData.observe")
             .substringBefore("viewModel.sourceUpdatePending.observe")
         val populatedState = successState.substringAfter("if (it > 0)")
             .substringBefore("} else {")
-        assertTrue(populatedState.contains("binding.ivEmpty.gone()"))
-        assertTrue(populatedState.contains("binding.tvMsg.gone()"))
-        assertTrue(successState.substringAfter("} else {").contains("binding.ivEmpty.visible()"))
+        assertTrue(populatedState.contains("showEmptyIcon = false"))
+        assertTrue(populatedState.contains("messageText = null"))
+        assertTrue(successState.substringAfter("} else {").contains("showEmptyIcon = true"))
 
-        val layout = readProjectFile("src/main/res/layout/dialog_recycler_view.xml")
-        assertTrue(layout.contains("@+id/ll_empty"))
-        val emptyIcon = layout.substringAfter("@+id/iv_empty").substringBefore("/>")
-        assertTrue(emptyIcon.contains("@drawable/ic_description"))
-        assertTrue(emptyIcon.contains("android:visibility=\"gone\""))
-        val message = layout.substringAfter("@+id/tv_msg").substringBefore("/>")
-        assertTrue(message.contains("android:layout_width=\"match_parent\""))
-        assertTrue(message.contains("android:visibility=\"gone\""))
+        val components = readProjectFile(
+            "src/main/java/io/legado/app/ui/association/AssociationComposeComponents.kt"
+        )
+        assertTrue(components.contains("R.drawable.ic_description"))
 
         val icon = readProjectFile("src/main/res/drawable/ic_description.xml")
         assertTrue(icon.contains("android:pathData="))
@@ -104,19 +100,11 @@ class ImportBookSourceStateTest {
 
     @Test
     fun `import comment rows reset collapsed state when rebound`() {
-        listOf(
-            "src/main/java/io/legado/app/ui/association/ImportBookSourceDialog.kt",
-            "src/main/java/io/legado/app/ui/association/ImportTxtTocRuleDialog.kt",
-        ).forEach { path ->
-            val source = readProjectFile(path)
-            val textIndex = source.indexOf("showComment.text =")
-            val resetIndex = source.indexOf("showComment.maxLines = 3", textIndex)
-            val visibleIndex = source.indexOf("showComment.visible()", textIndex)
-            assertTrue(textIndex >= 0 && resetIndex > textIndex && visibleIndex > resetIndex)
-        }
-
-        val layout = readProjectFile("src/main/res/layout/item_source_import.xml")
-        assertTrue(layout.contains("android:maxLines=\"3\""))
+        val components = readProjectFile(
+            "src/main/java/io/legado/app/ui/association/AssociationComposeComponents.kt"
+        )
+        assertTrue(components.contains("var commentExpanded by remember(name, comment) { mutableStateOf(false) }"))
+        assertTrue(components.contains("maxLines = if (commentExpanded) 39 else 3"))
     }
 
     @Test
@@ -155,7 +143,7 @@ class ImportBookSourceStateTest {
         val dialog = readProjectFile(
             "src/main/java/io/legado/app/ui/association/ImportBookSourceDialog.kt"
         )
-        assertTrue(dialog.contains("viewModel.setUseSourceReplacement(item.isChecked)"))
+        assertTrue(dialog.contains("viewModel.setUseSourceReplacement(autoReplaceSource)"))
         assertTrue(dialog.contains("viewModel.originalSourceJson(position)"))
         assertTrue(dialog.contains("alternateCode = viewModel.replacedSourceJson(position)"))
         assertTrue(dialog.contains("showReplaceRules = true"))
@@ -180,8 +168,8 @@ class ImportBookSourceStateTest {
         assertTrue(syncOpenCodeDialog.contains("dialog.setReplaceRuleRefreshPending(false)"))
         val interactionState = dialog.substringAfter("private fun updateInteractionState()")
             .substringBefore("override fun onCodeSave")
-        assertTrue(interactionState.contains("menu_select_new_source)?.isEnabled = importEnabled"))
-        assertTrue(interactionState.contains("menu_select_update_source)?.isEnabled = importEnabled"))
+        assertTrue(interactionState.contains("importEnabledState = importEnabled"))
+        assertTrue(interactionState.contains("autoReplaceSource = viewModel.automaticSourceReplacement"))
 
         val viewModel = readProjectFile(
             "src/main/java/io/legado/app/ui/association/ImportBookSourceViewModel.kt"

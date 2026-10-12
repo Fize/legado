@@ -20,19 +20,19 @@ class FileAssociationLoadingStateTest {
         val permissionDenied = source.substringAfter("}.onDenied {")
             .substringBefore("}.request()")
 
-        assertTrue(onlineImportObserver.contains("binding.rotateLoading.gone()"))
-        assertTrue(successObserver.contains("binding.rotateLoading.gone()"))
-        assertTrue(permissionDenied.contains("binding.rotateLoading.gone()"))
+        assertTrue(onlineImportObserver.contains("isLoading = false"))
+        assertTrue(successObserver.contains("isLoading = false"))
+        assertTrue(permissionDenied.contains("isLoading = false"))
     }
 
     @Test
     fun `folder selection does not leave loading visible`() {
         val folderSelection = source.substringAfter("private fun chooseBookDirectory()")
 
-        assertFalse(folderSelection.contains("binding.rotateLoading.visible()"))
-        assertTrue(folderSelection.contains("binding.rotateLoading.gone()"))
+        assertFalse(folderSelection.contains("isLoading = true"))
+        assertTrue(folderSelection.contains("isLoading = false"))
         assertTrue(
-            folderSelection.indexOf("binding.rotateLoading.gone()") <
+            folderSelection.indexOf("isLoading = false") <
                     folderSelection.indexOf("localBookTreeSelect.launch")
         )
     }
@@ -44,7 +44,7 @@ class FileAssociationLoadingStateTest {
         val copy = readProjectFile("src/main/java/io/legado/app/ui/association/FileAssociationViewModel.kt")
             .substringAfter("fun importLocalBooks(directory: Uri)")
             .substringBefore("private fun reportSharedImportError")
-        assertTrue(observer.contains("if (importing) binding.rotateLoading.visible() else binding.rotateLoading.gone()"))
+        assertTrue(observer.contains("isLoading = importing"))
         assertTrue(copy.contains("importingLocalBooks.value = true"))
         assertTrue(copy.contains(".onFinally { importingLocalBooks.value = false }"))
     }

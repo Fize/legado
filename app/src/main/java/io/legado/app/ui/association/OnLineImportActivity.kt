@@ -4,23 +4,30 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
 import androidx.fragment.app.DialogFragment
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
-import io.legado.app.databinding.ActivityTranslucenceBinding
+import io.legado.app.base.VMBaseComposeActivity
+import io.legado.app.constant.Theme
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 网络一键导入
  * 格式: legado://import/{path}?src={url}
  */
 class OnLineImportActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, OnLineImportViewModel>() {
+    VMBaseComposeActivity<OnLineImportViewModel>(
+        theme = Theme.Transparent,
+        imageBg = false
+    ) {
 
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
     override val viewModel by viewModels<OnLineImportViewModel>()
+
+    @Composable
+    override fun Content() {
+        TranslucenceLoadingScreen(isLoading = false)
+    }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         viewModel.successLive.observe(this) {
@@ -30,7 +37,8 @@ class OnLineImportActivity :
             when (it.first) {
                 "bookSource" -> showDialogFragment(
                     ImportBookSourceDialog(it.second, true)
-                )                "replaceRule" -> showDialogFragment(
+                )
+                "replaceRule" -> showDialogFragment(
                     ImportReplaceRuleDialog(it.second, true)
                 )
                 "highlightRule" -> showImportHighlightRuleDialog(it.second, true)
@@ -44,8 +52,11 @@ class OnLineImportActivity :
                     ImportDictRuleDialog(it.second, true)
                 )
                 "bookshelf" -> {
-                    startActivity(Intent(this, FileAssociationActivity::class.java)
-                        .setAction(Intent.ACTION_VIEW).setData(Uri.parse(it.second)))
+                    startActivity(
+                        Intent(this, FileAssociationActivity::class.java)
+                            .setAction(Intent.ACTION_VIEW)
+                            .setData(Uri.parse(it.second))
+                    )
                     finish()
                 }
                 "readConfig" -> finallyDialog(getString(R.string.success), it.second)
@@ -92,7 +103,8 @@ class OnLineImportActivity :
                 "/importonline" -> when (it.host) {
                     "booksource" -> showDialogFragment(
                         ImportBookSourceDialog(url, true)
-                    )                    "replace" -> showDialogFragment(
+                    )
+                    "replace" -> showDialogFragment(
                         ImportReplaceRuleDialog(url, true)
                     )
                     else -> {

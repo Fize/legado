@@ -1,16 +1,22 @@
 package io.legado.app.ui.association
 
 import android.os.Bundle
-import io.legado.app.base.BaseActivity
+import androidx.compose.runtime.Composable
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.SourceType
-import io.legado.app.databinding.ActivityTranslucenceBinding
+import io.legado.app.constant.Theme
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 class OpenUrlConfirmActivity :
-    BaseActivity<ActivityTranslucenceBinding>() {
+    BaseComposeActivity(
+        theme = Theme.Transparent,
+        imageBg = false
+    ) {
 
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
+    @Composable
+    override fun Content() {
+        TranslucenceLoadingScreen(isLoading = false)
+    }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         intent.getStringExtra("uri")?.let {

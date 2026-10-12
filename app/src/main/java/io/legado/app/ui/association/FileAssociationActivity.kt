@@ -4,12 +4,16 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import androidx.core.os.postDelayed
 import androidx.fragment.app.DialogFragment
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
-import io.legado.app.databinding.ActivityTranslucenceBinding
+import io.legado.app.base.VMBaseComposeActivity
+import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
@@ -21,29 +25,37 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import splitties.init.appCtx
 import java.io.File
 
 class FileAssociationActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, FileAssociationViewModel>() {
+    VMBaseComposeActivity<FileAssociationViewModel>(
+        theme = Theme.Transparent,
+        imageBg = false
+    ) {
 
     private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { directory -> AppConfig.defaultBookTreeUri = directory.toString() }
         viewModel.selectLocalBookDirectory(it.uri)
     }
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
 
     override val viewModel by viewModels<FileAssociationViewModel>()
+
+    private var isLoading by mutableStateOf(false)
 
     private val handler by lazy {
         buildMainHandler()
     }
 
+    @Composable
+    override fun Content() {
+        TranslucenceLoadingScreen(isLoading = isLoading)
+    }
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.rotateLoading.visible()
+        isLoading = true
         viewModel.localBookBatch.observe(this) {
-            binding.rotateLoading.gone()
+            isLoading = false
             if (supportFragmentManager.findFragmentByTag("sharedLocalBooks") == null) {
                 ImportLocalBookDialog().show(supportFragmentManager, "sharedLocalBooks")
             }
@@ -53,29 +65,31 @@ class FileAssociationActivity :
         }
         viewModel.importingLocalBooks.observe(this) { importing ->
             if (viewModel.localBookBatch.value.isNullOrEmpty()) {
-                if (importing) binding.rotateLoading.visible() else binding.rotateLoading.gone()
+                isLoading = importing
             }
         }
         viewModel.importedLocalBooks.observe(this) { if (it) finish() }
         viewModel.mixedLocalTypes.observe(this) { mixed ->
             if (mixed) {
-                binding.rotateLoading.gone()
-                alert(title = getString(R.string.wrong_format),
-                    message = getString(R.string.shared_local_books_mixed_types)) {
+                isLoading = false
+                alert(
+                    title = getString(R.string.wrong_format),
+                    message = getString(R.string.shared_local_books_mixed_types)
+                ) {
                     yesButton { finish() }
                     onCancelled { finish() }
                 }
             }
         }
         viewModel.onLineImportLive.observe(this) {
-            binding.rotateLoading.gone()
+            isLoading = false
             startActivity<OnLineImportActivity> {
                 data = it
             }
             finish()
         }
         viewModel.successLive.observe(this) {
-            binding.rotateLoading.gone()
+            isLoading = false
             if (supportFragmentManager.fragments.any { fragment -> fragment is DialogFragment }) {
                 return@observe
             }
@@ -91,19 +105,19 @@ class FileAssociationActivity :
             }
         }
         viewModel.errorLive.observe(this) {
-            binding.rotateLoading.gone()
+            isLoading = false
             toastOnUi(it)
             handler.postDelayed(2000) {
                 finish()
             }
         }
         viewModel.openBookLiveData.observe(this) {
-            binding.rotateLoading.gone()
+            isLoading = false
             startActivityForBook(it)
             finish()
         }
         viewModel.notSupportedLiveData.observe(this) { data ->
-            binding.rotateLoading.gone()
+            isLoading = false
             alert(
                 title = appCtx.getString(R.string.draw),
                 message = appCtx.getString(R.string.file_not_supported, data.second)
@@ -130,7 +144,7 @@ class FileAssociationActivity :
     }
 
     private fun dispatchIntent(intent: Intent) {
-        binding.rotateLoading.visible()
+        isLoading = true
         when (intent.action) {
             Intent.ACTION_SEND_MULTIPLE -> viewModel.dispatchSharedUris(
                 IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
@@ -174,7 +188,7 @@ class FileAssociationActivity :
                 .rationale(R.string.tip_perm_request_storage)
                 .onGranted { block() }
                 .onDenied {
-                    binding.rotateLoading.gone()
+                    isLoading = false
                     toastOnUi("请求存储权限失败。")
                     handler.postDelayed(2000) {
                         finish()
@@ -191,11 +205,13 @@ class FileAssociationActivity :
             viewModel.selectLocalBookDirectory(Uri.parse(configured))
             return
         }
-        binding.rotateLoading.gone()
+        isLoading = false
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(R.string.select_book_folder)
-            .setMessage(getString(R.string.shared_local_books_storage) +
-                if (viewModel.importAfterDirectorySelection) "" else "\n\n${configured ?: privateBookDirectory().path}")
+            .setMessage(
+                getString(R.string.shared_local_books_storage) +
+                    if (viewModel.importAfterDirectorySelection) "" else "\n\n${configured ?: privateBookDirectory().path}"
+            )
             .setPositiveButton(R.string.select_folder) { _, _ ->
                 viewModel.choosingLocalBookDirectory = true
                 localBookTreeSelect.launch {

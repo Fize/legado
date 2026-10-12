@@ -7,18 +7,30 @@ import android.os.Environment
 import android.webkit.MimeTypeMap
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityTranslucenceBinding
-import io.legado.app.databinding.DialogEditTextBinding
+import io.legado.app.constant.Theme
 import io.legado.app.help.IntentData
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
+import io.legado.app.ui.association.TranslucenceLoadingScreen
 import io.legado.app.utils.SelectImageContract
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.externalFiles
@@ -27,7 +39,6 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isSameOrDescendantOf
 import io.legado.app.utils.launch
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import splitties.init.appCtx
 import java.io.File
 
@@ -52,12 +63,16 @@ internal fun takePersistableUriPermissions(
 }
 
 class HandleFileActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, HandleFileViewModel>(),
+    VMBaseComposeActivity<HandleFileViewModel>(
+        theme = Theme.Transparent,
+        imageBg = false
+    ),
     FilePickerDialog.CallBack {
 
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
     override val viewModel by viewModels<HandleFileViewModel>()
     private var mode = 0
+    private var showInputDirectory by mutableStateOf(false)
+    private var showInputImgSrc by mutableStateOf(false)
 
     private val selectDocTree =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -82,6 +97,123 @@ class HandleFileActivity :
         it.uri?.let { uri ->
             onResult(Intent().setData(uri))
         } ?: finish()
+    }
+
+    @Composable
+    override fun Content() {
+        TranslucenceLoadingScreen(isLoading = false)
+        if (showInputDirectory) {
+            var inputPath by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = {
+                    showInputDirectory = false
+                    finish()
+                },
+                title = { Text(stringResource(R.string.manual_input)) },
+                text = {
+                    OutlinedTextField(
+                        value = inputPath,
+                        onValueChange = { inputPath = it },
+                        label = { Text(stringResource(R.string.enter_directory_path)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showInputDirectory = false
+                            if (inputPath.isBlank()) {
+                                toastOnUi(getString(R.string.empty_directory_input))
+                                finish()
+                                return@TextButton
+                            }
+                            val file = File(inputPath)
+                            if (file.exists() &&
+                                file.isDirectory &&
+                                isExternalStorage(file) &&
+                                file.checkWrite()
+                            ) {
+                                onResult(Intent().setData(Uri.fromFile(file)))
+                            } else {
+                                toastOnUi(getString(R.string.invalid_directory))
+                                finish()
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showInputDirectory = false
+                            finish()
+                        }
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+        if (showInputImgSrc) {
+            var inputPath by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = {
+                    showInputImgSrc = false
+                    finish()
+                },
+                title = { Text(stringResource(R.string.manual_input)) },
+                text = {
+                    OutlinedTextField(
+                        value = inputPath,
+                        onValueChange = { inputPath = it },
+                        label = { Text(stringResource(R.string.enter_img_src_path)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showInputImgSrc = false
+                            if (inputPath.isBlank()) {
+                                toastOnUi(getString(R.string.empty_img_src_input))
+                                finish()
+                                return@TextButton
+                            }
+                            if (inputPath.startsWith("http", true)) {
+                                onResult(Intent().setData(inputPath.toUri()))
+                                return@TextButton
+                            }
+                            val file = File(inputPath)
+                            if (file.exists() &&
+                                file.isFile &&
+                                isExternalStorage(file) &&
+                                file.canRead()
+                            ) {
+                                onResult(Intent().setData(Uri.fromFile(file)))
+                            } else {
+                                toastOnUi(getString(R.string.invalid_file_path))
+                                finish()
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showInputImgSrc = false
+                            finish()
+                        }
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -202,69 +334,11 @@ class HandleFileActivity :
     }
 
     private fun showInputDirectoryDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.enter_directory_path)
-        }
-
-        alert(getString(R.string.manual_input)) {
-            customView { alertBinding.root }
-            okButton {
-                val inputPath = alertBinding.editView.text.toString()
-                if (inputPath.isBlank()) {
-                    toastOnUi(getString(R.string.empty_directory_input))
-                    return@okButton
-                }
-                val file = File(inputPath)
-                if (file.exists() &&
-                    file.isDirectory &&
-                    isExternalStorage(file) &&
-                    file.checkWrite()
-                ) {
-                    onResult(Intent().setData(Uri.fromFile(file)))
-                } else {
-                    toastOnUi(getString(R.string.invalid_directory))
-                }
-            }
-            onDismiss {
-                finish()
-            }
-            cancelButton()
-        }
+        showInputDirectory = true
     }
 
     private fun showInputImgSrcDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.enter_img_src_path)
-        }
-
-        alert(getString(R.string.manual_input)) {
-            customView { alertBinding.root }
-            okButton {
-                val inputPath = alertBinding.editView.text.toString()
-                if (inputPath.isBlank()) {
-                    toastOnUi(getString(R.string.empty_img_src_input))
-                    return@okButton
-                }
-                if (inputPath.startsWith("http", true)) {
-                    onResult(Intent().setData(inputPath.toUri()))
-                    return@okButton
-                }
-                val file = File(inputPath)
-                if (file.exists() &&
-                    file.isFile &&
-                    isExternalStorage(file) &&
-                    file.canRead()
-                ) {
-                    onResult(Intent().setData(Uri.fromFile(file)))
-                } else {
-                    toastOnUi(getString(R.string.invalid_file_path))
-                }
-            }
-            onDismiss {
-                finish()
-            }
-            cancelButton()
-        }
+        showInputImgSrc = true
     }
 
     private fun isExternalStorage(path: File): Boolean {

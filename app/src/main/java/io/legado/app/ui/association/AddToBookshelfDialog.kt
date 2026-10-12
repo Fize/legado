@@ -5,16 +5,38 @@ import android.app.Application
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.MutableLiveData
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.DialogAddToBookshelfBinding
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.webBook.WebBook
@@ -25,7 +47,6 @@ import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 添加书籍链接到书架，需要对应网站书源
@@ -35,7 +56,7 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
  * - 在所有启用的书源中匹配orgin
  * - 在所有启用的书源中使用详情页正则匹配${origin}/${path}, {origin: bookSourceUrl}
  */
-class AddToBookshelfDialog() : BaseDialogFragment(R.layout.dialog_add_to_bookshelf) {
+class AddToBookshelfDialog() : BaseComposeDialogFragment() {
 
     constructor(bookUrl: String, finishOnDismiss: Boolean = false) : this() {
         arguments = Bundle().apply {
@@ -44,12 +65,50 @@ class AddToBookshelfDialog() : BaseDialogFragment(R.layout.dialog_add_to_bookshe
         }
     }
 
-    val binding by viewBinding(DialogAddToBookshelfBinding::bind)
     val viewModel by viewModels<ViewModel>()
+    private var isLoading by mutableStateOf(false)
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
+
+    @Composable
+    override fun DialogContent() {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.add_to_bookshelf),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(18.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(72.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { dismiss() }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            }
+        }
     }
 
     @SuppressLint("SetTextI18n")
@@ -71,11 +130,7 @@ class AddToBookshelfDialog() : BaseDialogFragment(R.layout.dialog_add_to_bookshe
             return
         }
         viewModel.loadStateLiveData.observe(this) {
-            if (it) {
-                binding.rotateLoading.visible()
-            } else {
-                binding.rotateLoading.gone()
-            }
+            isLoading = it
         }
         viewModel.loadErrorLiveData.observe(this) {
             toastOnUi(it)
@@ -91,9 +146,6 @@ class AddToBookshelfDialog() : BaseDialogFragment(R.layout.dialog_add_to_bookshe
                 dismiss()
             }
         }
-        binding.tvCancel.setOnClickListener {
-            dismiss()
-        }
     }
 
     class ViewModel(application: Application) : BaseViewModel(application) {
@@ -104,9 +156,6 @@ class AddToBookshelfDialog() : BaseDialogFragment(R.layout.dialog_add_to_bookshe
 
         fun load(bookUrl: String, success: (book: Book) -> Unit) {
             execute {
-//                appDb.bookDao.getBook(bookUrl)?.let {
-//                    throw NoStackTraceException("${it.name} 已在书架")
-//                } //onFragmentCreated的时候已经判断
                 val baseUrl = NetworkUtils.getBaseUrl(bookUrl)
                     ?: throw NoStackTraceException("书籍地址格式不对")
                 val urlMatcher = AnalyzeUrl.paramPattern.matcher(bookUrl)
