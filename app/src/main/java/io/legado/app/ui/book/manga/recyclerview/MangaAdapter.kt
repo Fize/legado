@@ -4,27 +4,33 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.graphics.Typeface
 import android.util.SparseArray
-import android.view.LayoutInflater
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.annotation.IntRange
+import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.graphics.ColorUtils
 import androidx.core.util.size
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.AsyncListDiffer
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
-import androidx.viewbinding.ViewBinding
 import com.bumptech.glide.Glide
 import com.bumptech.glide.ListPreloader.PreloadModelProvider
 import com.bumptech.glide.RequestBuilder
 import com.bumptech.glide.load.resource.bitmap.BitmapTransformation
-import io.legado.app.base.adapter.ItemViewHolder
+import io.legado.app.R
 import io.legado.app.base.adapter.RecyclerAdapter.Companion.TYPE_FOOTER_VIEW
-import io.legado.app.databinding.ItemBookMangaEdgeBinding
-import io.legado.app.databinding.ItemBookMangaPageBinding
 import io.legado.app.help.glide.progress.ProgressManager
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadManga
@@ -33,15 +39,14 @@ import io.legado.app.ui.book.manga.entities.EpaperTransformation
 import io.legado.app.ui.book.manga.entities.GrayscaleTransformation
 import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.entities.ReaderLoading
-import io.legado.app.utils. applyMangaColorFilterToBgColor
+import io.legado.app.utils.applyMangaColorFilterToBgColor
 import io.legado.app.utils.dpToPx
+import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.resolveMangaSpreadSlot
-
 
 class MangaAdapter(private val context: Context) :
     RecyclerView.Adapter<RecyclerView.ViewHolder>(), PreloadModelProvider<Any> {
 
-    private val inflater: LayoutInflater = LayoutInflater.from(context)
     private lateinit var mConfig: MangaColorFilterConfig
     private var mTransformation: BitmapTransformation? = null
     private var currentMangaEInkThreshold = 0
@@ -97,8 +102,52 @@ class MangaAdapter(private val context: Context) :
         mDiffer.submitList(contents, runnable)
     }
 
-    inner class PageViewHolder(binding: ItemBookMangaPageBinding) :
-        MangaVH<ItemBookMangaPageBinding>(binding, context) {
+    class PageViewBinding(
+        val root: FrameLayout,
+        val image: AppCompatImageView,
+        val flProgress: FrameLayout,
+        val loading: ProgressBar,
+        val retry: Button,
+        val progress: TextView,
+    )
+
+    private fun createPageViewBinding(context: Context): PageViewBinding {
+        val defaultBg = context.getCompatColor(R.color.book_ant_10)
+        val root = FrameLayout(context).apply {
+            layoutParams = RecyclerView.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            setBackgroundColor(defaultBg)
+        }
+        val image = AppCompatImageView(context).apply {
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_XY
+        }
+        val flProgress = FrameLayout(context).apply {
+            setBackgroundColor(defaultBg)
+        }
+        val loading = ProgressBar(context).apply {
+            isIndeterminate = true
+        }
+        val retry = Button(context).apply {
+            text = "重新加载"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            visibility = View.GONE
+        }
+        val progress = TextView(context).apply {
+            text = "0%"
+            setTextColor(Color.WHITE)
+            visibility = View.GONE
+        }
+        flProgress.addView(loading, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
+        flProgress.addView(retry, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
+        flProgress.addView(progress, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
+        root.addView(image, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        root.addView(flProgress, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        return PageViewBinding(root, image, flProgress, loading, retry, progress)
+    }
+
+    inner class PageViewHolder(val binding: PageViewBinding = createPageViewBinding(context)) :
+        MangaVH(binding.root, context) {
 
         init {
             initComponent(
@@ -176,15 +225,27 @@ class MangaAdapter(private val context: Context) :
         }
     }
 
-    inner class PageMoreViewHolder(val binding: ItemBookMangaEdgeBinding) :
-        RecyclerView.ViewHolder(binding.root) {
+    inner class PageMoreViewHolder(
+        private val rootView: FrameLayout = FrameLayout(context).apply {
+            layoutParams = RecyclerView.LayoutParams(MATCH_PARENT, 96.dpToPx())
+            setBackgroundColor(context.getCompatColor(R.color.book_ant_10))
+        },
+        private val textView: TextView = TextView(context).apply {
+            setTextColor(Color.WHITE)
+            setTypeface(typeface, Typeface.BOLD)
+        }
+    ) : RecyclerView.ViewHolder(rootView) {
+        init {
+            rootView.addView(textView, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
+        }
+
         fun onBind(item: ReaderLoading) {
             val message = item.mMessage
-            binding.text.text = message
+            textView.text = message
             val bgColor = lastResolvedBgColor
-            binding.root.setBackgroundColor(bgColor)
+            rootView.setBackgroundColor(bgColor)
             val isLight = ColorUtils.calculateLuminance(bgColor) > 0.5
-            binding.text.setTextColor(if (isLight) 0xFF333333.toInt() else Color.WHITE)
+            textView.setTextColor(if (isLight) 0xFF333333.toInt() else Color.WHITE)
             itemView.updateLayoutParams {
                 width = MATCH_PARENT
                 height = if (isHorizontal || item.isVolume) {
@@ -195,6 +256,8 @@ class MangaAdapter(private val context: Context) :
             }
         }
     }
+
+    private class FooterViewHolder(view: View) : RecyclerView.ViewHolder(view)
 
     override fun onViewAttachedToWindow(holder: RecyclerView.ViewHolder) {
         super.onViewAttachedToWindow(holder)
@@ -209,19 +272,18 @@ class MangaAdapter(private val context: Context) :
         }
     }
 
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         return when {
             viewType >= TYPE_FOOTER_VIEW -> {
-                ItemViewHolder(footerItems.get(viewType).invoke(parent))
+                FooterViewHolder(footerItems.get(viewType).invoke(parent))
             }
 
             viewType == LOADING_VIEW -> {
-                PageMoreViewHolder(ItemBookMangaEdgeBinding.inflate(inflater, parent, false))
+                PageMoreViewHolder()
             }
 
             viewType == CONTENT_VIEW -> {
-                PageViewHolder(ItemBookMangaPageBinding.inflate(inflater, parent, false))
+                PageViewHolder()
             }
 
             else -> error("Unknown view type!")
@@ -265,11 +327,10 @@ class MangaAdapter(private val context: Context) :
         }
     }
 
-
-    private val footerItems: SparseArray<(parent: ViewGroup) -> ViewBinding> by lazy { SparseArray() }
+    private val footerItems: SparseArray<(parent: ViewGroup) -> View> by lazy { SparseArray() }
 
     @Synchronized
-    fun addFooterView(footer: ((parent: ViewGroup) -> ViewBinding)) {
+    fun addFooterView(footer: ((parent: ViewGroup) -> View)) {
         kotlin.runCatching {
             val index = getActualItemCount() + footerItems.size
             footerItems.put(TYPE_FOOTER_VIEW + footerItems.size, footer)
@@ -283,7 +344,7 @@ class MangaAdapter(private val context: Context) :
     fun getActualItemCount() = getItems().size
 
     @Synchronized
-    fun removeFooterView(footer: ((parent: ViewGroup) -> ViewBinding)) {
+    fun removeFooterView(footer: ((parent: ViewGroup) -> View)) {
         kotlin.runCatching {
             val index = footerItems.indexOfValue(footer)
             if (index >= 0) {

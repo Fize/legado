@@ -23,7 +23,6 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView
-import androidx.viewbinding.ViewBinding
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.Transformation
 import com.bumptech.glide.load.engine.GlideException
@@ -117,8 +116,8 @@ internal fun sampleMangaDrawableEdgeColor(
     }.getOrDefault(Color.WHITE)
 }
 
-open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Context) :
-    RecyclerView.ViewHolder(binding.root) {
+open class MangaVH(rootView: View, private val context: Context) :
+    RecyclerView.ViewHolder(rootView) {
 
     protected lateinit var mLoading: ProgressBar
     protected lateinit var mImage: AppCompatImageView
@@ -305,4 +304,3 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
 
     }
 }
-

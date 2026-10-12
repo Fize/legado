@@ -2,20 +2,34 @@ package io.legado.app.ui.widget.recycler
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.LayoutInflater
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.annotation.ColorRes
 import io.legado.app.R
-import io.legado.app.databinding.ViewLoadMoreBinding
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.anima.RotateLoading
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
 
 @Suppress("unused")
 class LoadMoreView(context: Context, attrs: AttributeSet? = null) : FrameLayout(context, attrs) {
-    private val binding = ViewLoadMoreBinding.inflate(LayoutInflater.from(context), this)
+    private val rotateLoading = RotateLoading(context).apply {
+        visibility = View.INVISIBLE
+    }
+    internal val tvText = TextView(context).apply {
+        gravity = Gravity.CENTER
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        setSingleLine(true)
+        val pad = 10.dpToPx()
+        setPadding(pad, pad, pad, pad)
+        visibility = View.INVISIBLE
+    }
+
     private var errorMsg = ""
 
     private var onClickListener: OnClickListener? = null
@@ -27,6 +41,18 @@ class LoadMoreView(context: Context, attrs: AttributeSet? = null) : FrameLayout(
         private set
 
     init {
+        val loadingSize = 36.dpToPx()
+        val loadingMargin = 6.dpToPx()
+        addView(
+            rotateLoading,
+            LayoutParams(loadingSize, loadingSize, Gravity.CENTER).apply {
+                setMargins(loadingMargin, loadingMargin, loadingMargin, loadingMargin)
+            }
+        )
+        addView(
+            tvText,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+        )
         super.setOnClickListener {
             if (!showErrorDialog(it)) {
                 onClickListener?.onClick(it)
@@ -40,18 +66,18 @@ class LoadMoreView(context: Context, attrs: AttributeSet? = null) : FrameLayout(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        layoutParams.width = LayoutParams.MATCH_PARENT
+        layoutParams?.width = LayoutParams.MATCH_PARENT
     }
 
     fun startLoad() {
         isLoading = true
-        binding.tvText.invisible()
-        binding.rotateLoading.visible()
+        tvText.invisible()
+        rotateLoading.visible()
     }
 
     fun stopLoad() {
         isLoading = false
-        binding.rotateLoading.inVisible()
+        rotateLoading.inVisible()
     }
 
     fun hasMore() {
@@ -65,28 +91,28 @@ class LoadMoreView(context: Context, attrs: AttributeSet? = null) : FrameLayout(
         errorMsg = ""
         hasMore = false
         if (msg != null) {
-            binding.tvText.text = msg
+            tvText.text = msg
         } else {
-            binding.tvText.setText(R.string.bottom_line)
+            tvText.setText(R.string.bottom_line)
         }
-        binding.tvText.visible()
+        tvText.visible()
     }
 
     fun error(msg: String?, text: String = "") {
         stopLoad()
         hasMore = false
         errorMsg = msg ?: ""
-        binding.tvText.text =
+        tvText.text =
             text.ifEmpty { context.getString(R.string.error_load_msg, "点击查看详情") }
-        binding.tvText.visible()
+        tvText.visible()
     }
 
     fun setLoadingColor(@ColorRes color: Int) {
-        binding.rotateLoading.loadingColor = context.getCompatColor(color)
+        rotateLoading.loadingColor = context.getCompatColor(color)
     }
 
     fun setLoadingTextColor(@ColorRes color: Int) {
-        binding.tvText.setTextColor(context.getCompatColor(color))
+        tvText.setTextColor(context.getCompatColor(color))
     }
 
     private fun showErrorDialog(view: View): Boolean {

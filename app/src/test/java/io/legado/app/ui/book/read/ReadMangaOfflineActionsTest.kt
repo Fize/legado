@@ -14,7 +14,6 @@ class ReadMangaOfflineActionsTest {
         val viewModel = projectFile(
             "src/main/java/io/legado/app/ui/book/manga/ReadMangaViewModel.kt"
         ).readText()
-        val menu = projectFile("src/main/res/menu/book_manga.xml").readText()
         val preferKey = projectFile("src/main/java/io/legado/app/constant/PreferKey.kt").readText()
         val appConfig = projectFile("src/main/java/io/legado/app/help/config/AppConfig.kt").readText()
         val downloadDialog = projectFile(
@@ -26,9 +25,9 @@ class ReadMangaOfflineActionsTest {
         ).readText()
         val bookCover = projectFile("src/main/java/io/legado/app/model/BookCover.kt").readText()
 
-        assertTrue(menu.contains("android:id=\"@+id/menu_download\""))
-        assertTrue(menu.contains("@+id/menu_manga_long_click_save_image"))
-        assertTrue(activity.contains("R.id.menu_download ->"))
+        assertTrue(activity.contains("R.string.offline_cache"))
+        assertTrue(activity.contains("R.string.manga_long_click_save_image"))
+        assertTrue(activity.contains("showBookDownloadDialog"))
         assertTrue(activity.contains("longTapListener ="))
         assertTrue(activity.contains("AppConfig.mangaLongClickSaveImage"))
         assertTrue(activity.contains("as? MangaPage"))

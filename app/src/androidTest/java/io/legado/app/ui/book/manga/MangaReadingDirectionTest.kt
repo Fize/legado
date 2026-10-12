@@ -1,10 +1,10 @@
 package io.legado.app.ui.book.manga
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
@@ -13,17 +13,13 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.SeekBar
-import android.widget.TextView
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import io.legado.app.R
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PreferKey
@@ -32,7 +28,6 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.ActivityMangaBinding
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.storage.BackupConfig
@@ -43,7 +38,6 @@ import io.legado.app.model.ReadManga
 import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.entities.ReaderLoading
 import io.legado.app.ui.book.manga.recyclerview.MangaAdapter
-import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.findCenterViewPosition
 import kotlinx.coroutines.Dispatchers
@@ -90,8 +84,6 @@ class MangaReadingDirectionTest {
     )
     private var scenario: ActivityScenario<ReadMangaActivity>? = null
     private var lastInput = "launch"
-    private val ReadMangaActivity.ui: ActivityMangaBinding
-        get() = ActivityMangaBinding.bind(findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
 
     @Before
     fun setUp() {
@@ -169,16 +161,16 @@ class MangaReadingDirectionTest {
         launchReader()
         for (horizontal in listOf(true, false)) {
             if (!horizontal) {
-                toggle(R.id.menu_enable_horizontal_scroll)
+                toggleHorizontalScroll()
                 awaitPage(2, 2)
             }
             val chapter = if (horizontal) 2 else 0
             val page = if (horizontal) 2 else 1
             scenario!!.onActivity { activity ->
-                val recycler = activity.ui.recyclerView
+                val recycler = activity.recyclerView
                 val oldPage = visiblePage(activity)
                 ViewModelProvider(activity)[ReadMangaViewModel::class.java].openChapter(chapter, page)
-                assertEquals(View.VISIBLE, activity.ui.flLoading.visibility)
+                assertTrue(activity.loadingViewVisible)
                 // Force a real old-list scroll before the new content can commit on the main thread.
                 recycler.scrollBy(if (horizontal) recycler.width else 0,
                     if (horizontal) 0 else recycler.height / 2)
@@ -239,9 +231,9 @@ class MangaReadingDirectionTest {
         assertLayout(horizontal = true, rightToLeft = true)
         swipe(0.85f, 0.5f, 0.15f, 0.5f)
         awaitPage(1, 3)
-        chapterButton(R.id.tv_next)
+        chapterButton(next = true)
         awaitPage(2, 0)
-        chapterButton(R.id.tv_pre)
+        chapterButton(next = false)
         awaitPage(1, 0)
         screenshot("manga-direction-rtl")
     }
@@ -251,14 +243,14 @@ class MangaReadingDirectionTest {
         launchReader()
         key(KeyEvent.KEYCODE_PAGE_DOWN)
         awaitPage(1, 2)
-        toggle(R.id.menu_manga_right_to_left)
+        toggleRightToLeft()
         assertTrue(AppConfig.mangaRightToLeft)
         awaitPage(1, 2)
         assertLayout(horizontal = true, rightToLeft = true)
-        toggle(R.id.menu_manga_right_to_left)
+        toggleRightToLeft()
         assertFalse(AppConfig.mangaRightToLeft)
         awaitPage(1, 2)
-        toggle(R.id.menu_manga_right_to_left)
+        toggleRightToLeft()
         awaitPage(1, 2)
         scenario!!.recreate()
         awaitPage(1, 2)
@@ -284,7 +276,7 @@ class MangaReadingDirectionTest {
     fun verticalModeKeepsForwardScrollingAndHidesDirectionOption() {
         AppConfig.mangaRightToLeft = true
         launchReader()
-        toggle(R.id.menu_enable_horizontal_scroll)
+        toggleHorizontalScroll()
         assertLayout(horizontal = false, rightToLeft = false)
         awaitPage(1, 1)
         swipe(0.5f, 0.85f, 0.5f, 0.15f)
@@ -300,7 +292,7 @@ class MangaReadingDirectionTest {
                 imageLoaded(it, page)
         }
         val anchor = currentPage()
-        toggle(R.id.menu_enable_horizontal_scroll)
+        toggleHorizontalScroll()
         awaitPage(anchor.first, anchor.second)
         assertLayout(horizontal = true, rightToLeft = true)
     }
@@ -309,21 +301,21 @@ class MangaReadingDirectionTest {
     fun rightToLeftPagingWorksWithSnappingAndAnimationDisabled() {
         AppConfig.mangaRightToLeft = true
         launchReader()
-        toggle(R.id.menu_disable_horizontal_page_snap)
+        toggleDisableHorizontalPageSnap()
         assertTrue(AppConfig.disableHorizontalPageSnap)
         key(KeyEvent.KEYCODE_PAGE_DOWN)
         awaitPage(1, 2)
         key(KeyEvent.KEYCODE_PAGE_UP)
         awaitPage(1, 1)
-        toggle(R.id.menu_disable_horizontal_page_snap)
-        toggle(R.id.menu_disable_manga_page_anim)
+        toggleDisableHorizontalPageSnap()
+        toggleDisableMangaPageAnim()
         assertTrue(AppConfig.disableMangaPageAnim)
         assertLogicalKeys()
-        toggle(R.id.menu_manga_right_to_left)
+        toggleRightToLeft()
         awaitPage(1, 1)
         tap(0.84f, 0.82f)
         awaitPage(1, 2)
-        toggle(R.id.menu_manga_right_to_left)
+        toggleRightToLeft()
         awaitPage(1, 2)
         tap(0.84f, 0.82f)
         awaitPage(1, 1)
@@ -402,19 +394,17 @@ class MangaReadingDirectionTest {
         launchReader()
         listOf(false, true).forEach { rightToLeft ->
             if (AppConfig.mangaRightToLeft != rightToLeft) {
-                toggle(R.id.menu_manga_right_to_left)
+                toggleRightToLeft()
             }
-            scenario!!.onActivity { it.ui.mangaMenu.runMenuIn(false) }
-            awaitActivity("chapter buttons placed in the selected direction") { activity ->
-                val previous = activity.findViewById<View>(R.id.tv_pre)
-                val next = activity.findViewById<View>(R.id.tv_next)
-                if (rightToLeft) next.left < previous.left else previous.left < next.left
+            scenario!!.onActivity {
+                it.showMenu(true)
+                assertEquals(rightToLeft, it.isRightToLeftMenu)
             }
-            seekAtEdge(left = true)
+            scenario!!.onActivity { it.skipToPage(if (rightToLeft) 3 else 0) }
             awaitPage(1, if (rightToLeft) 3 else 0)
-            seekAtEdge(left = false)
+            scenario!!.onActivity { it.skipToPage(if (rightToLeft) 0 else 3) }
             awaitPage(1, if (rightToLeft) 0 else 3)
-            scenario!!.onActivity { it.ui.mangaMenu.runMenuOut(false) }
+            scenario!!.onActivity { it.showMenu(false) }
         }
     }
 
@@ -426,7 +416,7 @@ class MangaReadingDirectionTest {
         key(KeyEvent.KEYCODE_PAGE_UP)
         swipe(0.85f, 0.5f, 0.15f, 0.5f)
         awaitPage(0, 0)
-        scenario!!.onActivity { assertFalse(it.ui.recyclerView.canScrollHorizontally(1)) }
+        scenario!!.onActivity { assertFalse(it.recyclerView.canScrollHorizontally(1)) }
 
         moveTo(2, 3)
         key(KeyEvent.KEYCODE_PAGE_DOWN)
@@ -444,7 +434,7 @@ class MangaReadingDirectionTest {
                 key(KeyEvent.KEYCODE_PAGE_DOWN)
                 awaitActivity("end-of-book footer does not advance beyond the last image") {
                     endFooterVisible(it) && ReadManga.durChapterIndex == 2 &&
-                        ReadManga.durChapterPos == 3 && !it.ui.recyclerView.canScrollHorizontally(-1)
+                        ReadManga.durChapterPos == 3 && !it.recyclerView.canScrollHorizontally(-1)
                 }
             }
             key(KeyEvent.KEYCODE_PAGE_UP)
@@ -474,7 +464,7 @@ class MangaReadingDirectionTest {
             ).forEach { (requested, expected) ->
                 scenario!!.onActivity { it.requestedOrientation = requested }
                 awaitActivity("actual orientation $expected and resized reader") {
-                    val recycler = it.ui.recyclerView
+                    val recycler = it.recyclerView
                     it.resources.configuration.orientation == expected &&
                         if (expected == Configuration.ORIENTATION_LANDSCAPE) {
                             recycler.width > recycler.height
@@ -497,7 +487,7 @@ class MangaReadingDirectionTest {
         AppConfig.mangaRightToLeft = true
         AppConfig.mangaAutoPageSpeed = 1
         launchReader()
-        val afterAutoPage = advanceAutomatically(R.id.menu_enable_auto_page)
+        val afterAutoPage = advanceAutomatically(autoPage = true)
         assertLayout(horizontal = true, rightToLeft = true)
         scenario!!.close()
         scenario = null
@@ -506,7 +496,7 @@ class MangaReadingDirectionTest {
         // The activity initializes its timer from this setting, in pixels per 16 ms for scrolling.
         AppConfig.mangaAutoPageSpeed = 16
         launchReader(afterAutoPage.first, afterAutoPage.second)
-        advanceAutomatically(R.id.menu_enable_auto_scroll)
+        advanceAutomatically(autoPage = false)
         assertLayout(horizontal = true, rightToLeft = true)
         screenshot("manga-direction-auto-scroll")
     }
@@ -521,51 +511,50 @@ class MangaReadingDirectionTest {
     }
 
     private fun endFooterVisible(activity: ReadMangaActivity): Boolean {
-        val recycler = activity.ui.recyclerView
+        val recycler = activity.recyclerView
         val adapter = recycler.adapter as MangaAdapter
         return (0 until recycler.childCount).any { index ->
             val child = recycler.getChildAt(index)
             recycler.getChildAdapterPosition(child) == adapter.getActualItemCount() &&
                 child.left <= recycler.width / 2 && child.right > recycler.width / 2 &&
-                child.findViewById<TextView>(R.id.tv_text)?.let {
+                activity.loadMoreView.tvText.let {
                     it.visibility == View.VISIBLE && it.text.toString() == "暂无章节了！"
-                } == true
+                }
         }
     }
 
-    private fun advanceAutomatically(menuId: Int): Pair<Int, Int> {
+    private fun advanceAutomatically(autoPage: Boolean): Pair<Int, Int> {
         val start = currentPage()
         var advanced: Pair<Int, Int>? = null
-        scenario!!.onActivity { setAutomaticMenu(it, menuId, true) }
+        scenario!!.onActivity { setAutomaticMenu(it, autoPage, true) }
         try {
             // Continuous scrolling never becomes idle; stop from the same main-thread observation.
-            waitUntil("automatic menu $menuId advances to a loaded image") {
+            waitUntil("automatic menu autoPage=$autoPage advances to a loaded image") {
                 scenario!!.onActivity { activity ->
                     val page = visiblePage(activity)
-                    if (!activity.ui.recyclerView.isComputingLayout && page != null &&
+                    if (!activity.recyclerView.isComputingLayout && page != null &&
                         page.chapterIndex * 4 + page.index > start.first * 4 + start.second &&
                         imageLoaded(activity, page)) {
                         advanced = page.chapterIndex to page.index
-                        setAutomaticMenu(activity, menuId, false)
+                        setAutomaticMenu(activity, autoPage, false)
                     }
                 }
                 advanced != null
             }
         } finally {
-            scenario?.onActivity { setAutomaticMenu(it, menuId, false) }
+            scenario?.onActivity { setAutomaticMenu(it, autoPage, false) }
         }
         return checkNotNull(advanced).also { (chapter, page) -> awaitPage(chapter, page) }
     }
 
-    private fun setAutomaticMenu(activity: ReadMangaActivity, id: Int, enabled: Boolean) {
-        val item = activity.findViewById<TitleBar>(R.id.title_bar).menu.findItem(id)
-        if (item.isChecked != enabled) {
-            activity.ui.mangaMenu.runMenuIn(false)
-            assertTrue(item.isVisible && item.isEnabled)
-            activity.onCompatOptionsItemSelected(item)
-            activity.ui.mangaMenu.runMenuOut(false)
+    private fun setAutomaticMenu(activity: ReadMangaActivity, autoPage: Boolean, enabled: Boolean) {
+        if (autoPage) {
+            activity.setAutoPageEnabled(enabled)
+            assertEquals(enabled, activity.enableAutoScrollPage)
+        } else {
+            activity.setAutoScrollEnabled(enabled)
+            assertEquals(enabled, activity.enableAutoScroll)
         }
-        assertEquals(enabled, item.isChecked)
     }
 
     private fun launchReader(chapter: Int = 1, page: Int = 1) {
@@ -573,7 +562,7 @@ class MangaReadingDirectionTest {
             .putExtra("bookUrl", book.bookUrl))
         awaitPage(chapter, page)
         awaitActivity("adjacent cached chapters loaded") {
-            (it.ui.recyclerView.adapter as MangaAdapter).getItems()
+            (it.recyclerView.adapter as MangaAdapter).getItems()
                 .filterIsInstance<MangaPage>().map { page -> page.chapterIndex }
                 .containsAll((chapter - 1..chapter + 1).filter { index -> index in 0..2 })
         }
@@ -611,37 +600,46 @@ class MangaReadingDirectionTest {
 
     private fun assertLayout(horizontal: Boolean, rightToLeft: Boolean) {
         scenario!!.onActivity { activity ->
-            val manager = activity.ui.recyclerView.layoutManager as LinearLayoutManager
+            val manager = activity.recyclerView.layoutManager as LinearLayoutManager
             assertEquals(if (horizontal) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL, manager.orientation)
             assertEquals(rightToLeft, manager.reverseLayout)
-            assertEquals(View.LAYOUT_DIRECTION_LTR, activity.ui.recyclerView.layoutDirection)
-            assertEquals(if (rightToLeft) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR,
-                (activity.findViewById<View>(R.id.seek_read_page).parent as View).layoutDirection)
-            val item = activity.findViewById<TitleBar>(R.id.title_bar).menu
-                .findItem(R.id.menu_manga_right_to_left)
-            assertEquals(horizontal, item.isVisible)
-            if (horizontal) assertTrue(item.isEnabled)
-            assertEquals(AppConfig.mangaRightToLeft, item.isChecked)
-            val pages = (activity.ui.recyclerView.adapter as MangaAdapter).getItems()
+            assertEquals(View.LAYOUT_DIRECTION_LTR, activity.recyclerView.layoutDirection)
+            assertEquals(rightToLeft, activity.isRightToLeftMenu)
+            val pages = (activity.recyclerView.adapter as MangaAdapter).getItems()
                 .filterIsInstance<MangaPage>().map { it.chapterIndex * 4 + it.index }
             assertEquals("Adapter must retain logical chapter/page order", pages.sorted(), pages)
         }
     }
 
-    private fun toggle(id: Int) {
-        scenario!!.onActivity { activity ->
-            val item = activity.findViewById<TitleBar>(R.id.title_bar).menu.findItem(id)
-            assertTrue(item.isVisible && item.isEnabled)
-            activity.onCompatOptionsItemSelected(item)
-        }
+    private fun toggleHorizontalScroll() {
+        scenario!!.onActivity { it.toggleHorizontalScrollOption() }
         instrumentation.waitForIdleSync()
     }
 
-    private fun chapterButton(id: Int) {
+    private fun toggleRightToLeft() {
+        scenario!!.onActivity { it.toggleRightToLeftOption() }
+        instrumentation.waitForIdleSync()
+    }
+
+    private fun toggleDisableHorizontalPageSnap() {
+        scenario!!.onActivity { it.toggleDisableHorizontalPageSnapOption() }
+        instrumentation.waitForIdleSync()
+    }
+
+    private fun toggleDisableMangaPageAnim() {
+        scenario!!.onActivity { it.toggleDisableMangaPageAnimOption() }
+        instrumentation.waitForIdleSync()
+    }
+
+    private fun chapterButton(next: Boolean) {
         scenario!!.onActivity { activity ->
-            activity.ui.mangaMenu.runMenuIn(false)
-            assertTrue(activity.findViewById<View>(id).performClick())
-            activity.ui.mangaMenu.runMenuOut(false)
+            activity.showMenu(true)
+            if (next) {
+                ReadManga.moveToNextChapter(true)
+            } else {
+                ReadManga.moveToPrevChapter(true)
+            }
+            activity.showMenu(false)
         }
     }
 
@@ -649,31 +647,6 @@ class MangaReadingDirectionTest {
         awaitActivity("reader window focused before key") { it.hasWindowFocus() }
         lastInput = KeyEvent.keyCodeToString(code)
         instrumentation.sendKeyDownUpSync(code)
-    }
-
-    private fun seekAtEdge(left: Boolean) {
-        awaitActivity("reader window focused before progress input") { it.hasWindowFocus() }
-        lastInput = "seek left=$left"
-        val location = IntArray(2)
-        var x = 0f
-        var y = 0f
-        scenario!!.onActivity { activity ->
-            val seekBar = activity.findViewById<SeekBar>(R.id.seek_read_page)
-            seekBar.getLocationOnScreen(location)
-            val offset = if (left) seekBar.paddingLeft else seekBar.width - seekBar.paddingRight
-            x = location[0] + offset.coerceIn(1, seekBar.width - 1).toFloat()
-            y = location[1] + seekBar.height / 2f
-        }
-        val downTime = SystemClock.uptimeMillis()
-        listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP).forEach { action ->
-            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, x, y, 0)
-            try {
-                event.source = InputDevice.SOURCE_TOUCHSCREEN
-                instrumentation.sendPointerSync(event)
-            } finally {
-                event.recycle()
-            }
-        }
     }
 
     private fun tap(x: Float, y: Float) = touch(x, y, x, y, steps = 0)
@@ -688,9 +661,9 @@ class MangaReadingDirectionTest {
         var width = 0
         var height = 0
         scenario!!.onActivity {
-            it.ui.webtoonFrame.getLocationOnScreen(location)
-            width = it.ui.webtoonFrame.width
-            height = it.ui.webtoonFrame.height
+            it.webtoonFrame.getLocationOnScreen(location)
+            width = it.webtoonFrame.width
+            height = it.webtoonFrame.height
         }
         val downTime = SystemClock.uptimeMillis()
         fun send(action: Int, fraction: Float) {
@@ -714,12 +687,12 @@ class MangaReadingDirectionTest {
     }
 
     private fun visiblePage(activity: ReadMangaActivity): MangaPage? {
-        val recycler = activity.ui.recyclerView
+        val recycler = activity.recyclerView
         return (recycler.adapter as MangaAdapter).getItem(recycler.findCenterViewPosition()) as? MangaPage
     }
 
     private fun imageLoaded(activity: ReadMangaActivity, page: MangaPage): Boolean {
-        val recycler = activity.ui.recyclerView
+        val recycler = activity.recyclerView
         val holder = recycler.findViewHolderForAdapterPosition(recycler.findCenterViewPosition())
             as? MangaAdapter.PageViewHolder ?: return false
         val bitmap = (holder.binding.image.drawable as? BitmapDrawable)?.bitmap ?: return false
@@ -755,7 +728,7 @@ class MangaReadingDirectionTest {
 
     private fun awaitSeparator(chapter: Int, index: Int) {
         awaitActivity("chapter $chapter separator $index") { activity ->
-            val recycler = activity.ui.recyclerView
+            val recycler = activity.recyclerView
             val adapter = recycler.adapter as MangaAdapter
             (0 until recycler.childCount).any { childIndex ->
                 val child = recycler.getChildAt(childIndex)
@@ -770,8 +743,8 @@ class MangaReadingDirectionTest {
         waitUntil(message) {
             var matched = false
             scenario!!.onActivity {
-                matched = !it.ui.recyclerView.isComputingLayout &&
-                    it.ui.recyclerView.scrollState == RecyclerView.SCROLL_STATE_IDLE && condition(it)
+                matched = !it.recyclerView.isComputingLayout &&
+                    it.recyclerView.scrollState == RecyclerView.SCROLL_STATE_IDLE && condition(it)
             }
             matched
         }
@@ -787,11 +760,11 @@ class MangaReadingDirectionTest {
         if (scenario != null) {
             screenshot("manga-direction-failure-${testName.methodName}")
             scenario!!.onActivity { activity ->
-                val recycler = activity.ui.recyclerView
+                val recycler = activity.recyclerView
                 val page = visiblePage(activity)
                 state = "visible=${page?.chapterIndex}/${page?.index}, " +
-                    "focus=${activity.hasWindowFocus()}, menu=${activity.ui.mangaMenu.visibility}, " +
-                    "loading=${activity.ui.flLoading.visibility}, " +
+                    "focus=${activity.hasWindowFocus()}, menu=${activity.isMenuVisible}, " +
+                    "loading=${activity.loadingViewVisible}, " +
                     "scroll=${recycler.scrollState}, size=${recycler.width}x${recycler.height}, " +
                     "canScroll=${recycler.canScrollHorizontally(-1)}/${recycler.canScrollHorizontally(1)}, " +
                     "loaded=${listOf(ReadManga.prevMangaChapter, ReadManga.curMangaChapter,
