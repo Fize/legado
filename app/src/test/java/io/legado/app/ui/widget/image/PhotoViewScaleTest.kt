@@ -43,7 +43,7 @@ class PhotoViewScaleTest {
             )
         )
         assertFalse(source.contains("mClickRunnable"))
-        assertTrue(dialogSource.contains("binding.photoView.setOnClickListener { dismiss() }"))
+        assertTrue(dialogSource.contains("photoView.setOnClickListener { dismiss() }"))
     }
 
     private fun projectFile(pathInApp: String): File {

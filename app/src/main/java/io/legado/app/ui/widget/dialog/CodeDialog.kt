@@ -4,33 +4,79 @@ import android.app.Activity.RESULT_OK
 import android.content.Intent
 import android.os.Bundle
 import android.text.method.KeyListener
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.SeekBar
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.widget.doAfterTextChanged
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogCodeViewBinding
 import io.legado.app.help.IntentData
 import io.legado.app.help.findTextRanges
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.view.ThemeSeekBar
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.code.CodeTextTransfer
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.code.CodeView
 import io.legado.app.ui.widget.code.EditSafety
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.ui.widget.code.addJsonPattern
 import io.legado.app.ui.widget.code.addLegadoPattern
-import io.legado.app.utils.applyTint
+import io.legado.app.ui.widget.seekbar.VerticalSeekBarWrapper
 import io.legado.app.utils.disableEdit
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.gone
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.visible
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 internal fun resolveCodeDialogOriginal(
     showingAlternate: Boolean,
@@ -47,7 +93,7 @@ internal fun resolveCodeDialogPositionProgress(
     return (scrollY.coerceIn(0, maxScrollY).toLong() * progressMax / maxScrollY).toInt()
 }
 
-class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
+class CodeDialog() : BaseDialogFragment() {
 
     constructor(
         code: String,
@@ -67,20 +113,26 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
         }
     }
 
-    val binding by viewBinding(DialogCodeViewBinding::bind)
+    private var codeViewRef: CodeView? = null
+    private var positionBarRef: ThemeSeekBar? = null
     private var editKeyListener: KeyListener? = null
     private var originalCode = ""
-    private var alternateCode: String? = null
-    private var showingAlternate = false
-    private var saveEnabled = false
-    private lateinit var searchView: SearchView
+    private var alternateCode by mutableStateOf<String?>(null)
+    private var showingAlternate by mutableStateOf(false)
+    private var saveEnabled by mutableStateOf(false)
+    @set:JvmName("updateSearchOpenState")
+    private var searchOpen by mutableStateOf(false)
+    private var searchQuery by mutableStateOf("")
+    @set:JvmName("updateSearchActionsEnabledState")
+    private var searchActionsEnabled by mutableStateOf(false)
     private var searchRanges: List<IntRange> = emptyList()
-    private var searchIndex = -1
-    private var replaceRuleRefreshPending = false
+    private var searchIndex by mutableIntStateOf(-1)
+    @set:JvmName("updateReplaceRuleRefreshPendingState")
+    private var replaceRuleRefreshPending by mutableStateOf(false)
     private var originalCodeStateKey: String? = null
     private var alternateCodeStateKey: String? = null
     private var editorTextPath: String? = null
-    private var editorPending = false
+    private var editorPending by mutableStateOf(false)
     private var editorReadOnly = false
     private val scrollListener = ViewTreeObserver.OnScrollChangedListener { updatePositionBar() }
     private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { updatePositionBar() }
@@ -100,7 +152,7 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
             }
             if (code != null) {
                 originalCode = code
-                if (!showingAlternate) binding.codeView.setText(code)
+                if (!showingAlternate) codeViewRef?.setText(code)
                 if (sourcePreview) {
                     clearAlternateCode()
                     callback()?.onCodeSave(code, requestId)
@@ -109,11 +161,14 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
             if (!showingAlternate) {
                 result.data?.takeIf { it.hasExtra("cursorPosition") }
                     ?.getIntExtra("cursorPosition", 0)?.let {
-                        binding.codeView.setSelection(it.coerceIn(0, binding.codeView.length()))
+                        val cv = codeViewRef
+                        if (cv != null) {
+                            cv.setSelection(it.coerceIn(0, cv.length()))
+                        }
                     }
             }
         } catch (error: Exception) {
-            toastOnUi(error.localizedMessage)
+            toastOnUi(error.localizedMessage ?: "")
         } finally {
             CodeTextTransfer.delete(context, editorTextPath)
             CodeTextTransfer.delete(context, outputPath)
@@ -130,36 +185,331 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
         setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val context = requireContext()
+        val disableEdit = arguments?.getBoolean("disableEdit") == true
+        val showReplaceRulesArg = arguments?.getBoolean("showReplaceRules") == true
+
+        val codeView = CodeView(context).apply {
+            val pad = 12.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            if (disableEdit) {
+                disableEdit()
+            }
+            addLegadoPattern()
+            addJsonPattern()
+            addJsPattern()
+            viewTreeObserver.addOnScrollChangedListener(scrollListener)
+            viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+            doAfterTextChanged {
+                if (searchOpen) {
+                    updateSearch(keepIndex = true, selectMatch = false)
+                }
+            }
+        }
+        codeViewRef = codeView
+
+        val seekBar = ThemeSeekBar(context, null).apply {
+            contentDescription = getString(R.string.content_edit_position)
+            max = 10000
+            rotation = 90f
+            isSaveEnabled = false
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        val max = maxScrollY()
+                        codeView.scrollTo(
+                            0,
+                            (max * progress.toLong() / bar.max).toInt(),
+                        )
+                    }
+                }
+
+                override fun onStartTrackingTouch(bar: SeekBar) = Unit
+                override fun onStopTrackingTouch(bar: SeekBar) = Unit
+            })
+        }
+        positionBarRef = seekBar
+
+        val seekBarWrapper = VerticalSeekBarWrapper(context).apply {
+            addView(
+                seekBar,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+
+        return ComposeView(context).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    val localContext = LocalContext.current
+                    val barBg = Color(localContext.primaryColor)
+                    val barContent = Color(localContext.primaryTextColor)
+                    val pending = replaceRuleRefreshPending || editorPending
+                    val canPreviewReplacement = !disableEdit && alternateCode != null
+                    var overflowExpanded by remember { mutableStateOf(false) }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colorResource(R.color.background))
+                    ) {
+                        TopAppBar(
+                            title = {
+                                if (searchOpen) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = {
+                                            searchQuery = it
+                                            updateSearch()
+                                        },
+                                        placeholder = {
+                                            Text(
+                                                text = stringResource(R.string.search),
+                                                color = barContent.copy(alpha = 0.7f)
+                                            )
+                                        },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                        keyboardActions = KeyboardActions(
+                                            onSearch = { moveToMatch(searchIndex + 1) }
+                                        ),
+                                        trailingIcon = {
+                                            IconButton(
+                                                onClick = {
+                                                    searchQuery = ""
+                                                    setSearchOpen(false)
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = stringResource(R.string.close),
+                                                    tint = barContent
+                                                )
+                                            }
+                                        },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = barContent,
+                                            unfocusedTextColor = barContent,
+                                            cursorColor = barContent,
+                                            focusedBorderColor = barContent.copy(alpha = 0.6f),
+                                            unfocusedBorderColor = barContent.copy(alpha = 0.3f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                } else {
+                                    Text(if (disableEdit) "code view" else "code edit")
+                                }
+                            },
+                            actions = {
+                                if (!searchOpen) {
+                                    IconButton(
+                                        onClick = {
+                                            setSearchOpen(true)
+                                            updateSearch(keepIndex = true)
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = stringResource(R.string.search),
+                                            tint = barContent
+                                        )
+                                    }
+                                } else {
+                                    IconButton(
+                                        onClick = {
+                                            if (!editorPending) moveToMatch(searchIndex - 1)
+                                        },
+                                        enabled = searchActionsEnabled && !editorPending
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_skip_previous),
+                                            contentDescription = stringResource(R.string.help_search_prev),
+                                            tint = barContent
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            if (!editorPending) moveToMatch(searchIndex + 1)
+                                        },
+                                        enabled = searchActionsEnabled && !editorPending
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_skip_next),
+                                            contentDescription = stringResource(R.string.help_search_next),
+                                            tint = barContent
+                                        )
+                                    }
+                                }
+
+                                if (saveEnabled && !searchOpen) {
+                                    IconButton(
+                                        onClick = {
+                                            if (!editorPending) openEditor()
+                                        },
+                                        enabled = !pending
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_edit),
+                                            contentDescription = stringResource(R.string.view_in_code_editor),
+                                            tint = barContent
+                                        )
+                                    }
+                                }
+
+                                if (saveEnabled && (!showingAlternate || sourcePreview) && !searchOpen) {
+                                    IconButton(
+                                        onClick = {
+                                            if (!editorPending && !replaceRuleRefreshPending) {
+                                                callback()?.onCodeSave(currentOriginalCode(), requestId)
+                                                dismiss()
+                                            }
+                                        },
+                                        enabled = !pending
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_save),
+                                            contentDescription = stringResource(R.string.action_save),
+                                            tint = barContent
+                                        )
+                                    }
+                                }
+
+                                if (showReplaceRulesArg || sourcePreview) {
+                                    Box {
+                                        IconButton(onClick = { overflowExpanded = true }) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = stringResource(R.string.more_menu),
+                                                tint = barContent
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = overflowExpanded,
+                                            onDismissRequest = { overflowExpanded = false }
+                                        ) {
+                                            if (showReplaceRulesArg) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.menu_replace_rule)) },
+                                                    enabled = !pending,
+                                                    onClick = {
+                                                        overflowExpanded = false
+                                                        if (!editorPending && !replaceRuleRefreshPending) {
+                                                            callback()?.onOpenReplaceRules()
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                            if (sourcePreview) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.effective_replaces)) },
+                                                    enabled = !pending,
+                                                    onClick = {
+                                                        overflowExpanded = false
+                                                        if (!editorPending && !replaceRuleRefreshPending) {
+                                                            callback()?.onShowSourceReplacements(
+                                                                currentOriginalCode(),
+                                                                requestId,
+                                                                false
+                                                            )
+                                                        }
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.manual_replace_rule)) },
+                                                    enabled = !pending && callback()?.isManualSourceReplacementEnabled() == true,
+                                                    onClick = {
+                                                        overflowExpanded = false
+                                                        if (!editorPending && !replaceRuleRefreshPending &&
+                                                            callback()?.isManualSourceReplacementEnabled() == true
+                                                        ) {
+                                                            callback()?.onShowSourceReplacements(
+                                                                currentOriginalCode(),
+                                                                requestId,
+                                                                true
+                                                            )
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = barBg,
+                                titleContentColor = barContent,
+                                actionIconContentColor = barContent
+                            )
+                        )
+
+                        if (canPreviewReplacement) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .clickable(enabled = !pending) {
+                                            showAlternate(!showingAlternate)
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = showingAlternate,
+                                        onCheckedChange = { checked -> showAlternate(checked) },
+                                        enabled = !pending
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.show_source_replacement),
+                                        color = colorResource(R.color.primaryText)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            AndroidView(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                                factory = { codeView }
+                            )
+                            AndroidView(
+                                modifier = Modifier
+                                    .width(40.dp)
+                                    .fillMaxHeight(),
+                                factory = { seekBarWrapper }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         editorTextPath = savedInstanceState?.getString("editorTextPath")
         editorPending = savedInstanceState?.getBoolean("editorPending") == true
         editorReadOnly = savedInstanceState?.getBoolean("editorReadOnly") == true
-        binding.toolBar.setBackgroundColor(primaryColor)
         val disableEdit = arguments?.getBoolean("disableEdit") == true
-        if (disableEdit) {
-            binding.toolBar.title = "code view"
-            binding.codeView.disableEdit()
-        }
         initMenu(!disableEdit)
-        binding.codeView.addLegadoPattern()
-        binding.codeView.addJsonPattern()
-        binding.codeView.addJsPattern()
-        binding.codeView.viewTreeObserver.addOnScrollChangedListener(scrollListener)
-        binding.codeView.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
-        binding.positionBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    val max = maxScrollY()
-                    binding.codeView.scrollTo(
-                        0,
-                        (max * progress.toLong() / bar.max).toInt(),
-                    )
-                }
-            }
-
-            override fun onStartTrackingTouch(bar: SeekBar) = Unit
-            override fun onStopTrackingTouch(bar: SeekBar) = Unit
-        })
         originalCodeStateKey = savedInstanceState?.getString("originalCode")
             ?: arguments?.getString("code")
         originalCode = originalCodeStateKey
@@ -172,128 +522,51 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
         if (arguments?.getBoolean("showReplaceRules") == true) {
             callback()?.let { alternateCode = it.getCodeAlternate(requestId) }
         }
-        editKeyListener = binding.codeView.keyListener
-        binding.codeView.setText(originalCode)
-        binding.codeView.post { updatePositionBar() }
+        val codeView = checkNotNull(codeViewRef)
+        editKeyListener = codeView.keyListener
+        codeView.setText(originalCode)
+        codeView.post { updatePositionBar() }
         val canPreviewReplacement = !disableEdit && alternateCode != null
-        binding.cbSourceReplacementPreview.apply {
-            isChecked = savedInstanceState?.getBoolean("showingAlternate")
-                ?: (arguments?.getBoolean("showAlternate") == true)
-            if (canPreviewReplacement) {
-                visible()
-            } else {
-                gone()
-            }
-            setOnCheckedChangeListener { _, checked -> showAlternate(checked) }
-        }
+        val initialShowingAlternate = savedInstanceState?.getBoolean("showingAlternate")
+            ?: (arguments?.getBoolean("showAlternate") == true)
+        showingAlternate = initialShowingAlternate
         if (canPreviewReplacement) {
-            showAlternate(binding.cbSourceReplacementPreview.isChecked)
+            showAlternate(showingAlternate)
         }
         setReplaceRuleRefreshPending(callback()?.isReplaceRuleRefreshPending() == true)
-        binding.codeView.doAfterTextChanged {
-            if (!searchView.isIconified) {
-                updateSearch(keepIndex = true, selectMatch = false)
-            }
-        }
     }
 
     private fun showAlternate(show: Boolean) {
+        val codeView = codeViewRef ?: return
         if (show) {
             val alternate = alternateCode ?: return
             if (!showingAlternate) {
-                originalCode = binding.codeView.text?.toString().orEmpty()
+                originalCode = codeView.text?.toString().orEmpty()
             }
-            binding.codeView.setText(alternate)
-            binding.codeView.keyListener = null
+            codeView.setText(alternate)
+            codeView.keyListener = null
         } else {
-            binding.codeView.setText(originalCode)
-            binding.codeView.keyListener = editKeyListener
+            codeView.setText(originalCode)
+            codeView.keyListener = editKeyListener
         }
         showingAlternate = show
         updateEditorAction()
-        binding.toolBar.menu.findItem(R.id.menu_save)?.isVisible =
-            saveEnabled && (!show || sourcePreview) && searchView.isIconified
-        if (!searchView.isIconified) showCurrentMatch()
-        binding.codeView.post { updatePositionBar() }
+        if (searchOpen) showCurrentMatch()
+        codeView.post { updatePositionBar() }
     }
 
     private fun initMenu(canSave: Boolean) {
         saveEnabled = canSave
-        binding.toolBar.inflateMenu(R.menu.code_edit)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.menu.findItem(R.id.menu_replace_rule).isVisible =
-            arguments?.getBoolean("showReplaceRules") == true
-        binding.toolBar.menu.findItem(R.id.menu_effective_replaces).isVisible = sourcePreview
-        binding.toolBar.menu.findItem(R.id.menu_manual_replace_rule).isVisible = sourcePreview
-        binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isVisible = canSave
-        searchView = binding.toolBar.menu.findItem(R.id.menu_search).actionView as SearchView
-        val navigationWidth = 96.dpToPx()
-        val minimumWidth = 48.dpToPx()
-        binding.toolBar.addOnLayoutChangeListener { _, left, _, right, _, _, _, _, _ ->
-            val availableWidth = (right - left - navigationWidth -
-                    binding.toolBar.contentInsetStart - binding.toolBar.contentInsetEnd -
-                    binding.toolBar.paddingStart - binding.toolBar.paddingEnd)
-                .coerceAtLeast(minimumWidth)
-            if (searchView.maxWidth != availableWidth) searchView.maxWidth = availableWidth
-        }
-        searchView.apply {
-            maxWidth = (resources.displayMetrics.widthPixels - navigationWidth -
-                    binding.toolBar.contentInsetStart - binding.toolBar.contentInsetEnd -
-                    binding.toolBar.paddingStart - binding.toolBar.paddingEnd)
-                .coerceAtLeast(minimumWidth)
-            queryHint = getString(R.string.search)
-            setOnSearchClickListener {
-                setSearchOpen(true)
-                updateSearch(keepIndex = true)
-            }
-            setOnCloseListener {
-                setSearchOpen(false)
-                false
-            }
-            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String): Boolean {
-                    moveToMatch(searchIndex + 1)
-                    return true
-                }
-
-                override fun onQueryTextChange(newText: String): Boolean {
-                    updateSearch()
-                    return true
-                }
-            })
-        }
         setSearchOpen(false)
-        binding.toolBar.setOnMenuItemClickListener {
-            if (editorPending) return@setOnMenuItemClickListener true
-            when (it.itemId) {
-                R.id.menu_search_previous -> moveToMatch(searchIndex - 1)
-                R.id.menu_search_next -> moveToMatch(searchIndex + 1)
-                R.id.menu_replace_rule -> if (!replaceRuleRefreshPending) {
-                    callback()?.onOpenReplaceRules()
-                }
-                R.id.menu_effective_replaces -> if (!replaceRuleRefreshPending) {
-                    callback()?.onShowSourceReplacements(currentOriginalCode(), requestId, false)
-                }
-                R.id.menu_manual_replace_rule -> if (!replaceRuleRefreshPending &&
-                    callback()?.isManualSourceReplacementEnabled() == true) {
-                    callback()?.onShowSourceReplacements(currentOriginalCode(), requestId, true)
-                }
-                R.id.menu_fullscreen_edit -> openEditor()
-                R.id.menu_save -> if (!replaceRuleRefreshPending) {
-                    callback()?.onCodeSave(currentOriginalCode(), requestId)
-                    dismiss()
-                }
-            }
-            return@setOnMenuItemClickListener true
-        }
     }
 
     private fun openEditor() {
         if (!saveEnabled || replaceRuleRefreshPending || editorPending) return
+        val codeView = codeViewRef ?: return
         val context = requireContext().applicationContext
         editorReadOnly = showingAlternate && !sourcePreview
-        val code = if (editorReadOnly) binding.codeView.text.toString() else currentOriginalCode()
-        val cursor = if (showingAlternate && sourcePreview) 0 else binding.codeView.selectionStart.coerceAtLeast(0)
+        val code = if (editorReadOnly) codeView.text.toString() else currentOriginalCode()
+        val cursor = if (showingAlternate && sourcePreview) 0 else codeView.selectionStart.coerceAtLeast(0)
         editorPending = true
         updateEditorAction()
         try {
@@ -310,31 +583,18 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
             editorTextPath = null
             editorPending = false
             updateEditorAction()
-            toastOnUi(error.localizedMessage)
+            toastOnUi(error.localizedMessage ?: "")
         }
     }
 
     private fun updateEditorAction() {
         val pending = replaceRuleRefreshPending || editorPending
-        binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled = !pending
-        binding.toolBar.menu.findItem(R.id.menu_replace_rule).isEnabled = !pending
-        binding.toolBar.menu.findItem(R.id.menu_save).isEnabled = !pending
-        binding.toolBar.menu.findItem(R.id.menu_effective_replaces).isEnabled = !pending
-        binding.toolBar.menu.findItem(R.id.menu_manual_replace_rule).apply {
-            isEnabled = !pending && callback()?.isManualSourceReplacementEnabled() == true
-            isVisible = sourcePreview
-        }
-        binding.cbSourceReplacementPreview.isEnabled = !pending
-        binding.codeView.keyListener = if (pending || showingAlternate) null else editKeyListener
+        codeViewRef?.keyListener = if (pending || showingAlternate) null else editKeyListener
         isCancelable = !pending
     }
 
     private fun setSearchOpen(open: Boolean) {
-        binding.toolBar.menu.findItem(R.id.menu_search_previous).isVisible = open
-        binding.toolBar.menu.findItem(R.id.menu_search_next).isVisible = open
-        binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isVisible = saveEnabled && !open
-        binding.toolBar.menu.findItem(R.id.menu_save).isVisible =
-            saveEnabled && (!showingAlternate || sourcePreview) && !open
+        searchOpen = open
         if (!open) setSearchActionsEnabled(false)
     }
 
@@ -343,8 +603,8 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
         selectMatch: Boolean = true,
     ) {
         searchRanges = findTextRanges(
-            binding.codeView.text?.toString().orEmpty(),
-            searchView.query?.toString().orEmpty(),
+            codeViewRef?.text?.toString().orEmpty(),
+            searchQuery,
         )
         if (searchRanges.isEmpty()) {
             searchIndex = -1
@@ -368,7 +628,7 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
 
     private fun showCurrentMatch() {
         val range = searchRanges.getOrNull(searchIndex) ?: return
-        val codeView = binding.codeView
+        val codeView = codeViewRef ?: return
         codeView.setSelection(range.first, range.last + 1)
         codeView.post {
             if (!codeView.isAttachedToWindow ||
@@ -379,23 +639,24 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
     }
 
     private fun setSearchActionsEnabled(enabled: Boolean) {
-        binding.toolBar.menu.findItem(R.id.menu_search_previous).isEnabled = enabled
-        binding.toolBar.menu.findItem(R.id.menu_search_next).isEnabled = enabled
+        searchActionsEnabled = enabled
     }
 
     private fun maxScrollY(): Int {
-        val codeView = binding.codeView
+        val codeView = codeViewRef ?: return 0
         return ((codeView.layout?.height ?: 0) + codeView.totalPaddingTop +
             codeView.totalPaddingBottom - codeView.height).coerceAtLeast(0)
     }
 
     private fun updatePositionBar() {
+        val seekBar = positionBarRef ?: return
+        val codeView = codeViewRef ?: return
         val max = maxScrollY()
-        binding.positionBar.isEnabled = max > 0
-        binding.positionBar.progress = resolveCodeDialogPositionProgress(
-            binding.codeView.scrollY,
+        seekBar.isEnabled = max > 0
+        seekBar.progress = resolveCodeDialogPositionProgress(
+            codeView.scrollY,
             max,
-            binding.positionBar.max,
+            seekBar.max,
         )
     }
 
@@ -411,14 +672,10 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
 
     private fun updateAlternatePreview() {
         if (view == null) return
-        binding.cbSourceReplacementPreview.apply {
-            if (alternateCode == null) {
-                if (showingAlternate) showAlternate(false)
-                gone()
-            } else {
-                visible()
-                if (isChecked) showAlternate(true)
-            }
+        if (alternateCode == null) {
+            if (showingAlternate) showAlternate(false)
+        } else {
+            if (showingAlternate) showAlternate(true)
         }
         updateEditorAction()
     }
@@ -435,7 +692,7 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
         resolveCodeDialogOriginal(
             showingAlternate,
             originalCode,
-            binding.codeView.text?.toString().orEmpty(),
+            codeViewRef?.text?.toString().orEmpty(),
         )
     }
 
@@ -444,14 +701,18 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
 
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
-        setSearchOpen(!searchView.isIconified)
+        searchOpen = savedInstanceState?.getBoolean("searchOpen") == true
+        searchQuery = savedInstanceState?.getString("searchQuery").orEmpty()
+        setSearchOpen(searchOpen)
         searchIndex = savedInstanceState?.getInt("searchIndex", -1) ?: -1
-        if (!searchView.isIconified) updateSearch(keepIndex = true)
+        if (searchOpen) updateSearch(keepIndex = true)
     }
 
     override fun onDestroyView() {
-        binding.codeView.viewTreeObserver.removeOnScrollChangedListener(scrollListener)
-        binding.codeView.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
+        codeViewRef?.viewTreeObserver?.removeOnScrollChangedListener(scrollListener)
+        codeViewRef?.viewTreeObserver?.removeOnGlobalLayoutListener(layoutListener)
+        codeViewRef = null
+        positionBarRef = null
         super.onDestroyView()
     }
 
@@ -459,6 +720,8 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
         outState.putString("editorTextPath", editorTextPath)
         outState.putBoolean("editorPending", editorPending)
         outState.putBoolean("editorReadOnly", editorReadOnly)
+        outState.putBoolean("searchOpen", searchOpen)
+        outState.putString("searchQuery", searchQuery)
         outState.putInt("searchIndex", searchIndex)
         originalCodeStateKey = saveStateData(originalCodeStateKey, currentOriginalCode())
             .also { outState.putString("originalCode", it) }
@@ -472,7 +735,6 @@ class CodeDialog() : BaseDialogFragment(R.layout.dialog_code_view) {
 
     private fun saveStateData(key: String?, data: String): String =
         key?.also { IntentData.put(it, data) } ?: IntentData.put(data)
-
 
     interface Callback {
 

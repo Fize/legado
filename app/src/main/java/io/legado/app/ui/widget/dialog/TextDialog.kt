@@ -7,40 +7,91 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.method.LinkMovementMethod
 import android.text.style.BackgroundColorSpan
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
 import android.view.textclassifier.TextClassifier
-import android.widget.ArrayAdapter
-import androidx.core.view.GravityCompat
-import androidx.core.view.isVisible
-import androidx.core.widget.doAfterTextChanged
-import androidx.drawerlayout.widget.DrawerLayout
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogTextViewBinding
 import io.legado.app.help.CacheManager
 import io.legado.app.help.HelpSection
 import io.legado.app.help.IntentData
 import io.legado.app.help.findTextRanges
 import io.legado.app.help.parseHelpSections
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.text.ScrollTextView
 import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.applyOpenTint
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.hideSoftInput
-import io.legado.app.utils.installMd3OverflowMenu
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setHtml
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.setMarkdown
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.showSoftInput
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.html.HtmlPlugin
@@ -51,8 +102,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-
-class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
+class TextDialog() : BaseDialogFragment() {
 
     enum class Mode {
         MD, HTML, TEXT
@@ -78,16 +128,24 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
         this.autoClose = autoClose
     }
 
-    private val binding by viewBinding(DialogTextViewBinding::bind)
+    private var textViewRef: ScrollTextView? = null
     private var time = 0L
+    private var badgeCount by mutableIntStateOf(0)
     private var autoClose: Boolean = false
     private var markwon: Markwon? = null
     private var renderJob: Job? = null
     private var fullContent = ""
     private var sections: List<HelpSection> = emptyList()
-    private var selectedSection = 0
+    private val tocLabels = mutableStateListOf<String>()
+    private var tocMenuVisible by mutableStateOf(false)
+    private var searchMenuVisible by mutableStateOf(false)
+    private var tocDrawerOpen by mutableStateOf(false)
+    private var selectedSection by mutableIntStateOf(0)
     private var restoredScrollY = 0
-    private var searchQuery = ""
+    private var searchBarVisible by mutableStateOf(false)
+    private var searchQuery by mutableStateOf("")
+    private var searchCountText by mutableStateOf("")
+    private var searchNavEnabled by mutableStateOf(false)
     private var searchRanges: List<IntRange> = emptyList()
     private var searchIndex = -1
     private val searchSpans = mutableListOf<BackgroundColorSpan>()
@@ -97,20 +155,261 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 0.9f)
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val context = requireContext()
+        val dialogTitle = arguments?.getString("title").orEmpty()
+        val mode = arguments?.getString("mode")
+
+        val scrollTextView = ScrollTextView(context, null).apply {
+            val pad = 12.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            scrollBarStyle = View.SCROLLBARS_OUTSIDE_OVERLAY
+            setTextColor(context.secondaryTextColor)
+            setTextIsSelectable(true)
+        }
+        textViewRef = scrollTextView
+
+        return ComposeView(context).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    val localContext = LocalContext.current
+                    val barBg = Color(localContext.primaryColor)
+                    val barContent = Color(localContext.primaryTextColor)
+                    val accent = Color(localContext.accentColor)
+                    val searchFocusRequester = remember { FocusRequester() }
+                    val keyboardController = LocalSoftwareKeyboardController.current
+
+                    LaunchedEffect(searchBarVisible) {
+                        if (searchBarVisible) {
+                            runCatching { searchFocusRequester.requestFocus() }
+                            keyboardController?.show()
+                        } else {
+                            keyboardController?.hide()
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colorResource(R.color.background))
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            TopAppBar(
+                                title = { Text(dialogTitle) },
+                                actions = {
+                                    if (searchMenuVisible) {
+                                        IconButton(onClick = { toggleSearch() }) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_search),
+                                                contentDescription = stringResource(R.string.search),
+                                                tint = barContent
+                                            )
+                                        }
+                                    }
+                                    if (tocMenuVisible) {
+                                        IconButton(onClick = { tocDrawerOpen = true }) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_chapter_list),
+                                                contentDescription = stringResource(R.string.chapter_list),
+                                                tint = barContent
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val cacheKey = "code_text_${System.currentTimeMillis()}"
+                                            CacheManager.putMemory(cacheKey, fullContent)
+                                            startActivity<CodeEditActivity> {
+                                                putExtra("cacheKey", cacheKey)
+                                                putExtra("title", dialogTitle)
+                                                putExtra(
+                                                    "languageName",
+                                                    if (mode == Mode.MD.name) "text.html.markdown" else "text.html.basic"
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_code),
+                                            contentDescription = stringResource(R.string.edit_content),
+                                            tint = barContent
+                                        )
+                                    }
+                                    TextButton(onClick = { dismissAllowingStateLoss() }) {
+                                        Text(
+                                            text = stringResource(R.string.close),
+                                            color = barContent
+                                        )
+                                    }
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = barBg,
+                                    titleContentColor = barContent,
+                                    actionIconContentColor = barContent
+                                )
+                            )
+
+                            if (searchBarVisible) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { onSearchQueryChanged(it) },
+                                        placeholder = { Text(stringResource(R.string.search)) },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                        keyboardActions = KeyboardActions(
+                                            onSearch = { moveToMatch(searchIndex + 1) }
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .focusRequester(searchFocusRequester)
+                                    )
+                                    Text(
+                                        text = searchCountText,
+                                        color = colorResource(R.color.secondaryText),
+                                        fontSize = 12.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .widthIn(min = 40.dp)
+                                            .padding(horizontal = 4.dp)
+                                    )
+                                    IconButton(
+                                        onClick = { moveToMatch(searchIndex - 1) },
+                                        enabled = searchNavEnabled,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_arrow_down),
+                                            contentDescription = stringResource(R.string.help_search_prev),
+                                            tint = colorResource(R.color.primaryText),
+                                            modifier = Modifier.rotate(180f)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { moveToMatch(searchIndex + 1) },
+                                        enabled = searchNavEnabled,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_arrow_down),
+                                            contentDescription = stringResource(R.string.help_search_next),
+                                            tint = colorResource(R.color.primaryText)
+                                        )
+                                    }
+                                }
+                            }
+
+                            AndroidView(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                factory = { scrollTextView }
+                            )
+                        }
+
+                        if (badgeCount > 0) {
+                            Surface(
+                                shape = CircleShape,
+                                color = accent,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(3.dp)
+                            ) {
+                                Text(
+                                    text = badgeCount.toString(),
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        if (tocDrawerOpen) {
+                            val scrimInteraction = remember { MutableInteractionSource() }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.4f))
+                                    .clickable(
+                                        interactionSource = scrimInteraction,
+                                        indication = null,
+                                        onClick = { tocDrawerOpen = false }
+                                    )
+                            )
+                        }
+
+                        AnimatedVisibility(
+                            visible = tocDrawerOpen,
+                            enter = slideInHorizontally(initialOffsetX = { it }),
+                            exit = slideOutHorizontally(targetOffsetX = { it }),
+                            modifier = Modifier.align(Alignment.CenterEnd)
+                        ) {
+                            Surface(
+                                color = colorResource(R.color.background),
+                                shadowElevation = 8.dp,
+                                modifier = Modifier
+                                    .width(264.dp)
+                                    .fillMaxHeight()
+                            ) {
+                                LazyColumn(
+                                    contentPadding = PaddingValues(vertical = 8.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    itemsIndexed(tocLabels) { position, label ->
+                                        val isSelected = selectedSection == position
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    if (isSelected) accent.copy(alpha = 0.15f)
+                                                    else Color.Transparent
+                                                )
+                                                .clickable {
+                                                    if (selectedSection != position) {
+                                                        if (position != 0 && searchQuery.isNotBlank()) {
+                                                            onSearchQueryChanged("")
+                                                        }
+                                                        selectedSection = position
+                                                        restoredScrollY = 0
+                                                        textViewRef?.scrollTo(0, 0)
+                                                        renderMarkdown(currentMarkdown())
+                                                    }
+                                                    tocDrawerOpen = false
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                color = if (isSelected) accent else colorResource(R.color.primaryText),
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.inflateMenu(R.menu.dialog_text)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.installMd3OverflowMenu(
-            onOpenCustomMenu = { it.applyOpenTint(requireContext()) }
-        )
-        binding.drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
-        binding.drawerLayout.setDrawerTitle(GravityCompat.END, getString(R.string.chapter_list))
         selectedSection = savedInstanceState?.getInt(STATE_SELECTED_SECTION) ?: 0
         restoredScrollY = savedInstanceState?.getInt(STATE_SCROLL_Y) ?: 0
+        val textView = checkNotNull(textViewRef)
         arguments?.let {
-            val title = it.getString("title")
-            binding.toolBar.title = title
             val showToc = it.getBoolean("showToc")
             val content = if (showToc) {
                 it.getString("content").orEmpty()
@@ -122,10 +421,10 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
             when (mode) {
                 Mode.MD.name -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        binding.textView.setTextClassifier(TextClassifier.NO_OP)
+                        textView.setTextClassifier(TextClassifier.NO_OP)
                     }
                     if (showToc) {
-                        binding.textView.setLineSpacing(0f, 1.3f)
+                        textView.setLineSpacing(0f, 1.3f)
                         setupToc()
                         setupSearch(savedInstanceState)
                     }
@@ -148,45 +447,27 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
                     }
                 }
 
-                Mode.HTML.name -> binding.textView.setHtml(content)
+                Mode.HTML.name -> textView.setHtml(content)
                 else -> {
                     if (content.length >= 32 * 1024) {
                         val truncatedContent =
                             content.take(32 * 1024) + "\n\n数据太大，无法全部显示…"
-                        binding.textView.text = truncatedContent
+                        textView.text = truncatedContent
                     } else {
-                        binding.textView.text = content
+                        textView.text = content
                     }
                 }
-            }
-            binding.toolBar.setOnMenuItemClickListener { menu ->
-                when (menu.itemId) {
-                    R.id.menu_search -> toggleSearch()
-                    R.id.menu_help_toc -> binding.drawerLayout.openDrawer(GravityCompat.END)
-                    R.id.menu_close -> dismissAllowingStateLoss()
-                    R.id.menu_fullscreen_edit -> {
-                        val cacheKey = "code_text_${System.currentTimeMillis()}"
-                        CacheManager.putMemory(cacheKey, fullContent)
-                        startActivity<CodeEditActivity> {
-                            putExtra("cacheKey", cacheKey)
-                            putExtra("title", title)
-                            putExtra("languageName", if (mode == Mode.MD.name) "text.html.markdown" else "text.html.basic")
-                        }
-                    }
-                }
-                true
             }
             time = it.getLong("time", 0L)
         }
         if (time > 0) {
             val owner = viewLifecycleOwner
-            val badgeView = binding.badgeView
-            badgeView.setBadgeCount((time / 1000).toInt())
+            badgeCount = (time / 1000).toInt()
             owner.lifecycleScope.launch {
                 while (time > 0) {
                     delay(1000)
                     time -= 1000
-                    badgeView.setBadgeCount((time / 1000).toInt())
+                    badgeCount = (time / 1000).toInt()
                     if (time <= 0) {
                         dialog?.setCancelable(true)
                         if (autoClose) dialog?.cancel()
@@ -213,27 +494,9 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
         val labels = listOf(getString(R.string.all)) + sections.map {
             if (it.depth == 0) it.title else "    ${it.title}"
         }
-        binding.tocList.adapter = ArrayAdapter<String>(
-            requireContext(),
-            android.R.layout.simple_list_item_activated_1,
-            labels,
-        )
-        binding.tocList.setItemChecked(selectedSection, true)
-        binding.tocList.setSelection(selectedSection)
-        binding.tocList.setOnItemClickListener { _, _, position, _ ->
-            if (selectedSection != position) {
-                if (position != 0 && searchQuery.isNotBlank()) {
-                    binding.searchInput.text?.clear()
-                }
-                selectedSection = position
-                restoredScrollY = 0
-                binding.textView.scrollTo(0, 0)
-                renderMarkdown(currentMarkdown())
-            }
-            binding.drawerLayout.closeDrawers()
-        }
-        binding.toolBar.menu.findItem(R.id.menu_help_toc)?.isVisible = true
-        binding.drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        tocLabels.clear()
+        tocLabels.addAll(labels)
+        tocMenuVisible = true
     }
 
     private fun currentMarkdown(): String {
@@ -250,44 +513,19 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
         if (searchQuery.isNotBlank() && selectedSection != 0) {
             selectedSection = 0
             restoredScrollY = 0
-            binding.tocList.setItemChecked(0, true)
-            binding.tocList.setSelection(0)
         }
-        binding.searchInput.setText(searchQuery)
-        binding.searchBar.isVisible = savedInstanceState?.getBoolean(STATE_SEARCH_VISIBLE) == true
-        binding.searchInput.doAfterTextChanged {
-            onSearchQueryChanged(it?.toString().orEmpty())
-        }
-        binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                moveToMatch(searchIndex + 1)
-                true
-            } else {
-                false
-            }
-        }
-        binding.btnSearchPrev.setOnClickListener { moveToMatch(searchIndex - 1) }
-        binding.btnSearchNext.setOnClickListener { moveToMatch(searchIndex + 1) }
-        binding.toolBar.menu.findItem(R.id.menu_search)?.isVisible = true
+        searchBarVisible = savedInstanceState?.getBoolean(STATE_SEARCH_VISIBLE) == true
+        searchMenuVisible = true
     }
 
     private fun toggleSearch() {
-        val searchInput = binding.searchInput
-        binding.searchBar.isVisible = !binding.searchBar.isVisible
-        if (binding.searchBar.isVisible) {
-            searchInput.setSelection(searchInput.text?.length ?: 0)
-            searchInput.post {
-                if (searchInput.isAttachedToWindow) searchInput.showSoftInput()
-            }
-        } else {
-            searchInput.hideSoftInput()
-        }
+        searchBarVisible = !searchBarVisible
     }
 
     private fun onSearchQueryChanged(query: String) {
         searchQuery = query
         searchIndex = -1
-        binding.searchCount.text = ""
+        searchCountText = ""
         setSearchNavigationEnabled(false)
         if (query.isBlank()) {
             searchRanges = emptyList()
@@ -297,8 +535,6 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
         if (selectedSection != 0) {
             selectedSection = 0
             restoredScrollY = 0
-            binding.tocList.setItemChecked(0, true)
-            binding.tocList.setSelection(0)
             renderMarkdown(currentMarkdown())
         } else if (renderJob?.isActive != true) {
             applySearchHighlight()
@@ -307,18 +543,19 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
 
     private fun applySearchHighlight(keepIndex: Boolean = false) {
         clearSearchSpans()
-        val text = binding.textView.text
+        val textView = textViewRef ?: return
+        val text = textView.text
         searchRanges = findTextRanges(text.toString(), searchQuery)
         if (searchRanges.isEmpty()) {
             searchIndex = -1
             setSearchNavigationEnabled(false)
-            binding.searchCount.text = "0/0"
+            searchCountText = "0/0"
             return
         }
         if (!keepIndex || searchIndex !in searchRanges.indices) searchIndex = 0
         val spannable = text as? Spannable ?: run {
-            binding.textView.text = SpannableStringBuilder(text)
-            binding.textView.text as? Spannable ?: return
+            textView.text = SpannableStringBuilder(text)
+            textView.text as? Spannable ?: return
         }
         val normalColor = ColorUtils.adjustAlpha(primaryColor, 0.25f)
         val currentColor = ColorUtils.adjustAlpha(primaryColor, 0.5f)
@@ -328,13 +565,12 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
             searchSpans.add(span)
         }
         setSearchNavigationEnabled(true)
-        binding.searchCount.text = "${searchIndex + 1}/${searchRanges.size}"
+        searchCountText = "${searchIndex + 1}/${searchRanges.size}"
         scrollToCurrentMatch()
     }
 
     private fun setSearchNavigationEnabled(enabled: Boolean) {
-        binding.btnSearchPrev.isEnabled = enabled
-        binding.btnSearchNext.isEnabled = enabled
+        searchNavEnabled = enabled
     }
 
     private fun moveToMatch(index: Int) {
@@ -344,14 +580,14 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
     }
 
     private fun clearSearchSpans() {
-        val text = binding.textView.text as? Spannable
+        val text = textViewRef?.text as? Spannable
         searchSpans.forEach { text?.removeSpan(it) }
         searchSpans.clear()
     }
 
     private fun scrollToCurrentMatch() {
         val offset = searchRanges.getOrNull(searchIndex)?.first ?: return
-        val textView = binding.textView
+        val textView = textViewRef ?: return
         textView.post {
             if (!textView.isAttachedToWindow ||
                 searchRanges.getOrNull(searchIndex)?.first != offset
@@ -369,7 +605,7 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
         renderJob?.cancel()
         renderJob = viewLifecycleOwner.lifecycleScope.launch {
             val parsed = withContext(IO) { currentMarkwon.toMarkdown(markdown) }
-            val textView = binding.textView
+            val textView = textViewRef ?: return@launch
             textView.movementMethod = LinkMovementMethod.getInstance()
             textView.setMarkdown(
                 currentMarkwon,
@@ -391,8 +627,8 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
     override fun onSaveInstanceState(outState: Bundle) {
         if (arguments?.getBoolean("showToc") == true) {
             outState.putInt(STATE_SELECTED_SECTION, selectedSection)
-            outState.putInt(STATE_SCROLL_Y, binding.textView.scrollY)
-            outState.putBoolean(STATE_SEARCH_VISIBLE, binding.searchBar.isVisible)
+            outState.putInt(STATE_SCROLL_Y, textViewRef?.scrollY ?: 0)
+            outState.putBoolean(STATE_SEARCH_VISIBLE, searchBarVisible)
             outState.putString(STATE_SEARCH_QUERY, searchQuery)
             outState.putInt(STATE_SEARCH_INDEX, searchIndex)
         }
@@ -404,6 +640,7 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
         renderJob = null
         searchSpans.clear()
         markwon = null
+        textViewRef = null
         super.onDestroyView()
     }
 

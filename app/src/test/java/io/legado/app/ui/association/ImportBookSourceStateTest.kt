@@ -190,40 +190,24 @@ class ImportBookSourceStateTest {
         val codeDialog = readProjectFile(
             "src/main/java/io/legado/app/ui/widget/dialog/CodeDialog.kt"
         )
-        assertTrue(codeDialog.contains("binding.codeView.keyListener = null"))
+        assertTrue(codeDialog.contains("codeView.keyListener = null"))
         assertFalse(codeDialog.contains("ReplaceRuleActivity"))
         assertTrue(codeDialog.contains("callback()?.onOpenReplaceRules()"))
         assertTrue(codeDialog.contains("fun setReplaceRuleRefreshPending"))
-        assertTrue(codeDialog.contains("if (!replaceRuleRefreshPending)"))
-        assertTrue(codeDialog.contains("binding.codeView.keyListener = if (pending"))
+        assertTrue(codeDialog.contains("if (!editorPending && !replaceRuleRefreshPending)"))
+        assertTrue(codeDialog.contains("codeViewRef?.keyListener = if (pending"))
         assertTrue(codeDialog.contains("isCancelable = !pending"))
         assertTrue(codeDialog.contains("fun clearAlternateCode()"))
         assertTrue(codeDialog.contains("callback()?.isReplaceRuleRefreshPending()"))
-        val replaceMenu = codeDialog.substringAfter("R.id.menu_replace_rule ->")
-            .substringBefore("R.id.menu_save ->")
-        assertTrue(replaceMenu.contains("onOpenReplaceRules"))
-        assertFalse(replaceMenu.contains("dismiss"))
+        assertTrue(codeDialog.contains("R.string.menu_replace_rule"))
         assertTrue(codeDialog.contains("fun refreshAlternateCode()"))
         assertTrue(codeDialog.contains("callback()?.getCodeAlternate(requestId)"))
         assertTrue(codeDialog.contains("!replaceRuleRefreshPending"))
-        assertTrue(
-            codeDialog.indexOf("setOnCheckedChangeListener") >
-                codeDialog.indexOf("val canPreviewReplacement")
-        )
         assertTrue(codeDialog.contains("initMenu(!disableEdit)"))
-        assertTrue(codeDialog.contains("saveEnabled && (!show || sourcePreview) && searchView.isIconified"))
+        assertTrue(codeDialog.contains("saveEnabled && (!showingAlternate || sourcePreview) && !searchOpen"))
         assertTrue(codeDialog.contains("editorReadOnly = showingAlternate && !sourcePreview"))
         assertTrue(codeDialog.contains("callback()?.onCodeSave(currentOriginalCode(), requestId)"))
         assertTrue(codeDialog.contains("findTextRanges("))
-        assertTrue(codeDialog.contains("right - left - navigationWidth"))
-        assertTrue(
-            codeDialog.contains(
-                "binding.toolBar.contentInsetStart - binding.toolBar.contentInsetEnd"
-            )
-        )
-        assertTrue(
-            codeDialog.contains("binding.toolBar.paddingStart - binding.toolBar.paddingEnd")
-        )
         assertTrue(
             codeDialog.contains("updateSearch(keepIndex = true, selectMatch = false)")
         )
@@ -231,13 +215,13 @@ class ImportBookSourceStateTest {
         val alternatePreview = codeDialog.substringAfter("private fun showAlternate")
             .substringBefore("private fun initMenu")
         assertTrue(
-            alternatePreview.contains("if (!searchView.isIconified) showCurrentMatch()")
+            alternatePreview.contains("if (searchOpen) showCurrentMatch()")
         )
         assertTrue(
-            codeDialog.contains("R.id.menu_search_previous -> moveToMatch(searchIndex - 1)")
+            codeDialog.contains("if (!editorPending) moveToMatch(searchIndex - 1)")
         )
         assertTrue(
-            codeDialog.contains("R.id.menu_search_next -> moveToMatch(searchIndex + 1)")
+            codeDialog.contains("if (!editorPending) moveToMatch(searchIndex + 1)")
         )
         assertTrue(codeDialog.contains("codeView.setSelection(range.first, range.last + 1)"))
         assertTrue(codeDialog.contains("codeView.bringPointIntoView(range.first)"))
@@ -250,15 +234,9 @@ class ImportBookSourceStateTest {
         assertTrue(codeDialog.contains("outState.putBoolean(\"showingAlternate\""))
         assertTrue(
             codeDialog.contains(
-                "if (!searchView.isIconified) updateSearch(keepIndex = true)"
+                "if (searchOpen) updateSearch(keepIndex = true)"
             )
         )
-
-        val codeMenu = readProjectFile("src/main/res/menu/code_edit.xml")
-        assertTrue(codeMenu.contains("@+id/menu_search"))
-        assertTrue(codeMenu.contains("@+id/menu_search_previous"))
-        assertTrue(codeMenu.contains("@+id/menu_search_next"))
-        assertTrue(codeMenu.contains("@+id/menu_replace_rule"))
     }
 
     private fun readProjectFile(pathInApp: String): String {

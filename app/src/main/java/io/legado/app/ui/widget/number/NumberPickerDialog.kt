@@ -1,23 +1,22 @@
 package io.legado.app.ui.widget.number
 
 import android.content.Context
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.NumberPicker
 import androidx.appcompat.app.AlertDialog
 import io.legado.app.R
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.hideSoftInput
 
-class NumberPickerDialog(context: Context, private val isDecimalMode: Boolean = false) {
+class NumberPickerDialog(private val context: Context, private val isDecimalMode: Boolean = false) {
     private val builder = AlertDialog.Builder(context)
     private var numberPicker: NumberPicker? = null
     private var maxValue: Int? = null
     private var minValue: Int? = null
     private var value: Int? = null
     private var displayedValues: Array<String>? = null
-
-    init {
-        builder.setView(R.layout.dialog_number_picker)
-    }
 
     fun setTitle(title: String): NumberPickerDialog {
         builder.setTitle(title)
@@ -56,6 +55,33 @@ class NumberPickerDialog(context: Context, private val isDecimalMode: Boolean = 
     }
 
     fun show(callBack: ((value: Int) -> Unit)?) {
+        val picker = NumberPicker(context).apply {
+            isVerticalScrollBarEnabled = false
+            isHorizontalScrollBarEnabled = false
+            this@NumberPickerDialog.minValue?.let { minValue = it }
+            this@NumberPickerDialog.maxValue?.let { maxValue = it }
+            this@NumberPickerDialog.value?.let { value = it }
+            if (isDecimalMode) {
+                val min = this@NumberPickerDialog.minValue ?: 0
+                val max = this@NumberPickerDialog.maxValue ?: 0
+                displayedValues = Array(max - min + 1) { i ->
+                    ((min + i) / 10.0).toString()
+                }
+            }
+            this@NumberPickerDialog.displayedValues?.let { displayedValues = it }
+        }
+        numberPicker = picker
+        val container = FrameLayout(context).apply {
+            addView(
+                picker,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.CENTER
+                )
+            )
+        }
+        builder.setView(container)
         builder.setPositiveButton(R.string.ok) { _, _ ->
             numberPicker?.let { np ->
                 np.clearFocus()
@@ -64,24 +90,6 @@ class NumberPickerDialog(context: Context, private val isDecimalMode: Boolean = 
             }
         }
         builder.setNegativeButton(R.string.cancel, null)
-        val dialog = builder.show().applyTint()
-        numberPicker = dialog.findViewById(R.id.number_picker)
-        numberPicker?.let { np ->
-            minValue?.let {
-                np.minValue = it
-            }
-            maxValue?.let {
-                np.maxValue = it
-            }
-            value?.let {
-                np.value = it
-            }
-            if (isDecimalMode) {
-                np.displayedValues = Array(maxValue!! - minValue!! + 1) { i ->
-                    ((minValue!! + i) / 10.0).toString()
-                }
-            }
-            displayedValues?.let { np.displayedValues = it }
-        }
+        builder.show().applyTint()
     }
 }

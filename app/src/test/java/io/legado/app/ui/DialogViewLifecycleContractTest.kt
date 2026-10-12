@@ -196,15 +196,13 @@ class DialogViewLifecycleContractTest {
 
         assertTrue(countdown.contains("val owner = viewLifecycleOwner"))
         assertTrue(countdown.contains("owner.lifecycleScope.launch"))
-        assertTrue(countdown.contains("val badgeView = binding.badgeView"))
-        assertTrue(countdown.contains("badgeView.setBadgeCount"))
+        assertTrue(countdown.contains("badgeCount = (time / 1000).toInt()"))
         assertFalse(countdown.contains("view.post"))
     }
 
     @Test
     fun `text dialog search is help only and rejects stale posted scrolls`() {
         val source = source("widget/dialog/TextDialog.kt")
-        val layout = projectFile("src/main/res/layout/dialog_text_view.xml").readText()
         val markdownSetup = source.section(
             "Mode.MD.name -> {",
             "viewLifecycleOwner.lifecycleScope.launch",
@@ -223,15 +221,14 @@ class DialogViewLifecycleContractTest {
         assertTrue(source.contains("if (position != 0 && searchQuery.isNotBlank())"))
         assertTrue(source.contains("if (searchQuery.isNotBlank() && selectedSection != 0)"))
         assertTrue(source.contains("else if (renderJob?.isActive != true)"))
-        assertTrue(layout.contains("android:saveEnabled=\"false\""))
     }
 
     @Test
-    fun `text dialog retints icons when overflow opens`() {
+    fun `text dialog uses theme primaryTextColor for top bar icons`() {
         val source = source("widget/dialog/TextDialog.kt")
 
-        assertTrue(source.contains("binding.toolBar.installMd3OverflowMenu("))
-        assertTrue(source.contains("onOpenCustomMenu = { it.applyOpenTint(requireContext()) }"))
+        assertTrue(source.contains("val barContent = Color(localContext.primaryTextColor)"))
+        assertTrue(source.contains("actionIconContentColor = barContent"))
     }
 
     private fun source(relativePath: String): String {

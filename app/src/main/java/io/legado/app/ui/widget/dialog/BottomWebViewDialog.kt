@@ -43,7 +43,13 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
-import io.legado.app.databinding.DialogWebViewBinding
+import android.view.LayoutInflater
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
@@ -59,6 +65,7 @@ import io.legado.app.help.webView.WebViewPool
 import io.legado.app.help.webView.shouldInjectPreloadJs
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.invisible
 import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
@@ -67,7 +74,6 @@ import io.legado.app.utils.runOnUI
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.launch
 import androidx.core.view.size
@@ -263,7 +269,13 @@ internal data class BrowserDialogRequest(
     val config: String?,
 )
 
-class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view), WebJsExtensions.Callback {
+class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callback {
+
+    private class WebViewDialogBinding(
+        val root: View,
+        val webViewContainer: FrameLayout,
+        val customWebView: FrameLayout,
+    )
 
     private data class SheetSizeSnapshot(
         val layoutHeight: Int,
@@ -290,7 +302,8 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         }
     }
 
-    private val binding by viewBinding(DialogWebViewBinding::bind)
+    private var _binding: WebViewDialogBinding? = null
+    private val binding get() = checkNotNull(_binding)
     private val bottomSheet: View?
         get() = dialog?.findViewById(com.google.android.material.R.id.design_bottom_sheet)
     private val behavior: BottomSheetBehavior<View>?
@@ -798,6 +811,35 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         }
     }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val context = requireContext()
+        val webContainer = FrameLayout(context)
+        val customContainer = FrameLayout(context)
+        val composeView = ComposeView(context).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { webContainer }
+                        )
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { customContainer }
+                        )
+                    }
+                }
+            }
+        }
+        _binding = WebViewDialogBinding(composeView, webContainer, customContainer)
+        return composeView
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         pooledWebView = WebViewPool.acquire(requireContext())
@@ -1015,6 +1057,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         originOrientation?.let {
             activity?.requestedOrientation = it
         }
+        _binding = null
         super.onDestroyView()
     }
 

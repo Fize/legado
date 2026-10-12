@@ -15,9 +15,9 @@ class UrlOptionDialogContractTest {
 
     @Test
     fun `request and response scripts use their matching setters`() {
-        assertTrue(source.contains("urlOption.setJs(binding.editJs.text.toString())"))
-        assertTrue(source.contains("urlOption.setBodyJs(binding.editBodyJs.text.toString())"))
-        assertFalse(source.contains("urlOption.setJs(binding.editBodyJs.text.toString())"))
+        assertTrue(source.contains("urlOption.setJs(jsText)"))
+        assertTrue(source.contains("urlOption.setBodyJs(bodyJsText)"))
+        assertFalse(source.contains("urlOption.setJs(bodyJsText)"))
     }
 
     private fun projectFile(pathInApp: String): File {
