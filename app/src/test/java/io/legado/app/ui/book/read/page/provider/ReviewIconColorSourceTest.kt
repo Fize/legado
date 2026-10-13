@@ -41,17 +41,13 @@ class ReviewIconColorSourceTest {
         val activity = projectFile(
             "src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
         ).readText().normalizeLines()
-        val layout = projectFile(
-            "src/main/res/layout/dialog_read_bg_text.xml"
-        ).readText().normalizeLines()
 
         assertTrue(dialog.contains("const val REVIEW_ICON_COLOR = 124"))
         assertTrue(dialog.contains(".setDialogId(REVIEW_ICON_COLOR)"))
         assertTrue(dialog.contains("ReadBookConfig.reviewIconColor = 0"))
         assertTrue(dialog.contains("arrayListOf(8, 9, 11)"))
         assertTrue(activity.contains("REVIEW_ICON_COLOR ->"))
-        assertTrue(layout.contains("@+id/tv_review_icon_color"))
-        assertTrue(layout.contains("@string/review_icon_color_title"))
+        assertTrue(dialog.contains("R.string.review_icon_color_title"))
     }
 
     private fun String.normalizeLines(): String = replace("\r\n", "\n")

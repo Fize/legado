@@ -32,17 +32,11 @@ class TitleNumberSpacingTest {
 
     @Test
     fun `spacing seek bar exposes the mapped range`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_tip_config.xml"))
-        val seekBars = document.getElementsByTagName(
-            "io.legado.app.ui.widget.DetailSeekBar"
-        )
-        val spacing = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_title_number_spacing" }
+        val source = projectFile("src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt").readText()
+        val spacingSection = source.substringAfter("titleRes = R.string.title_number_spacing")
+            .substringBefore("titleRes =")
 
-        assertEquals("150", spacing.getAttribute("app:max"))
+        org.junit.Assert.assertTrue(spacingSection.contains("max = 150"))
     }
 
     private fun projectFile(pathInApp: String): File {

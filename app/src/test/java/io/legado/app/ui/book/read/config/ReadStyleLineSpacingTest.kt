@@ -11,17 +11,10 @@ class ReadStyleLineSpacingTest {
 
     @Test
     fun `seek bar exposes the requested range`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_read_book_style.xml"))
-        val seekBars = document.getElementsByTagName(
-            "io.legado.app.ui.widget.DetailSeekBar"
-        )
-        val lineSpacing = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_line_size" }
-
-        assertEquals("50", lineSpacing.getAttribute("app:max"))
+        val source = projectFile("src/main/java/io/legado/app/ui/book/read/config/ReadStyleDialog.kt").readText()
+        val lineSpacingSection = source.substringAfter("titleRes = R.string.line_size")
+            .substringBefore("titleRes =")
+        assertTrue(lineSpacingSection.contains("max = 50"))
     }
 
     @Test

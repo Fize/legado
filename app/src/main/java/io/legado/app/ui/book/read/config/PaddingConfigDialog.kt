@@ -2,39 +2,82 @@ package io.legado.app.ui.book.read.config
 
 import android.animation.ValueAnimator
 import android.content.DialogInterface
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.TextView
-import androidx.appcompat.widget.TooltipCompat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.DialogReadPaddingBinding
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.throttle
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlin.math.roundToInt
 
-class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
+class PaddingConfigDialog : BaseDialogFragment() {
 
-    private val binding by viewBinding(DialogReadPaddingBinding::bind)
     private val defaultConfig = ReadBookConfig.Config()
-    private var curRegion = Region.BODY
+    private var curRegion by mutableStateOf(Region.BODY)
     private var trackingRegion: Region? = null
     private var activeTrackingCount = 0
-    private var lockLR = false
+    private var lockLR by mutableStateOf(false)
+    private var showLineState by mutableStateOf(false)
+    private var actionsEnabledState by mutableStateOf(true)
+    private var topProgress by mutableIntStateOf(0)
+    private var bottomProgress by mutableIntStateOf(0)
+    private var leftProgress by mutableIntStateOf(0)
+    private var rightProgress by mutableIntStateOf(0)
     private var textColor = 0
     private var bgColor = 0
     private var pendingBodyEdit: PaddingEdit? = null
@@ -74,9 +117,25 @@ class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    PaddingConfigScreen()
+                }
+            }
+        }
+    }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         (activity as ReadBookActivity).bottomDialog++
-        initView()
+        bgColor = requireContext().bottomBackground
+        textColor = requireContext().getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
         bindRegion(Region.BODY)
     }
 
@@ -96,92 +155,287 @@ class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
         super.onDismiss(dialog)
     }
 
-    private fun initView() = binding.run {
-        bgColor = requireContext().bottomBackground
-        textColor = requireContext().getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
-        val radius = 8.dpToPx().toFloat()
-        rootView.background = GradientDrawable().apply {
-            cornerRadius = radius
-            setColor(bgColor)
-        }
-        swLockLr.setTextColor(textColor)
-        swShowLine.setTextColor(textColor)
-        ivReset.setColorFilter(textColor)
-        TooltipCompat.setTooltipText(ivReset, getString(R.string.restore_default))
+    @Composable
+    private fun PaddingConfigScreen() {
+        val context = requireContext()
+        val bg = Color(context.bottomBackground)
+        val fg = Color(context.getPrimaryTextColor(ColorUtils.isColorLight(context.bottomBackground)))
+        val accent = Color(context.accentColor)
+        val radius = 8.dp
+        val cornerRadius = radius
+        val actionsAlpha = if (actionsEnabledState) 1f else 0.38f
 
-        arrayOf(dsbTop, dsbBottom, dsbLeft, dsbRight).forEach { seekBar ->
-            seekBar.onTrackingStart = { startTracking() }
-            seekBar.onTrackingStop = { stopTracking() }
-        }
-        dsbTop.onDragging = { liveApply(Side.TOP, it) }
-        dsbBottom.onDragging = { liveApply(Side.BOTTOM, it) }
-        dsbLeft.onDragging = { liveApply(Side.LEFT, it) }
-        dsbRight.onDragging = { liveApply(Side.RIGHT, it) }
-        dsbTop.onChanged = { finalApply(Side.TOP, it) }
-        dsbBottom.onChanged = { finalApply(Side.BOTTOM, it) }
-        dsbLeft.onChanged = { finalApply(Side.LEFT, it) }
-        dsbRight.onChanged = { finalApply(Side.RIGHT, it) }
-
-        btnRegionHeader.setOnClickListener { bindRegion(Region.HEADER) }
-        btnRegionBody.setOnClickListener { bindRegion(Region.BODY) }
-        btnRegionFooter.setOnClickListener { bindRegion(Region.FOOTER) }
-        ivReset.setOnClickListener { askResetRegion() }
-        swLockLr.setOnUserCheckedChangeListener { isChecked ->
-            finishPendingBodyEdit()
-            lockLR = isChecked
-        }
-        swShowLine.setOnUserCheckedChangeListener { isChecked ->
-            when (curRegion) {
-                Region.HEADER -> ReadBookConfig.showHeaderLine = isChecked
-                Region.FOOTER -> ReadBookConfig.showFooterLine = isChecked
-                Region.BODY -> return@setOnUserCheckedChangeListener
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(cornerRadius))
+                .background(bg)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // Region selector + reset row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Region.entries.forEach { region ->
+                        val selected = region == curRegion
+                        val btnShape = RoundedCornerShape(8.dp)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .alpha(actionsAlpha)
+                                .clip(btnShape)
+                                .background(if (selected) fg else Color.Transparent)
+                                .border(1.dp, fg, btnShape)
+                                .clickable(enabled = actionsEnabledState) {
+                                    bindRegion(region)
+                                }
+                                .padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(region.titleRes),
+                                color = if (selected) bg else fg,
+                                fontSize = 14.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+                IconButton(
+                    onClick = { askResetRegion() },
+                    enabled = actionsEnabledState,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .alpha(actionsAlpha)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_restore),
+                        contentDescription = stringResource(R.string.restore_default),
+                        tint = fg
+                    )
+                }
             }
-            postRegionEvent(curRegion)
+
+            // 4 Padding SeekBars: Top (max 400), Bottom (max 400), Left (max 100), Right (max 100)
+            PaddingSeekBarControl(
+                titleRes = R.string.padding_top,
+                progress = topProgress,
+                max = 400,
+                textColor = fg,
+                accentColor = accent,
+                onTrackingStart = { startTracking() },
+                onDragging = { liveApply(Side.TOP, it) },
+                onChanged = { finalApply(Side.TOP, it) },
+                onTrackingStop = { stopTracking() }
+            )
+            PaddingSeekBarControl(
+                titleRes = R.string.padding_bottom,
+                progress = bottomProgress,
+                max = 400,
+                textColor = fg,
+                accentColor = accent,
+                onTrackingStart = { startTracking() },
+                onDragging = { liveApply(Side.BOTTOM, it) },
+                onChanged = { finalApply(Side.BOTTOM, it) },
+                onTrackingStop = { stopTracking() }
+            )
+            PaddingSeekBarControl(
+                titleRes = R.string.padding_left,
+                progress = leftProgress,
+                max = 100,
+                textColor = fg,
+                accentColor = accent,
+                onTrackingStart = { startTracking() },
+                onDragging = { liveApply(Side.LEFT, it) },
+                onChanged = { finalApply(Side.LEFT, it) },
+                onTrackingStop = { stopTracking() }
+            )
+            PaddingSeekBarControl(
+                titleRes = R.string.padding_right,
+                progress = rightProgress,
+                max = 100,
+                textColor = fg,
+                accentColor = accent,
+                onTrackingStart = { startTracking() },
+                onDragging = { liveApply(Side.RIGHT, it) },
+                onChanged = { finalApply(Side.RIGHT, it) },
+                onTrackingStop = { stopTracking() }
+            )
+
+            // Lock LR Switch
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .alpha(actionsAlpha),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.lock_left_right_padding),
+                    color = fg,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = lockLR,
+                    enabled = actionsEnabledState,
+                    onCheckedChange = { isChecked ->
+                        finishPendingBodyEdit()
+                        lockLR = isChecked
+                    }
+                )
+            }
+
+            // Show Line Switch
+            if (curRegion != Region.BODY) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.showLine),
+                        color = fg,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = showLineState,
+                        onCheckedChange = { isChecked ->
+                            showLineState = isChecked
+                            when (curRegion) {
+                                Region.HEADER -> ReadBookConfig.showHeaderLine = isChecked
+                                Region.FOOTER -> ReadBookConfig.showFooterLine = isChecked
+                                Region.BODY -> return@Switch
+                            }
+                            postRegionEvent(curRegion)
+                        }
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.height(48.dp))
+            }
         }
     }
 
-    private fun bindRegion(region: Region) = binding.run {
+    @Composable
+    private fun PaddingSeekBarControl(
+        titleRes: Int,
+        progress: Int,
+        max: Int,
+        textColor: Color,
+        accentColor: Color,
+        onTrackingStart: () -> Unit,
+        onDragging: (Int) -> Unit,
+        onChanged: (Int) -> Unit,
+        onTrackingStop: () -> Unit
+    ) {
+        var isDragging by remember { mutableStateOf(false) }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(titleRes),
+                    color = textColor,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = progress.toString(),
+                    color = textColor,
+                    fontSize = 14.sp
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        if (progress > 0) {
+                            onChanged(progress - 1)
+                        }
+                    },
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_reduce),
+                        contentDescription = stringResource(R.string.reduce),
+                        tint = textColor
+                    )
+                }
+                Slider(
+                    value = progress.toFloat(),
+                    onValueChange = {
+                        if (!isDragging) {
+                            isDragging = true
+                            onTrackingStart()
+                        }
+                        onDragging(it.roundToInt().coerceIn(0, max))
+                    },
+                    onValueChangeFinished = {
+                        if (isDragging) {
+                            isDragging = false
+                            onChanged(progress)
+                            onTrackingStop()
+                        }
+                    },
+                    valueRange = 0f..max.toFloat(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = accentColor,
+                        activeTrackColor = accentColor
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp)
+                )
+                IconButton(
+                    onClick = {
+                        if (progress < max) {
+                            onChanged(progress + 1)
+                        }
+                    },
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_add),
+                        contentDescription = stringResource(R.string.plus),
+                        tint = textColor
+                    )
+                }
+            }
+        }
+    }
+
+    private fun bindRegion(region: Region) {
         finishPendingBodyEdit()
         curRegion = region
-        dsbTop.progress = getPadding(region, Side.TOP)
-        dsbBottom.progress = getPadding(region, Side.BOTTOM)
-        dsbLeft.progress = getPadding(region, Side.LEFT)
-        dsbRight.progress = getPadding(region, Side.RIGHT)
+        topProgress = getPadding(region, Side.TOP)
+        bottomProgress = getPadding(region, Side.BOTTOM)
+        leftProgress = getPadding(region, Side.LEFT)
+        rightProgress = getPadding(region, Side.RIGHT)
         when (region) {
-            Region.BODY -> swShowLine.visibility = View.INVISIBLE
-            Region.HEADER -> {
-                swShowLine.visibility = View.VISIBLE
-                swShowLine.isChecked = ReadBookConfig.showHeaderLine
-            }
-
-            Region.FOOTER -> {
-                swShowLine.visibility = View.VISIBLE
-                swShowLine.isChecked = ReadBookConfig.showFooterLine
-            }
+            Region.BODY -> showLineState = false
+            Region.HEADER -> showLineState = ReadBookConfig.showHeaderLine
+            Region.FOOTER -> showLineState = ReadBookConfig.showFooterLine
         }
         lockLR = getPadding(region, Side.LEFT) == getPadding(region, Side.RIGHT)
-        swLockLr.isChecked = lockLR
-        upRegionStyles()
-    }
-
-    private fun upRegionStyles() = binding.run {
-        mapOf(
-            Region.HEADER to btnRegionHeader,
-            Region.BODY to btnRegionBody,
-            Region.FOOTER to btnRegionFooter,
-        ).forEach { (region, button) ->
-            val selected = region == curRegion
-            button.isSelected = selected
-            button.setTextColor(if (selected) bgColor else textColor)
-            button.backgroundTintList = null
-            button.background = regionBackground(selected)
-        }
-    }
-
-    private fun regionBackground(selected: Boolean) = GradientDrawable().apply {
-        cornerRadius = 8.dpToPx().toFloat()
-        setColor(if (selected) textColor else Color.TRANSPARENT)
-        setStroke(1.dpToPx(), textColor)
     }
 
     private fun startTracking() {
@@ -201,20 +455,8 @@ class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
         }
     }
 
-    private fun setPanelActionsEnabled(enabled: Boolean) = binding.run {
-        val alpha = if (enabled) 1f else 0.38f
-        regionButtons().forEach {
-            it.isEnabled = enabled
-            it.alpha = alpha
-        }
-        ivReset.isEnabled = enabled
-        ivReset.alpha = alpha
-        swLockLr.isEnabled = enabled
-        swLockLr.alpha = alpha
-    }
-
-    private fun regionButtons(): List<TextView> = binding.run {
-        listOf(btnRegionHeader, btnRegionBody, btnRegionFooter)
+    private fun setPanelActionsEnabled(enabled: Boolean) {
+        actionsEnabledState = enabled
     }
 
     private fun liveApply(side: Side, value: Int) {
@@ -248,8 +490,11 @@ class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
             val other = if (edit.side == Side.LEFT) Side.RIGHT else Side.LEFT
             setPadding(edit.region, other, edit.value)
             if (edit.region == curRegion) {
-                val otherBar = if (other == Side.LEFT) binding.dsbLeft else binding.dsbRight
-                if (otherBar.progress != edit.value) otherBar.progress = edit.value
+                if (other == Side.LEFT) {
+                    leftProgress = edit.value
+                } else {
+                    rightProgress = edit.value
+                }
             }
         }
         postRegionEvent(edit.region)
@@ -257,15 +502,12 @@ class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
 
     private fun upCurrentSeekBar(edit: PaddingEdit) {
         if (edit.region != curRegion) return
-        val seekBar = binding.run {
-            when (edit.side) {
-                Side.TOP -> dsbTop
-                Side.BOTTOM -> dsbBottom
-                Side.LEFT -> dsbLeft
-                Side.RIGHT -> dsbRight
-            }
+        when (edit.side) {
+            Side.TOP -> topProgress = edit.value
+            Side.BOTTOM -> bottomProgress = edit.value
+            Side.LEFT -> leftProgress = edit.value
+            Side.RIGHT -> rightProgress = edit.value
         }
-        if (seekBar.progress != edit.value) seekBar.progress = edit.value
     }
 
     private fun cancelPendingBodyEdit() {

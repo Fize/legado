@@ -10,22 +10,21 @@ class BgAdapterAssetUriTest {
     @Test
     fun `background previews use glide asset uri without reading bytes on main thread`() {
         val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/BgAdapter.kt"
+            "src/main/java/io/legado/app/ui/book/read/config/BgTextConfigDialog.kt"
         )
 
         assertTrue(source.contains("\"file:///android_asset/bg/\$item\".toUri()"))
         assertFalse(source.contains("assets.open("))
         assertFalse(source.contains(".readBytes()"))
-        assertFalse(source.contains("java.io.File"))
     }
 
     @Test
     fun `background names and selection behavior remain unchanged`() {
         val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/BgAdapter.kt"
+            "src/main/java/io/legado/app/ui/book/read/config/BgTextConfigDialog.kt"
         )
 
-        assertTrue(source.contains("tvName.text = item.substringBeforeLast(\".\")"))
+        assertTrue(source.contains("val displayName = item.substringBeforeLast(\".\")"))
         assertTrue(source.contains("ReadBookConfig.durConfig.setCurBg(1, it)"))
         assertTrue(source.contains("postEvent(EventBus.UP_CONFIG, arrayListOf(1))"))
     }

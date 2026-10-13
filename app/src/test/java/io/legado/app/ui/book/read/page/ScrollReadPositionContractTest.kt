@@ -15,11 +15,11 @@ class ScrollReadPositionContractTest {
         assertTrue(apply >= 0)
         assertTrue(change.indexOf("upView()") > apply)
         assertTrue(change.contains("if (ReadBook.pageAnim() != oldPageAnim) callBack?.upPageAnim()"))
-        assertTrue(dialog.contains("if (updatingPageAnim) return@setOnCheckedChangeListener"))
+        assertTrue(dialog.contains("if (updatingPageAnim) return"))
         val update = dialog.substringAfter("private fun upView()")
         assertTrue(update.indexOf("updatingPageAnim = true") >= 0)
-        assertTrue(update.indexOf("rgPageAnim.check") > update.indexOf("updatingPageAnim = true"))
-        assertTrue(update.indexOf("updatingPageAnim = false") > update.indexOf("rgPageAnim.check"))
+        assertTrue(update.indexOf("pageAnimState = it") > update.indexOf("updatingPageAnim = true"))
+        assertTrue(update.indexOf("updatingPageAnim = false") > update.indexOf("pageAnimState = it"))
     }
 
     @Test

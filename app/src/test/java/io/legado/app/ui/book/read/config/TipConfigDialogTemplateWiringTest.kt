@@ -1,27 +1,22 @@
 package io.legado.app.ui.book.read.config
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class TipConfigDialogTemplateWiringTest {
 
     @Test
     fun `template editor layout is scrollable and exposes edit and placeholder controls`() {
-        val layout = readProjectFile("src/main/res/layout/dialog_reader_info_template.xml")
+        val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt")
 
-        assertTrue(layout.contains("androidx.core.widget.NestedScrollView"))
-        assertTrue(layout.contains("io.legado.app.lib.theme.view.ThemeEditText"))
-        assertTrue(layout.contains("android:id=\"@+id/edit_template\""))
-        assertTrue(layout.contains("android:hint=\"@string/reader_info_template_hint\""))
-        assertTrue(layout.contains("android:maxLines=\"1\""))
-        assertTrue(layout.contains("android:singleLine=\"true\""))
-        assertTrue(layout.contains("com.google.android.material.chip.ChipGroup"))
-        assertTrue(layout.contains("android:id=\"@+id/chip_placeholders\""))
+        assertTrue(source.contains("NestedScrollView(context)"))
+        assertTrue(source.contains("ThemeEditText(context)"))
+        assertTrue(source.contains("setHint(R.string.reader_info_template_hint)"))
+        assertTrue(source.contains("maxLines = 1"))
+        assertTrue(source.contains("isSingleLine = true"))
+        assertTrue(source.contains("ChipGroup(context)"))
     }
 
     @Test
@@ -41,8 +36,7 @@ class TipConfigDialogTemplateWiringTest {
         pairs.forEach { (row, fields) ->
             val (template, legacy) = fields
             val summary = row.replaceFirst("ll", "tv")
-            assertTrue(source.contains("$summary.text = effectiveTemplate($template, $legacy)"))
-            assertTrue(source.contains("$row.setOnClickListener"))
+            assertTrue(source.contains("$summary = effectiveTemplate($template, $legacy)"))
             assertTrue(source.contains("current = effectiveTemplate($template, $legacy)"))
             assertTrue(source.contains("$template = it"))
         }
@@ -52,30 +46,14 @@ class TipConfigDialogTemplateWiringTest {
 
     @Test
     fun `template summaries keep labels visible when values are long`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(readProjectFile("src/main/res/layout/dialog_tip_config.xml").byteInputStream())
-        val textViews = document.getElementsByTagName("TextView")
-        val elements = (0 until textViews.length)
-            .map { textViews.item(it) as Element }
-            .associateBy { it.getAttribute("android:id") }
-        val summaryIds = listOf(
-            "tv_header_left",
-            "tv_header_middle",
-            "tv_header_right",
-            "tv_footer_left",
-            "tv_footer_middle",
-            "tv_footer_right",
-        )
+        val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt")
+        val rowComponent = source.substringAfter("private fun TipConfigClickRow(")
+            .substringBefore("private fun TipSeekBarRow(")
 
-        summaryIds.forEach { id ->
-            val element = elements.getValue("@+id/$id")
-            assertEquals("0dp", element.getAttribute("android:layout_width"))
-            assertEquals("1", element.getAttribute("android:layout_weight"))
-            assertEquals("end", element.getAttribute("android:ellipsize"))
-            assertEquals("end", element.getAttribute("android:gravity"))
-            assertEquals("1", element.getAttribute("android:maxLines"))
-        }
+        assertTrue(rowComponent.contains("Modifier.weight(1f)"))
+        assertTrue(rowComponent.contains("overflow = TextOverflow.Ellipsis"))
+        assertTrue(rowComponent.contains("textAlign = TextAlign.End"))
+        assertTrue(rowComponent.contains("maxLines = 1"))
     }
 
     @Test
@@ -98,7 +76,7 @@ class TipConfigDialogTemplateWiringTest {
             )
         )
         assertTrue(source.contains("editable.replace(start, end, placeholder)"))
-        assertTrue(source.contains("save(dialogBinding.editTemplate.editableText.toString())"))
+        assertTrue(source.contains("save(editTemplate.editableText.toString())"))
         assertFalse(source.contains("edit.text?.replace"))
         assertFalse(source.contains("editTemplate.text.toString()"))
         assertTrue(source.contains("postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))"))

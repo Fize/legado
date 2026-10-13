@@ -41,15 +41,10 @@ class TitleFontTest {
         val dialog = readProjectFile(
             "src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt"
         )
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_tip_config.xml"))
-        val rows = document.getElementsByTagName("LinearLayout")
-        val titleFont = (0 until rows.length)
-            .map { rows.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/ll_title_font" }
+        val titleFontRow = dialog.substringAfter("labelRes = R.string.title_font")
+            .substringBefore("TipSeekBarRow")
 
-        assertEquals("48dp", titleFont.getAttribute("android:minHeight"))
+        assertTrue(titleFontRow.contains("minHeightDp = 48"))
         assertTrue(dialog.contains("FontSelectDialog.CallBack"))
         assertTrue(dialog.contains("override val selectSystemTypefaceOnDefault = false"))
         assertTrue(dialog.contains("ReadBookConfig.titleFont = path"))

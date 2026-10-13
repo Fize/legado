@@ -49,21 +49,14 @@ class TitleLineSpacingTest {
 
     @Test
     fun settingsExposeTitleAndNumberSpacingRanges() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_tip_config.xml"))
-        val seekBars = document.getElementsByTagName(
-            "io.legado.app.ui.widget.DetailSeekBar"
-        )
-        val titleSpacing = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_title_line_spacing" }
-        val numberSpacing = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_title_number_spacing" }
+        val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt")
+        val titleSpacingSection = source.substringAfter("titleRes = R.string.title_line_spacing")
+            .substringBefore("titleRes =")
+        val numberSpacingSection = source.substringAfter("titleRes = R.string.title_number_spacing")
+            .substringBefore("titleRes =")
 
-        assertEquals("50", titleSpacing.getAttribute("app:max"))
-        assertEquals("150", numberSpacing.getAttribute("app:max"))
+        assertTrue(titleSpacingSection.contains("max = 50"))
+        assertTrue(numberSpacingSection.contains("max = 150"))
     }
 
     @Test
