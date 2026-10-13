@@ -12,27 +12,14 @@ import javax.xml.parsers.DocumentBuilderFactory
 class DialogMultipleEditTextLayoutTest {
 
     @Test
-    fun fieldsKeepAccessibleTouchSizeWithoutForcingSingleLineInput() {
-        val document = parseProjectXml("src/main/res/layout/dialog_multiple_edit_text.xml")
-        val fields = document.getElementsByTagName(
-            "io.legado.app.ui.widget.text.AutoCompleteTextView"
-        ).let { nodes ->
-            (0 until nodes.length).map { nodes.item(it) as Element }
-        }
-
-        assertEquals(2, fields.size)
-        fields.forEach { field ->
-            assertEquals("48dp", field.androidAttribute("minHeight"))
-            assertEquals("12dp", field.androidAttribute("paddingStart"))
-            assertEquals("6dp", field.androidAttribute("paddingTop"))
-            assertEquals("12dp", field.androidAttribute("paddingEnd"))
-            assertEquals("6dp", field.androidAttribute("paddingBottom"))
-            assertFalse(field.hasAttributeNS(androidNamespace, "singleLine"))
-            assertFalse(field.toolsAttribute("ignore").contains("TouchTargetSizeCheck"))
-        }
-
-        val secondLayout = document.findElementById("@+id/layout_2")
-        assertEquals("12dp", secondLayout.androidAttribute("layout_marginTop"))
+    fun keyboardAssistsEditDialogUsesComposeOutlinedTextFields() {
+        val source = readProjectFile(
+            "src/main/java/io/legado/app/ui/widget/keyboard/KeyboardAssistsConfig.kt"
+        )
+        assertTrue(source.contains("OutlinedTextField("))
+        assertTrue(source.contains("label = { Text(\"key\") }"))
+        assertTrue(source.contains("label = { Text(\"value\") }"))
+        assertFalse(source.contains("singleLine = true"))
     }
 
     @Test
@@ -81,11 +68,7 @@ class DialogMultipleEditTextLayoutTest {
     private fun Element.androidAttribute(name: String): String =
         getAttributeNS(androidNamespace, name)
 
-    private fun Element.toolsAttribute(name: String): String =
-        getAttributeNS(toolsNamespace, name)
-
     private companion object {
         const val androidNamespace = "http://schemas.android.com/apk/res/android"
-        const val toolsNamespace = "http://schemas.android.com/tools"
     }
 }

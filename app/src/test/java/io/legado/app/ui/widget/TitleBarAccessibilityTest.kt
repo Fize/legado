@@ -31,7 +31,7 @@ class TitleBarAccessibilityTest {
             "src/main/java/io/legado/app/ui/book/read/ReviewDetailDialog.kt"
         ).readText()
         assertTrue(
-            reviewDetail.contains("setNavigationContentDescription(R.string.close)")
+            reviewDetail.contains("contentDescription = stringResource(R.string.close)")
         )
     }
 

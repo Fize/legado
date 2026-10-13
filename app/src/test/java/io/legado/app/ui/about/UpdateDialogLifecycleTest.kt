@@ -46,15 +46,12 @@ class UpdateDialogLifecycleTest {
         ).readText()
 
         assertTrue(source.contains("putBoolean(\"isBeta\", updateInfo.isBeta)"))
-        assertTrue(source.contains("binding.betaActions.isVisible = true"))
         assertTrue(source.contains("setLayout(0.9f, 0.8f)"))
-        assertTrue(source.contains("binding.btnBetaUpdate.setText(R.string.beta_update_now)"))
-        assertTrue(source.contains("startDownload(arguments?.getString(\"url\"))"))
-        assertFalse(
-            source.substringAfter("binding.btnBetaUpdate.setOnClickListener")
-                .substringBefore("if (!isBetaUpdate)")
-                .contains("openUrl")
-        )
+        assertTrue(source.contains("R.string.beta_update_now"))
+        val btnBetaSection = source.substringAfter("// btnBetaUpdate")
+            .substringBefore("private fun formatUpdateMetadata")
+        assertTrue(btnBetaSection.contains("startDownload(arguments?.getString(\"url\"))"))
+        assertFalse(btnBetaSection.contains("openUrl"))
     }
 
     @Test
@@ -63,10 +60,10 @@ class UpdateDialogLifecycleTest {
             "src/main/java/io/legado/app/ui/about/UpdateDialog.kt"
         ).readText()
 
-        assertTrue(source.contains("binding.toolBar.menu.findItem(R.id.menu_download).isVisible = false"))
-        assertTrue(source.contains("R.id.menu_download_backup).isVisible"))
-        assertTrue(source.contains("R.id.menu_download_mirror).isVisible"))
-        assertTrue(source.contains("R.id.menu_download_alternate_mirror).isVisible"))
+        assertTrue(source.contains("val showPrimaryDownload = false"))
+        assertTrue(source.contains("val showBackupDownload = !isBetaUpdate && !arguments?.getString(\"backupUrl\").isNullOrBlank()"))
+        assertTrue(source.contains("val showMirrorDownload = !isBetaUpdate && !arguments?.getString(\"mirrorUrl\").isNullOrBlank()"))
+        assertTrue(source.contains("val showAlternateMirrorDownload = !isBetaUpdate && !arguments?.getString(\"alternateMirrorUrl\").isNullOrBlank()"))
     }
 
     @Test
@@ -81,29 +78,12 @@ class UpdateDialogLifecycleTest {
                 "putString(\"alternateMirrorUrl\", updateInfo.alternateMirrorDownloadUrl)"
             )
         )
-        assertTrue(source.contains("R.id.menu_download_mirror).isVisible"))
-        assertTrue(
-            source.contains(
-                "R.id.menu_download_mirror -> startDownload(arguments?.getString(\"mirrorUrl\"))"
-            )
-        )
-        assertTrue(source.contains("R.id.menu_download_alternate_mirror).isVisible"))
-        assertTrue(
-            source.contains(
-                "R.id.menu_download_alternate_mirror ->"
-            ) && source.contains("startDownload(arguments?.getString(\"alternateMirrorUrl\"))")
-        )
-        assertTrue(source.contains("R.id.menu_download_backup -> startDownload"))
-        assertTrue(
-            projectFile("src/main/res/menu/app_update.xml")
-                .readText()
-                .contains("android:id=\"@+id/menu_download_mirror\"")
-        )
-        assertTrue(
-            projectFile("src/main/res/menu/app_update.xml")
-                .readText()
-                .contains("android:id=\"@+id/menu_download_alternate_mirror\"")
-        )
+        assertTrue(source.contains("R.string.download_from_backup_cdn"))
+        assertTrue(source.contains("startDownload(arguments?.getString(\"mirrorUrl\"))"))
+        assertTrue(source.contains("R.string.download_from_second_cdn"))
+        assertTrue(source.contains("startDownload(arguments?.getString(\"alternateMirrorUrl\"))"))
+        assertTrue(source.contains("R.string.download_from_github"))
+        assertTrue(source.contains("startDownload(arguments?.getString(\"backupUrl\"))"))
     }
 
     @Test

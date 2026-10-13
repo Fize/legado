@@ -24,4 +24,32 @@
     <item name="view_pager_main" type="id" />
     <item name="view_pager_bookshelf" type="id" />
 
+    <item name="tool_bar" type="id" />
+    <item name="search_bar" type="id" />
+    <item name="search_input" type="id" />
+    <item name="btn_search_prev" type="id" />
+    <item name="btn_search_next" type="id" />
+    <item name="btn_close_search" type="id" />
+    <item name="search_regex" type="id" />
+    <item name="search_match_case" type="id" />
+    <item name="search_count" type="id" />
+    <item name="content_view" type="id" />
+    <item name="position_bar_container" type="id" />
+    <item name="position_bar" type="id" />
+    <item name="rl_loading" type="id" />
+    <item name="menu_search" type="id" />
+    <item name="menu_save" type="id" />
+    <item name="menu_reset" type="id" />
+    <item name="menu_copy_all" type="id" />
+    <item name="menu_content_plain_text" type="id" />
+    <item name="recycler_view" type="id" />
+    <item name="rotate_loading" type="id" />
+    <item name="tv_msg" type="id" />
+    <item name="tv_cancel" type="id" />
+    <item name="tv_ok" type="id" />
+    <item name="tv_footer_left" type="id" />
+    <item name="drag_handle" type="id" />
+    <item name="search_view" type="id" />
+    <item name="tab_layout" type="id" />
+
 </resources>

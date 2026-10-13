@@ -1,20 +1,23 @@
 package io.legado.app.ui.widget.keyboard
 
+import android.animation.AnimatorInflater
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Rect
 import android.os.Build
+import android.text.TextUtils
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.Window
 import android.widget.PopupWindow
+import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
@@ -22,13 +25,13 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.KeyboardAssist
-import io.legado.app.databinding.ItemFilletTextBinding
-import io.legado.app.databinding.PopupKeyboardToolBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyMd3PopupStyle
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.windowSize
@@ -37,7 +40,6 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
-import splitties.systemservices.layoutInflater
 import splitties.systemservices.windowManager
 
 /**
@@ -53,13 +55,28 @@ class KeyboardToolPop(
 
     private val helpChar = "❓"
 
-    private val binding = PopupKeyboardToolBinding.inflate(LayoutInflater.from(context))
+    private val recyclerView = RecyclerView(context).apply {
+        id = R.id.recycler_view
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        setBackgroundColor(context.getCompatColor(R.color.background_card))
+        val pad = 5.dpToPx()
+        setPadding(pad, pad, pad, pad)
+        layoutManager = GridLayoutManager(
+            context,
+            AppConfig.showBoardLine.coerceIn(1, 5),
+            GridLayoutManager.HORIZONTAL,
+            false
+        )
+    }
     private val adapter = Adapter(context)
     private var mIsSoftKeyBoardShowing = false
     var initialPadding = 0
 
     init {
-        contentView = binding.root
+        contentView = recyclerView
         applyMd3PopupStyle()
 
         isTouchable = true
@@ -82,7 +99,6 @@ class KeyboardToolPop(
     }
 
     private fun updateRowCount(rows: Int) {
-        val recyclerView = binding.recyclerView
         if (recyclerView.isComputingLayout) {
             recyclerView.post { updateRowCount(rows) }
             return
@@ -134,10 +150,10 @@ class KeyboardToolPop(
 
     @SuppressLint("SetTextI18n")
     private fun initRecyclerView() {
-        (binding.recyclerView.layoutManager as GridLayoutManager).spanCount = AppConfig.showBoardLine
-        binding.recyclerView.adapter = adapter
+        (recyclerView.layoutManager as GridLayoutManager).spanCount = AppConfig.showBoardLine
+        recyclerView.adapter = adapter
         adapter.addHeaderView {
-            ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
+            FilletTextItemBinding(context).apply {
                 textView.text = helpChar
                 root.setOnClickListener {
                     helpAlert()
@@ -147,7 +163,7 @@ class KeyboardToolPop(
         // 安卓6以上支持撤销重做
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             adapter.addHeaderView {
-                ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
+                FilletTextItemBinding(context).apply {
                     textView.text = "↩\uFE0F"
                     root.setOnClickListener {
                         callBack.onUndoClicked()
@@ -155,7 +171,7 @@ class KeyboardToolPop(
                 }
             }
             adapter.addHeaderView {
-                ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
+                FilletTextItemBinding(context).apply {
                     textView.text = "↪\uFE0F"
                     root.setOnClickListener {
                         callBack.onRedoClicked()
@@ -193,8 +209,33 @@ class KeyboardToolPop(
         contentView.activity?.showDialogFragment<KeyboardAssistsConfig>()
     }
 
+    class FilletTextItemBinding(context: Context) : ViewBinding {
+        val textView = TextView(context).apply {
+            val margin = 3.dpToPx()
+            layoutParams = RecyclerView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(margin, margin, margin, margin)
+            }
+            setBackgroundResource(R.drawable.bg_fillet_btn)
+            stateListAnimator = AnimatorInflater.loadStateListAnimator(
+                context,
+                R.animator.button_scale_animator
+            )
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+            setPadding(12.dpToPx(), 4.dpToPx(), 12.dpToPx(), 4.dpToPx())
+            maxLines = 1
+            setTextColor(context.getCompatColor(R.color.primaryText))
+            textSize = 14f
+        }
+
+        override fun getRoot(): TextView = textView
+    }
+
     inner class Adapter(context: Context) :
-        RecyclerAdapter<KeyboardAssist, ItemFilletTextBinding>(context) {
+        RecyclerAdapter<KeyboardAssist, FilletTextItemBinding>(context) {
 
         private val itemClickListener = View.OnClickListener { view ->
             val holder = view.tag as? ItemViewHolder
@@ -208,13 +249,13 @@ class KeyboardToolPop(
             }
         }
 
-        override fun getViewBinding(parent: ViewGroup): ItemFilletTextBinding {
-            return ItemFilletTextBinding.inflate(inflater, parent, false)
+        override fun getViewBinding(parent: ViewGroup): FilletTextItemBinding {
+            return FilletTextItemBinding(context)
         }
 
         override fun convert(
             holder: ItemViewHolder,
-            binding: ItemFilletTextBinding,
+            binding: FilletTextItemBinding,
             item: KeyboardAssist,
             payloads: MutableList<Any>
         ) {
@@ -223,7 +264,7 @@ class KeyboardToolPop(
             }
         }
 
-        override fun registerListener(holder: ItemViewHolder, binding: ItemFilletTextBinding) {
+        override fun registerListener(holder: ItemViewHolder, binding: FilletTextItemBinding) {
             holder.itemView.tag = holder
             holder.itemView.setOnClickListener(itemClickListener)
         }

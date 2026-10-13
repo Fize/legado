@@ -1,19 +1,41 @@
 package io.legado.app.ui.book.read
 
 import android.app.Application
+import android.content.Context
 import android.content.DialogInterface
+import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.text.NoCopySpan
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.inputmethod.EditorInfo
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.view.ContextThemeWrapper
+import androidx.appcompat.widget.AppCompatCheckBox
+import androidx.appcompat.widget.AppCompatTextView
+import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.ViewCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
+import androidx.core.widget.TextViewCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.viewModels
@@ -25,25 +47,33 @@ import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookChapter
-import io.legado.app.databinding.DialogContentEditBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.secondaryTextColor
+import io.legado.app.lib.theme.view.ThemeEditText
+import io.legado.app.lib.theme.view.ThemeSeekBar
 import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.anima.RotateLoading
+import io.legado.app.ui.widget.seekbar.VerticalSeekBarWrapper
+import io.legado.app.ui.widget.text.AutoCompleteTextView
+import io.legado.app.ui.widget.text.TextInputLayout
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyTint
-import io.legado.app.utils.hideSoftInput
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showSoftInput
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.Default
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -109,10 +139,267 @@ internal class ContentDraftState {
     }
 }
 
+class ContentEditBinding(private val context: Context) {
+    val toolBar = Toolbar(context).apply {
+        id = R.id.tool_bar
+        popupTheme = R.style.AppTheme_PopupOverlay
+        setTitleTextAppearance(context, R.style.ToolbarTitle)
+    }
+
+    val searchInput = ThemeEditText(context).apply {
+        id = R.id.search_input
+        setHint(R.string.search)
+        imeOptions = EditorInfo.IME_ACTION_SEARCH
+        inputType = InputType.TYPE_CLASS_TEXT
+        minHeight = 48.dpToPx()
+        setPadding(8.dpToPx(), paddingTop, 8.dpToPx(), paddingBottom)
+        isSaveEnabled = false
+        isSingleLine = true
+    }
+
+    private fun createActionButton(
+        buttonId: Int,
+        iconRes: Int,
+        contentDescRes: Int,
+        rotationDeg: Float = 0f
+    ): ImageButton {
+        val outValue = TypedValue()
+        context.theme.resolveAttribute(
+            androidx.appcompat.R.attr.selectableItemBackgroundBorderless,
+            outValue,
+            true
+        )
+        return ImageButton(context).apply {
+            id = buttonId
+            setBackgroundResource(outValue.resourceId)
+            contentDescription = context.getString(contentDescRes)
+            val pad = 12.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            rotation = rotationDeg
+            setImageResource(iconRes)
+            setColorFilter(context.primaryTextColor)
+        }
+    }
+
+    val btnSearchPrev = createActionButton(
+        buttonId = R.id.btn_search_prev,
+        iconRes = R.drawable.ic_arrow_down,
+        contentDescRes = R.string.help_search_prev,
+        rotationDeg = 180f
+    ).apply { isEnabled = false }
+
+    val btnSearchNext = createActionButton(
+        buttonId = R.id.btn_search_next,
+        iconRes = R.drawable.ic_arrow_down,
+        contentDescRes = R.string.help_search_next
+    ).apply { isEnabled = false }
+
+    val btnCloseSearch = createActionButton(
+        buttonId = R.id.btn_close_search,
+        iconRes = R.drawable.ic_baseline_close,
+        contentDescRes = R.string.close
+    )
+
+    val searchRegex = AppCompatCheckBox(context).apply {
+        id = R.id.search_regex
+        minHeight = 48.dpToPx()
+        isSaveEnabled = false
+        setText(R.string.regex)
+        textSize = 14f
+    }
+
+    val searchMatchCase = AppCompatCheckBox(context).apply {
+        id = R.id.search_match_case
+        minHeight = 48.dpToPx()
+        isSaveEnabled = false
+        setText(R.string.content_search_match_case)
+        textSize = 14f
+    }
+
+    val searchCount = AppCompatTextView(context).apply {
+        id = R.id.search_count
+        ViewCompat.setAccessibilityLiveRegion(
+            this,
+            ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE
+        )
+        gravity = Gravity.CENTER
+        minWidth = 48.dpToPx()
+        setTextColor(context.secondaryTextColor)
+        textSize = 12f
+        TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+            this,
+            8,
+            12,
+            1,
+            TypedValue.COMPLEX_UNIT_SP
+        )
+    }
+
+    val searchBar = LinearLayout(context).apply {
+        id = R.id.search_bar
+        orientation = LinearLayout.VERTICAL
+        setPadding(8.dpToPx(), 0, 8.dpToPx(), 0)
+        visibility = View.GONE
+        addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(
+                    searchInput,
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                val btnSize = 48.dpToPx()
+                addView(btnSearchPrev, LinearLayout.LayoutParams(btnSize, btnSize))
+                addView(btnSearchNext, LinearLayout.LayoutParams(btnSize, btnSize))
+                addView(btnCloseSearch, LinearLayout.LayoutParams(btnSize, btnSize))
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(
+                    searchRegex,
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                addView(
+                    searchMatchCase,
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                addView(
+                    searchCount,
+                    LinearLayout.LayoutParams(72.dpToPx(), 48.dpToPx())
+                )
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    val contentView = ThemeEditText(context).apply {
+        id = R.id.content_view
+        isSaveEnabled = false
+        gravity = Gravity.TOP or Gravity.START
+        val pad = 12.dpToPx()
+        setPadding(pad, pad, pad, pad)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        }
+    }
+
+    val positionBar = ThemeSeekBar(context).apply {
+        id = R.id.position_bar
+        contentDescription = context.getString(R.string.content_edit_position)
+        max = 10000
+        rotation = 90f
+        isSaveEnabled = false
+    }
+
+    val positionBarContainer = VerticalSeekBarWrapper(context).apply {
+        id = R.id.position_bar_container
+        addView(
+            positionBar,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    val rlLoading = RotateLoading(context).apply {
+        id = R.id.rl_loading
+        visibility = View.INVISIBLE
+    }
+
+    val root: LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundColor(context.backgroundColor)
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        addView(
+            toolBar,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        addView(
+            searchBar,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        addView(
+            FrameLayout(context).apply {
+                addView(
+                    LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        addView(
+                            contentView,
+                            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                        )
+                        addView(
+                            positionBarContainer,
+                            LinearLayout.LayoutParams(
+                                40.dpToPx(),
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        )
+                    },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+                addView(
+                    rlLoading,
+                    FrameLayout.LayoutParams(60.dpToPx(), 60.dpToPx(), Gravity.CENTER)
+                )
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        )
+    }
+}
+
+private class EditTitleViewHolder(context: Context) {
+    val editView = AutoCompleteTextView(context).apply {
+        minHeight = 48.dpToPx()
+        setPaddingRelative(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+    }
+    val root = FrameLayout(context).apply {
+        val pad = 16.dpToPx()
+        setPadding(pad, pad, pad, pad)
+        addView(
+            TextInputLayout(context, null).apply {
+                addView(
+                    editView,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+            },
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+}
+
 /**
  * 内容编辑
  */
-class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
+class ContentEditDialog : BaseDialogFragment() {
 
     companion object {
         private const val ARG_BOOK_URL = "bookUrl"
@@ -152,7 +439,9 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
         }
     }
 
-    val binding by viewBinding(DialogContentEditBinding::bind)
+    private var _binding: ContentEditBinding? = null
+    val binding: ContentEditBinding
+        get() = checkNotNull(_binding)
     val viewModel by viewModels<ContentEditViewModel>()
     private var editTitleDialog: AlertDialog? = null
     private var searchJob: Job? = null
@@ -178,6 +467,26 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
     override fun onStart() {
         super.onStart()
         setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val holder = ContentEditBinding(requireContext())
+        _binding = holder
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { holder.root }
+                    )
+                }
+            }
+        }
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -314,13 +623,11 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
         binding.contentView.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
         editTitleDialog?.dismiss()
         editTitleDialog = null
+        _binding = null
         super.onDestroyView()
     }
 
     private fun initMenu() {
-        binding.toolBar.inflateMenu(R.menu.content_edit)
-        binding.toolBar.menu.findItem(R.id.menu_content_plain_text).isChecked = plainText
-        binding.toolBar.menu.applyTint(requireContext())
         binding.toolBar.setOnMenuItemClickListener {
             when (it.itemId) {
                 R.id.menu_search -> toggleSearch()
@@ -353,6 +660,28 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
             }
             return@setOnMenuItemClickListener true
         }
+        val menu = binding.toolBar.menu
+        menu.clear()
+        menu.add(Menu.NONE, R.id.menu_search, 0, R.string.search).apply {
+            setIcon(R.drawable.ic_search)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        }
+        menu.add(Menu.NONE, R.id.menu_save, 1, R.string.action_save).apply {
+            setIcon(R.drawable.ic_save)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        menu.add(Menu.NONE, R.id.menu_reset, 2, R.string.reset).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_copy_all, 3, R.string.copy_all).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_content_plain_text, 4, R.string.content_edit_plain_text).apply {
+            isCheckable = true
+            isChecked = plainText
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.applyTint(requireContext())
     }
 
     private fun rawSelection(offset: Int, afterImages: Boolean): Int =
@@ -520,7 +849,7 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
         if (editTitleDialog != null) return
         editTitleDialog = alert {
             setTitle(R.string.edit)
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater)
+            val alertBinding = EditTitleViewHolder(requireContext())
             alertBinding.editView.setText(chapter.title)
             setCustomView(alertBinding.root)
             okButton {

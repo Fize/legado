@@ -1,16 +1,48 @@
 package io.legado.app.ui.book.read
 
-import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import io.legado.app.R
-import io.legado.app.databinding.DialogHighlightStyleBinding
-import io.legado.app.databinding.ItemHighlightChannelBinding
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.HighlightStyle.Deco
 import io.legado.app.help.HighlightStyle.FillShape
@@ -19,10 +51,14 @@ import io.legado.app.help.HighlightStyle.Shadow
 import io.legado.app.help.HighlightStyle.Underline
 import io.legado.app.help.HighlightStyles
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.ui.font.FontSelectDialog
+import io.legado.app.lib.theme.accentColor
+import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
+import io.legado.app.ui.font.FontSelectDialog
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.showDialogFragment
 import kotlin.math.roundToInt
 
@@ -39,18 +75,24 @@ class HighlightStyleDialog : BottomSheetDialogFragment(),
         fun pickHighlightColor(dialogId: Int, initial: Int, withAlpha: Boolean)
     }
 
-    private var _binding: DialogHighlightStyleBinding? = null
-    private val binding get() = _binding!!
     private val styleHost get() = resolveStyleHost(parentFragment, activity)
-    private val rows = arrayListOf<ItemHighlightChannelBinding>()
+    private var refreshVersion by mutableIntStateOf(0)
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        _binding = DialogHighlightStyleBinding.inflate(inflater, container, false)
-        return binding.root
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    @Suppress("UNUSED_EXPRESSION")
+                    refreshVersion
+                    HighlightStyleScreen()
+                }
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -58,33 +100,7 @@ class HighlightStyleDialog : BottomSheetDialogFragment(),
             dismiss()
             return
         }
-        buildPresets()
-        buildChannels()
-        binding.llHighlightFont.setOnClickListener {
-            showDialogFragment<FontSelectDialog>()
-        }
-        binding.tvHighlightFontSize.setOnClickListener {
-            NumberPickerDialog(requireContext()).setTitle(getString(R.string.text_size))
-                .setMinValue(5).setMaxValue(100)
-                .setValue(currentStyle().resolvedFontSize?.roundToInt() ?: ReadBookConfig.textSize)
-                .setCustomButton(R.string.btn_default_s) { apply(currentStyle().copy(fontSize = null)) }
-                .show { apply(currentStyle().copy(fontSize = it.toFloat())) }
-        }
-        binding.tvHighlightLetterSpacing.setOnClickListener {
-            NumberPickerDialog(requireContext()).setTitle(getString(R.string.text_letter_spacing))
-                .setMinValue(0).setMaxValue(150)
-                .setDisplayedValues(Array(151) { "${it - 50}%" })
-                .setValue(((currentStyle().resolvedLetterSpacing ?: ReadBookConfig.letterSpacing) * 100).roundToInt() + 50)
-                .setCustomButton(R.string.btn_default_s) { apply(currentStyle().copy(letterSpacing = null)) }
-                .show { apply(currentStyle().copy(letterSpacing = (it - 50) / 100f)) }
-        }
         refresh()
-    }
-
-    override fun onDestroyView() {
-        rows.clear()
-        _binding = null
-        super.onDestroyView()
     }
 
     private fun currentStyle(): HighlightStyle {
@@ -94,18 +110,6 @@ class HighlightStyleDialog : BottomSheetDialogFragment(),
     private fun apply(style: HighlightStyle) {
         styleHost?.onHighlightStyleChanged(style)
         refresh()
-    }
-
-    private fun buildPresets() {
-        HighlightStyles.presets.forEach { preset ->
-            binding.flPresets.addView(TextView(requireContext()).apply {
-                text = "\u25CF"
-                textSize = 20f
-                setPadding(18.dpToPx(), 8.dpToPx(), 18.dpToPx(), 8.dpToPx())
-                setTextColor(preset.previewColor())
-                setOnClickListener { apply(preset) }
-            })
-        }
     }
 
     private fun HighlightStyle.previewColor(): Int {
@@ -243,106 +247,303 @@ class HighlightStyleDialog : BottomSheetDialogFragment(),
         )
     }
 
-    private fun buildChannels() {
-        channels.forEach { channel ->
-            val row = ItemHighlightChannelBinding.inflate(
-                layoutInflater,
-                binding.llChannels,
-                false
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
+    private fun HighlightStyleScreen() {
+        val context = requireContext()
+        val bgColor = Color(context.backgroundColor)
+        val primaryText = Color(context.primaryTextColor)
+        val secondaryText = Color(context.secondaryTextColor)
+        val accent = Color(context.accentColor)
+        val style = currentStyle()
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(bgColor)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.highlight_presets),
+                color = secondaryText,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 6.dp)
             )
-            row.cbChannel.setText(channel.labelRes)
-            row.cbChannel.setOnClickListener {
-                val previousStyle = currentStyle()
-                val newStyle = channel.toggle(previousStyle, row.cbChannel.isChecked)
-                apply(newStyle)
-                if (channel.labelRes == R.string.highlight_shadow &&
-                    shouldOpenShadowEditor(previousStyle, newStyle)
-                ) {
-                    newStyle.shadow?.let { ShadowEditDialog.show(childFragmentManager, it) }
-                }
-            }
-            row.vSwatch.setOnClickListener {
-                if (channel.dialogId != NO_COLOR) {
-                    styleHost?.pickHighlightColor(
-                        channel.dialogId,
-                        channel.color(currentStyle()),
-                        channel.withAlpha
+
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+            ) {
+                HighlightStyles.presets.forEach { preset ->
+                    Text(
+                        text = "\u25CF",
+                        color = Color(preset.previewColor()),
+                        fontSize = 20.sp,
+                        modifier = Modifier
+                            .clickable { apply(preset) }
+                            .padding(horizontal = 18.dp, vertical = 8.dp)
                     )
                 }
             }
-            row.vSwatch.contentDescription = getString(channel.labelRes)
-            row.tvExtra.setOnClickListener {
-                if (channel.labelRes == R.string.highlight_shadow) {
-                    currentStyle().shadow?.let { ShadowEditDialog.show(childFragmentManager, it) }
-                } else {
-                    channel.changeExtra?.let { apply(it(currentStyle())) }
-                }
-            }
-            row.tvTune.setOnClickListener {
-                if (channel.labelRes == R.string.highlight_underline) {
-                    currentStyle().underline?.let {
-                        UnderlineEditDialog.show(childFragmentManager, it)
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = secondaryText.copy(alpha = 0.2f)
+            )
+
+            // Channels list
+            channels.forEach { channel ->
+                val enabled = channel.isEnabled(style)
+                val extra = channel.extra?.invoke(style)
+                val pill = channel.labelRes == R.string.highlight_bg_color &&
+                    style.resolvedFillShape == FillShape.PILL
+                val tuneVisible = enabled && (channel.labelRes == R.string.highlight_underline || pill)
+                val tuneText = if (tuneVisible) {
+                    if (pill) {
+                        getString(
+                            R.string.highlight_pill_padding_value,
+                            (style.resolvedPillPaddingScale * 100).roundToInt()
+                        )
+                    } else {
+                        getString(R.string.highlight_underline_adjust)
                     }
-                } else if (channel.labelRes == R.string.highlight_bg_color) {
-                    NumberPickerDialog(requireContext())
-                        .setTitle(getString(R.string.highlight_pill_padding))
-                        .setMinValue(25)
-                        .setMaxValue(200)
-                        .setValue((currentStyle().resolvedPillPaddingScale * 100).roundToInt())
-                        .setCustomButton(R.string.btn_default_s) {
-                            apply(currentStyle().copy(pillPaddingScale = null))
+                } else {
+                    ""
+                }
+                val labelText = stringResource(channel.labelRes)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                val previousStyle = currentStyle()
+                                val newStyle = channel.toggle(previousStyle, !enabled)
+                                apply(newStyle)
+                                if (channel.labelRes == R.string.highlight_shadow &&
+                                    shouldOpenShadowEditor(previousStyle, newStyle)
+                                ) {
+                                    newStyle.shadow?.let {
+                                        ShadowEditDialog.show(childFragmentManager, it)
+                                    }
+                                }
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = enabled,
+                            onCheckedChange = { checked ->
+                                val previousStyle = currentStyle()
+                                val newStyle = channel.toggle(previousStyle, checked)
+                                apply(newStyle)
+                                if (channel.labelRes == R.string.highlight_shadow &&
+                                    shouldOpenShadowEditor(previousStyle, newStyle)
+                                ) {
+                                    newStyle.shadow?.let {
+                                        ShadowEditDialog.show(childFragmentManager, it)
+                                    }
+                                }
+                            },
+                            colors = CheckboxDefaults.colors(checkedColor = accent)
+                        )
+                        Text(
+                            text = labelText,
+                            color = primaryText,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    if (extra != null && enabled) {
+                        Box(
+                            modifier = Modifier
+                                .heightIn(min = 40.dp)
+                                .widthIn(min = 48.dp)
+                                .clickable {
+                                    if (channel.labelRes == R.string.highlight_shadow) {
+                                        currentStyle().shadow?.let {
+                                            ShadowEditDialog.show(childFragmentManager, it)
+                                        }
+                                    } else {
+                                        channel.changeExtra?.let { apply(it(currentStyle())) }
+                                    }
+                                }
+                                .padding(horizontal = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = extra,
+                                color = accent,
+                                fontSize = 13.sp
+                            )
                         }
-                        .show { apply(currentStyle().copy(pillPaddingScale = it / 100f)) }
+                    }
+
+                    if (tuneVisible) {
+                        // tv_tune
+                        Box(
+                            modifier = Modifier
+                                .heightIn(min = 40.dp)
+                                .widthIn(min = 48.dp)
+                                .clickable {
+                                    if (channel.labelRes == R.string.highlight_underline) {
+                                        currentStyle().underline?.let {
+                                            UnderlineEditDialog.show(childFragmentManager, it)
+                                        }
+                                    } else if (channel.labelRes == R.string.highlight_bg_color) {
+                                        NumberPickerDialog(requireContext())
+                                            .setTitle(getString(R.string.highlight_pill_padding))
+                                            .setMinValue(25)
+                                            .setMaxValue(200)
+                                            .setValue((currentStyle().resolvedPillPaddingScale * 100).roundToInt())
+                                            .setCustomButton(R.string.btn_default_s) {
+                                                apply(currentStyle().copy(pillPaddingScale = null))
+                                            }
+                                            .show { apply(currentStyle().copy(pillPaddingScale = it / 100f)) }
+                                    }
+                                }
+                                .padding(horizontal = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = tuneText,
+                                color = accent,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    if (channel.dialogId != NO_COLOR && enabled) {
+                        val swatchColor = channel.color(style).takeIf { it != 0 } ?: DEFAULT_SWATCH_COLOR
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .size(48.dp)
+                                .semantics { contentDescription = labelText }
+                                .clickable {
+                                    styleHost?.pickHighlightColor(
+                                        channel.dialogId,
+                                        channel.color(currentStyle()),
+                                        channel.withAlpha
+                                    )
+                                }
+                                .padding(horizontal = 10.dp, vertical = 14.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 20.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(swatchColor))
+                            )
+                        }
+                    }
                 }
             }
-            binding.llChannels.addView(row.root)
-            rows.add(row)
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = secondaryText.copy(alpha = 0.2f)
+            )
+
+            // Font Row
+            val fontPath = style.resolvedFontPath
+            val fontValueText = if (fontPath.isEmpty()) {
+                stringResource(R.string.default_font)
+            } else {
+                Uri.decode(fontPath)
+                    .substringAfterLast('/')
+                    .substringAfterLast('\\')
+                    .ifBlank { fontPath }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable { showDialogFragment<FontSelectDialog>() }
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.text_font),
+                    color = primaryText,
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = fontValueText,
+                    color = secondaryText,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 180.dp)
+                )
+            }
+
+            // Font Size Row
+            val fontSizeText = getString(R.string.text_size) + " · " +
+                (style.resolvedFontSize?.roundToInt()?.toString() ?: getString(R.string.btn_default_s))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable {
+                        NumberPickerDialog(requireContext()).setTitle(getString(R.string.text_size))
+                            .setMinValue(5).setMaxValue(100)
+                            .setValue(currentStyle().resolvedFontSize?.roundToInt() ?: ReadBookConfig.textSize)
+                            .setCustomButton(R.string.btn_default_s) { apply(currentStyle().copy(fontSize = null)) }
+                            .show { apply(currentStyle().copy(fontSize = it.toFloat())) }
+                    }
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = fontSizeText,
+                    color = primaryText,
+                    fontSize = 15.sp
+                )
+            }
+
+            // Letter Spacing Row
+            val letterSpacingText = getString(R.string.text_letter_spacing) + " · " +
+                (style.resolvedLetterSpacing?.let { "${(it * 100).roundToInt()}%" } ?: getString(R.string.btn_default_s))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable {
+                        NumberPickerDialog(requireContext()).setTitle(getString(R.string.text_letter_spacing))
+                            .setMinValue(0).setMaxValue(150)
+                            .setDisplayedValues(Array(151) { "${it - 50}%" })
+                            .setValue(((currentStyle().resolvedLetterSpacing ?: ReadBookConfig.letterSpacing) * 100).roundToInt() + 50)
+                            .setCustomButton(R.string.btn_default_s) { apply(currentStyle().copy(letterSpacing = null)) }
+                            .show { apply(currentStyle().copy(letterSpacing = (it - 50) / 100f)) }
+                    }
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = letterSpacingText,
+                    color = primaryText,
+                    fontSize = 15.sp
+                )
+            }
         }
     }
 
     fun refresh() {
-        if (_binding == null) return
-        val style = currentStyle()
-        channels.forEachIndexed { index, channel ->
-            val row = rows[index]
-            val enabled = channel.isEnabled(style)
-            row.cbChannel.isChecked = enabled
-            row.vSwatch.visibility = if (channel.dialogId != NO_COLOR && enabled) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
-            if (channel.dialogId != NO_COLOR && enabled) {
-                val color = channel.color(style).takeIf { it != 0 } ?: DEFAULT_SWATCH_COLOR
-                row.vSwatchColor.backgroundTintList = ColorStateList.valueOf(color)
-            }
-            val extra = channel.extra?.invoke(style)
-            row.tvExtra.visibility = if (extra != null && enabled) View.VISIBLE else View.GONE
-            row.tvExtra.text = extra.orEmpty()
-            val pill = channel.labelRes == R.string.highlight_bg_color &&
-                style.resolvedFillShape == FillShape.PILL
-            val tuneVisible = enabled && (channel.labelRes == R.string.highlight_underline || pill)
-            row.tvTune.visibility = if (tuneVisible) View.VISIBLE else View.GONE
-            if (tuneVisible) row.tvTune.text = if (pill) {
-                getString(R.string.highlight_pill_padding_value,
-                    (style.resolvedPillPaddingScale * 100).roundToInt())
-            } else {
-                getString(R.string.highlight_underline_adjust)
-            }
-        }
-        val fontPath = style.resolvedFontPath
-        binding.tvHighlightFontSize.text = getString(R.string.text_size) + " · " +
-            (style.resolvedFontSize?.roundToInt()?.toString() ?: getString(R.string.btn_default_s))
-        binding.tvHighlightLetterSpacing.text = getString(R.string.text_letter_spacing) + " · " +
-            (style.resolvedLetterSpacing?.let { "${(it * 100).roundToInt()}%" } ?: getString(R.string.btn_default_s))
-        binding.tvHighlightFontValue.text = if (fontPath.isEmpty()) {
-            getString(R.string.default_font)
-        } else {
-            Uri.decode(fontPath)
-                .substringAfterLast('/')
-                .substringAfterLast('\\')
-                .ifBlank { fontPath }
-        }
+        refreshVersion++
     }
 
     override val curFontPath: String

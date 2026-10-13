@@ -25,7 +25,7 @@ class ReviewDetailMediaSourceTest {
                 ).containsMatchIn(source)
             )
         }
-        assertTrue(source.contains("bindReviewImage(binding, item.imageUrl)"))
+        assertTrue(source.contains("bindReviewImage(context, imageView, imageUrl)"))
         assertTrue(
             Regex(
                 """ImageLoader\.load\(context, imageUrl\)\s*""" +
@@ -50,46 +50,42 @@ class ReviewDetailMediaSourceTest {
 
     @Test
     fun `reply badges use the shared badge binding path`() {
-        val binding = dialogSource()
+        val rowBlock = dialogSource()
             .substringAfter("val replyIndent = mainAvatarSize")
-            .substringBefore("override fun registerListener")
-        val replyBranch = binding.indexOf("\n            if (item.isReply) {")
-        val badgeVisibility = binding.indexOf("binding.llBadges.visibility")
-        val badgeBinding = binding.indexOf("bindBadges(binding.llBadges, item.badges)")
-        val contentVisibility = binding.indexOf("val hasText")
+            .substringBefore("private companion object")
+        val replyBranch = rowBlock.indexOf("if (item.isReply) {")
+        val badgeVisibility = rowBlock.indexOf("if (item.badges.isNotEmpty())")
+        val badgeBinding = rowBlock.indexOf("bindBadges(context, llBadges, item.badges)")
+        val contentVisibility = rowBlock.indexOf("val hasText")
 
         assertTrue(badgeVisibility in 0 until replyBranch)
         assertTrue(badgeBinding in 0 until replyBranch)
         assertTrue(contentVisibility > replyBranch)
-        assertFalse(binding.substring(replyBranch, contentVisibility).contains("llBadges.gone()"))
     }
 
     @Test
     fun `reply target keeps the commenter header and prefixes the body`() {
-        val binding = dialogSource()
-            .substringAfter("binding.llBadges.visibility")
+        val rowBlock = dialogSource()
+            .substringAfter("private fun ReviewCommentRow(")
             .substringBefore("val hasText")
 
-        assertTrue(binding.contains("binding.tvName.text = item.name.orEmpty()"))
-        assertTrue(binding.contains("val replyToName = item.replyToName.orEmpty().trim()"))
-        assertTrue(binding.contains("val prefix = \"\u56de\u590d \$replyToName\uff1a\""))
-        assertFalse(binding.contains("binding.tvName.gone()"))
+        assertTrue(rowBlock.contains("text = item.name.orEmpty()"))
+        assertTrue(rowBlock.contains("val replyToName = item.replyToName.orEmpty().trim()"))
+        assertTrue(rowBlock.contains("val prefix = \"\u56de\u590d \$replyToName\uff1a\""))
     }
 
     @Test
     fun `reply likes are shown only for positive counts`() {
-        val binding = dialogSource()
-            .substringAfter("binding.tvTime.text = item.time.orEmpty()")
-            .substringBefore("private fun bindReviewImage")
+        val rowBlock = dialogSource()
+            .substringAfter("private fun ReviewCommentRow(")
+            .substringBefore("private companion object")
 
         assertTrue(
-            binding.contains(
+            rowBlock.contains(
                 "val showLikeArea = !item.isReply || (likeCount != null && likeCount > 0)"
             )
         )
-        assertTrue(binding.contains("if (showLikeArea)"))
-        assertTrue(binding.contains("binding.llLikeArea.visible()"))
-        assertTrue(binding.contains("binding.llLikeArea.gone()"))
+        assertTrue(rowBlock.contains("if (showLikeArea)"))
     }
 
     @Test
@@ -102,17 +98,17 @@ class ReviewDetailMediaSourceTest {
         assertTrue(flatten.contains("expandedReplyParentKeys.contains(parentKey)"))
         assertTrue(flatten.contains("val canLoadMore = hasReplyUrl"))
 
-        val listener = source.substringAfter("override fun registerListener(")
-            .substringBefore("private fun bindAudioState")
-        assertTrue(listener.contains("loadReplies(parentKey)"))
-        assertFalse(listener.contains("detail.replies.isNotEmpty()"))
+        val rowBlock = source.substringAfter("private fun ReviewCommentRow(")
+            .substringBefore("private companion object")
+        assertTrue(rowBlock.contains("loadReplies(parentKey)"))
+        assertFalse(rowBlock.contains("detail.replies.isNotEmpty()"))
     }
 
     @Test
     fun `review image restores its cached aspect ratio before reloading`() {
         val binding = dialogSource()
             .substringAfter("private fun bindReviewImage(")
-            .substringBefore("override fun registerListener")
+            .substringBefore("private fun bindBadges(")
         val clearRequest = binding.indexOf("Glide.with(context).clear(imageView)")
         val resetHeight = binding.indexOf("height = ViewGroup.LayoutParams.WRAP_CONTENT")
         val emptyImage = binding.indexOf("if (imageUrl.isNullOrBlank())")
@@ -130,19 +126,6 @@ class ReviewDetailMediaSourceTest {
         assertTrue(binding.contains("intrinsicWidth = size.width"))
         assertTrue(binding.contains("intrinsicHeight = size.height"))
         assertTrue(binding.contains("imageRequest.placeholder(placeholder).error(placeholder)"))
-    }
-
-    @Test
-    fun `review list only applies diff updates while resumed`() {
-        val source = dialogSource()
-        val resumeBlock = source.substringAfter("override fun onResume()")
-            .substringBefore("override fun onPause()")
-        val pauseBlock = source.substringAfter("override fun onPause()")
-            .substringBefore("override fun onFragmentCreated")
-
-        assertTrue(resumeBlock.contains("adapter.upResumed(true)"))
-        assertTrue(pauseBlock.contains("adapter.upResumed(false)"))
-        assertTrue(pauseBlock.indexOf("adapter.upResumed(false)") < pauseBlock.indexOf("super.onPause()"))
     }
 
     private fun dialogSource(): String = projectFile(

@@ -1,41 +1,84 @@
 package io.legado.app.ui.book.read
 
 import android.content.Context
-import android.graphics.Color
+import android.graphics.Color as AndroidColor
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.ShapeDrawable
 import android.os.Bundle
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.util.Size
+import android.util.TypedValue
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.updateLayoutParams
-import androidx.core.view.updatePaddingRelative
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.Target
+import com.google.android.flexbox.FlexWrap
 import com.google.android.flexbox.FlexboxLayout
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppLog
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.help.coroutine.Coroutine
@@ -48,19 +91,17 @@ import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.getMediaItem
 import io.legado.app.model.analyzeRule.ReviewRuleParser
 import io.legado.app.model.analyzeRule.ReviewRuleParser.DetailItem as ReviewDetailItem
 import io.legado.app.model.jsSource.JsSourceReview
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.utils.dpToPx
+import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isDataUrl
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.visible
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.windowSize
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemReviewCommentBinding
-import io.legado.app.ui.widget.dialog.PhotoDialog
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -69,7 +110,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
+class ReviewDetailDialog() : BaseDialogFragment() {
 
     constructor(
         paragraphNum: Int,
@@ -91,8 +132,6 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         }
     }
 
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val adapter by lazy { ReviewAdapter(requireContext()) }
     private var paragraphNum: Int = 0
     private var totalCount: Int = 0
     private var chapterIndex: Int = 0
@@ -111,6 +150,11 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
     private val replyExhaustedParentKeys = HashSet<String>()
     private val replyPageByParentKey = HashMap<String, Int>()
     private var hasReplyUrl = false
+    private val imageSizes = HashMap<String, Size>()
+    private var uiItemsState by mutableStateOf<List<ReviewUiItem>>(emptyList())
+    private var isInitialLoadingState by mutableStateOf(false)
+    private var emptyOrErrorMessageState by mutableStateOf<String?>(null)
+    private var audioStateVersion by mutableIntStateOf(0)
     private val sourceImageOptions by lazy {
         RequestOptions().set(OkHttpModelLoader.sourceOriginOption, sourceKey)
     }
@@ -152,32 +196,6 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
             refreshAudioPlaybackUi(previousAudioUrl, currentAudioUrl)
         }
     }
-    private val uiItemDiffCallback = object : DiffUtil.ItemCallback<ReviewUiItem>() {
-        override fun areItemsTheSame(oldItem: ReviewUiItem, newItem: ReviewUiItem): Boolean {
-            if (oldItem.itemType != newItem.itemType) return false
-            if (oldItem.itemType == TYPE_MORE) {
-                return oldItem.parentKey == newItem.parentKey
-            }
-            val oldId = oldItem.id?.takeIf { it.isNotBlank() }
-            val newId = newItem.id?.takeIf { it.isNotBlank() }
-            if (oldId != null || newId != null) {
-                return oldId == newId && oldItem.isReply == newItem.isReply
-            }
-            return oldItem.isReply == newItem.isReply &&
-                    oldItem.parentKey == newItem.parentKey &&
-                    oldItem.name == newItem.name &&
-                    oldItem.replyToName == newItem.replyToName &&
-                    oldItem.content == newItem.content &&
-                    oldItem.time == newItem.time &&
-                    oldItem.avatar == newItem.avatar &&
-                    oldItem.imageUrl == newItem.imageUrl &&
-                    oldItem.audioUrl == newItem.audioUrl
-        }
-
-        override fun areContentsTheSame(oldItem: ReviewUiItem, newItem: ReviewUiItem): Boolean {
-            return oldItem == newItem
-        }
-    }
 
     override fun onStart() {
         super.onStart()
@@ -192,14 +210,19 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         applyDialogHeightRatio(lastHeightRatio)
     }
 
-    override fun onResume() {
-        super.onResume()
-        adapter.upResumed(true)
-    }
-
-    override fun onPause() {
-        adapter.upResumed(false)
-        super.onPause()
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    ReviewDetailScreen()
+                }
+            }
+        }
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -210,70 +233,11 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         bookUrl = arguments?.getString(ARG_BOOK_URL).orEmpty()
         sourceKey = arguments?.getString(ARG_SOURCE_KEY).orEmpty()
         ruleHash = arguments?.getInt(ARG_RULE_HASH) ?: 0
-        binding.root.setBackgroundResource(R.drawable.bg_dialog_round_top)
-        binding.dragHandle.visible()
-        binding.toolBar.setBackgroundResource(R.drawable.bg_review_toolbar)
-        binding.toolBar.updateLayoutParams<ViewGroup.LayoutParams> {
-            height = 42.dpToPx()
-        }
-        binding.toolBar.minimumHeight = 0
-        binding.toolBar.setPadding(0, 0, 0, 0)
-        binding.toolBar.setContentInsetsRelative(6.dpToPx(), 6.dpToPx())
-        binding.toolBar.title = ""
-        binding.toolBar.subtitle = null
-        val oldCountView = binding.toolBar.findViewWithTag<View>("review_count_tag")
-        if (oldCountView != null) {
-            binding.toolBar.removeView(oldCountView)
-        }
-        if (totalCount > 0) {
-            val countView = TextView(requireContext()).apply {
-                tag = "review_count_tag"
-                text = getString(R.string.review_total_count, totalCount)
-                setTextColor(getCompatColor(R.color.secondaryText))
-                textSize = 14f
-                includeFontPadding = false
-                gravity = Gravity.CENTER_VERTICAL
-                maxLines = 1
-            }
-            val lp = androidx.appcompat.widget.Toolbar.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.END or Gravity.CENTER_VERTICAL
-            ).apply {
-                marginEnd = 8.dpToPx()
-            }
-            binding.toolBar.addView(countView, lp)
-        }
-        binding.toolBar.setNavigationIcon(R.drawable.ic_baseline_close)
-        binding.toolBar.setNavigationContentDescription(R.string.close)
-        binding.toolBar.navigationIcon?.setTint(getCompatColor(R.color.secondaryText))
-        binding.toolBar.setNavigationOnClickListener { dismiss() }
-        setupHeightDrag()
-        val layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.layoutManager = layoutManager
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.itemAnimator = null
-        binding.recyclerView.setFastScrollEnabled(false)
-        binding.recyclerView.setTrackVisible(false)
-        binding.recyclerView.setBubbleVisible(false)
-        binding.recyclerView.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
-            override fun onScrolled(
-                recyclerView: androidx.recyclerview.widget.RecyclerView,
-                dx: Int,
-                dy: Int
-            ) {
-                if (dy <= 0) return
-                val lastVisible = layoutManager.findLastVisibleItemPosition()
-                if (hasMore && !isLoading && lastVisible >= adapter.itemCount - 3) {
-                    loadDetailPage(paragraphNum, currentPage + 1, append = true)
-                }
-            }
-        })
         loadDetailPage(paragraphNum, 1, append = false)
     }
 
-    private fun setupHeightDrag() {
-        binding.dragHandle.setOnClickListener {
+    private fun setupHeightDrag(dragHandle: View) {
+        dragHandle.setOnClickListener {
             val windowHeight = requireContext().windowManager.windowSize.heightPixels
             if (windowHeight <= 0) return@setOnClickListener
             val currentHeight = dialog?.window?.attributes?.height?.takeIf { it > 0 }
@@ -283,7 +247,7 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
                 if (currentHeight < midpoint) MAX_HEIGHT_RATIO else DEFAULT_HEIGHT_RATIO
             )
         }
-        binding.dragHandle.setOnTouchListener { handle, event ->
+        dragHandle.setOnTouchListener { handle, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     val windowHeight = requireContext().windowManager.windowSize.heightPixels
@@ -402,30 +366,16 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
 
     private fun refreshAudioPlaybackUi(oldAudioUrl: String?, newAudioUrl: String?) {
         if (view == null) return
-        val affectedUrls = linkedSetOf<String>()
-        oldAudioUrl?.takeIf { it.isNotBlank() }?.let { affectedUrls.add(it) }
-        newAudioUrl?.takeIf { it.isNotBlank() }?.let { affectedUrls.add(it) }
-        if (affectedUrls.isEmpty()) return
-        binding.recyclerView.post {
-            if (view == null) return@post
-            adapter.getItems().forEachIndexed { index, item ->
-                val itemAudioUrl = item.audioUrl
-                if (item.itemType == TYPE_NORMAL &&
-                    !itemAudioUrl.isNullOrBlank() &&
-                    affectedUrls.contains(itemAudioUrl)
-                ) {
-                    adapter.updateItem(index, PAYLOAD_AUDIO_STATE)
-                }
-            }
-        }
+        if (oldAudioUrl.isNullOrBlank() && newAudioUrl.isNullOrBlank()) return
+        audioStateVersion++
     }
 
     private fun loadDetailPage(paragraphNum: Int, page: Int, append: Boolean) {
         if (isLoading) return
         if (!append) {
-            binding.rotateLoading.visible()
-            binding.tvMsg.gone()
-            adapter.setItems(emptyList())
+            isInitialLoadingState = true
+            emptyOrErrorMessageState = null
+            uiItemsState = emptyList()
             currentPage = 1
             hasMore = true
             nextPageUrl = null
@@ -518,7 +468,7 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
             )
         }.onSuccess(Main) { result ->
             if (!append) {
-                binding.rotateLoading.gone()
+                isInitialLoadingState = false
             }
             result?.source?.let { reviewSource = it }
             result?.let { hasReplyUrl = it.hasReplyUrl }
@@ -532,8 +482,7 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
             }
             if (items.isEmpty() && !append) {
                 hasMore = false
-                binding.tvMsg.text = getString(R.string.content_empty)
-                binding.tvMsg.visible()
+                emptyOrErrorMessageState = getString(R.string.content_empty)
                 isLoading = false
                 return@onSuccess
             }
@@ -554,9 +503,8 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         }.onError {
             isLoading = false
             if (!append) {
-                binding.rotateLoading.gone()
-                binding.tvMsg.text = it.localizedMessage ?: getString(R.string.content_empty)
-                binding.tvMsg.visible()
+                isInitialLoadingState = false
+                emptyOrErrorMessageState = it.localizedMessage ?: getString(R.string.content_empty)
             }
         }.start()
     }
@@ -838,8 +786,7 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
     }
 
     private fun renderUiItems() {
-        val uiItems = flattenItems(detailItems)
-        adapter.setItems(uiItems, uiItemDiffCallback, skipDiff = true)
+        uiItemsState = flattenItems(detailItems)
     }
 
     private fun ReviewDetailItem.toUiItem(isReply: Boolean, parentKey: String? = null) = ReviewUiItem(
@@ -857,6 +804,478 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         parentKey = parentKey
     )
 
+    private fun bindReviewImage(context: Context, imageView: ImageView, imageUrl: String?) {
+        Glide.with(context).clear(imageView)
+        imageView.setImageDrawable(null)
+        imageView.updateLayoutParams<ViewGroup.LayoutParams> {
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        if (imageUrl.isNullOrBlank()) {
+            imageView.gone()
+            return
+        }
+
+        val imageRequest = ImageLoader.load(context, imageUrl)
+            .apply(sourceImageOptions)
+            .addListener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(
+                    e: GlideException?,
+                    model: Any?,
+                    target: Target<Drawable>,
+                    isFirstResource: Boolean
+                ): Boolean = false
+
+                override fun onResourceReady(
+                    resource: Drawable,
+                    model: Any,
+                    target: Target<Drawable>?,
+                    dataSource: DataSource,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    val width = resource.intrinsicWidth
+                    val height = resource.intrinsicHeight
+                    if (width > 0 && height > 0) {
+                        imageSizes[imageUrl] = Size(width, height)
+                    }
+                    return false
+                }
+            })
+        imageSizes[imageUrl]?.let { size ->
+            val placeholder = ShapeDrawable().apply {
+                intrinsicWidth = size.width
+                intrinsicHeight = size.height
+                paint.color = AndroidColor.TRANSPARENT
+            }
+            imageRequest.placeholder(placeholder).error(placeholder)
+        }
+        imageView.visible()
+        imageRequest.into(imageView)
+    }
+
+    private fun bindBadges(context: Context, container: FlexboxLayout, badges: List<String>) {
+        container.removeAllViews()
+        if (badges.isEmpty()) {
+            container.gone()
+            return
+        }
+        container.visible()
+        badges.forEach { badge ->
+            if (badge.isAbsUrl() || badge.isDataUrl()) {
+                val badgeHeight = 20.dpToPx()
+                val iv = ImageView(context).apply {
+                    layoutParams = FlexboxLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        badgeHeight
+                    ).apply { setMargins(0, 0, 6.dpToPx(), 0) }
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    adjustViewBounds = true
+                }
+                ImageLoader.load(context, badge)
+                    .apply(sourceImageOptions)
+                    .into(iv)
+                container.addView(iv)
+            } else {
+                val tv = TextView(context).apply {
+                    layoutParams = FlexboxLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, 0, 6.dpToPx(), 0) }
+                    setPadding(6.dpToPx(), 2.dpToPx(), 6.dpToPx(), 2.dpToPx())
+                    setTextColor(context.getCompatColor(R.color.secondaryText))
+                    textSize = 11f
+                    text = badge
+                    setBackgroundResource(R.drawable.bg_review_badge_chip)
+                }
+                container.addView(tv)
+            }
+        }
+    }
+
+    @Composable
+    private fun ReviewDetailScreen() {
+        val context = requireContext()
+        val items = uiItemsState
+        val initialLoading = isInitialLoadingState
+        val emptyOrErrorMsg = emptyOrErrorMessageState
+        val audioTick = audioStateVersion
+        val listState = rememberLazyListState()
+
+        val shouldLoadMore by remember {
+            derivedStateOf {
+                val layoutInfo = listState.layoutInfo
+                val totalItems = layoutInfo.totalItemsCount
+                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                totalItems > 0 && lastVisibleIndex >= totalItems - 3
+            }
+        }
+
+        LaunchedEffect(shouldLoadMore, items.size) {
+            if (shouldLoadMore && hasMore && !isLoading) {
+                loadDetailPage(paragraphNum, currentPage + 1, append = true)
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+            color = colorResource(R.color.background)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .padding(horizontal = 6.dp)
+                ) {
+                    IconButton(
+                        onClick = { dismiss() },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .size(36.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_baseline_close),
+                            contentDescription = stringResource(R.string.close),
+                            tint = colorResource(R.color.secondaryText)
+                        )
+                    }
+
+                    AndroidView(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .width(48.dp)
+                            .fillMaxHeight(),
+                        factory = { ctx ->
+                            val outValue = TypedValue()
+                            ctx.theme.resolveAttribute(
+                                androidx.appcompat.R.attr.selectableItemBackgroundBorderless,
+                                outValue,
+                                true
+                            )
+                            FrameLayout(ctx).apply {
+                                id = R.id.drag_handle
+                                isClickable = true
+                                isFocusable = true
+                                contentDescription = ctx.getString(R.string.review_resize_handle)
+                                setBackgroundResource(outValue.resourceId)
+                                addView(
+                                    View(ctx).apply {
+                                        alpha = 0.45f
+                                        setBackgroundResource(R.drawable.bg_review_drag_handle)
+                                    },
+                                    FrameLayout.LayoutParams(
+                                        32.dpToPx(),
+                                        4.dpToPx(),
+                                        Gravity.CENTER
+                                    )
+                                )
+                                setupHeightDrag(this)
+                            }
+                        }
+                    )
+
+                    if (totalCount > 0) {
+                        Text(
+                            text = stringResource(R.string.review_total_count, totalCount),
+                            color = colorResource(R.color.secondaryText),
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 8.dp)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        itemsIndexed(
+                            items = items,
+                            key = { index, item ->
+                                if (item.itemType == TYPE_MORE) {
+                                    "more_${item.parentKey}_$index"
+                                } else {
+                                    "${item.parentKey}_${item.isReply}_${item.id ?: index}_$index"
+                                }
+                            }
+                        ) { _, item ->
+                            ReviewCommentRow(
+                                context = context,
+                                item = item,
+                                audioVersion = audioTick
+                            )
+                        }
+                    }
+
+                    if (initialLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .align(Alignment.Center),
+                            strokeWidth = 2.dp
+                        )
+                    }
+
+                    if (!emptyOrErrorMsg.isNullOrBlank() && items.isEmpty() && !initialLoading) {
+                        Text(
+                            text = emptyOrErrorMsg,
+                            color = colorResource(R.color.secondaryText),
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ReviewCommentRow(
+        context: Context,
+        item: ReviewUiItem,
+        audioVersion: Int
+    ) {
+        val primaryColor = colorResource(R.color.primaryText)
+        val secondaryColor = colorResource(R.color.secondaryText)
+        val contentColor = colorResource(R.color.reviewContentText)
+        val accentColor = colorResource(R.color.accent)
+
+        if (item.itemType == TYPE_MORE) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !item.isLoading) {
+                        val parentKey = item.parentKey ?: return@clickable
+                        loadReplies(parentKey)
+                    }
+                    .padding(start = 54.dp, top = 2.dp, end = 8.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (item.isLoading) {
+                        stringResource(R.string.loading)
+                    } else {
+                        stringResource(R.string.review_more_replies, item.moreCount)
+                    },
+                    fontSize = 14.sp,
+                    color = accentColor
+                )
+            }
+            return
+        }
+
+        // 子评论缩进：使用主评论头像宽度作为占位，避免写死 magic number
+        val mainAvatarSize = 36.dp
+        val replyIndent = mainAvatarSize
+        val startPadding = if (item.isReply) 8.dp + replyIndent else 8.dp
+        val avatarSize = if (item.isReply) 28.dp else 36.dp
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = startPadding, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            if (!item.avatar.isNullOrBlank()) {
+                AndroidView(
+                    modifier = Modifier.size(avatarSize),
+                    factory = { ctx ->
+                        ImageView(ctx).apply {
+                            scaleType = ImageView.ScaleType.CENTER_CROP
+                        }
+                    },
+                    update = { ivAvatar ->
+                        ImageLoader.load(context, item.avatar)
+                            .apply(sourceImageOptions)
+                            .circleCrop()
+                            .into(ivAvatar)
+                    }
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 10.dp, end = 6.dp)
+            ) {
+                if (!item.name.isNullOrBlank() || item.badges.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!item.name.isNullOrBlank()) {
+                            Text(
+                                text = item.name.orEmpty(),
+                                color = primaryColor,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(end = 6.dp)
+                            )
+                        }
+                        if (item.badges.isNotEmpty()) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    FlexboxLayout(ctx).apply {
+                                        flexWrap = FlexWrap.WRAP
+                                    }
+                                },
+                                update = { llBadges ->
+                                    bindBadges(context, llBadges, item.badges)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                val bodyAnnotated = remember(item.isReply, item.content, item.replyToName, secondaryColor, contentColor) {
+                    if (item.isReply) {
+                        val content = item.content.orEmpty().trim()
+                        val replyToName = item.replyToName.orEmpty().trim()
+                        when {
+                            content.isEmpty() || replyToName.isEmpty() -> buildAnnotatedString {
+                                append(content)
+                            }
+                            else -> buildAnnotatedString {
+                                val prefix = "回复 $replyToName："
+                                withStyle(SpanStyle(color = secondaryColor)) {
+                                    append(prefix)
+                                }
+                                append(content)
+                            }
+                        }
+                    } else {
+                        buildAnnotatedString {
+                            append(item.content.orEmpty())
+                        }
+                    }
+                }
+                val hasText = bodyAnnotated.text.isNotBlank()
+                if (hasText) {
+                    Text(
+                        text = bodyAnnotated,
+                        color = contentColor,
+                        fontSize = if (item.isReply) 14.sp else 16.sp,
+                        lineHeight = if (item.isReply) 18.sp else 20.sp,
+                        modifier = Modifier.padding(top = if (item.isReply) 0.dp else 4.dp)
+                    )
+                }
+
+                if (!item.imageUrl.isNullOrBlank()) {
+                    val imageUrl = item.imageUrl
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
+                        factory = { ctx ->
+                            ImageView(ctx).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                )
+                                adjustViewBounds = true
+                                maxHeight = 240.dpToPx()
+                                scaleType = ImageView.ScaleType.FIT_START
+                            }
+                        },
+                        update = { imageView ->
+                            bindReviewImage(context, imageView, imageUrl)
+                            imageView.setOnClickListener {
+                                PhotoDialog(imageUrl, sourceKey)
+                                    .show(this@ReviewDetailDialog.childFragmentManager, "reviewPhoto")
+                            }
+                        }
+                    )
+                }
+
+                if (!item.audioUrl.isNullOrBlank()) {
+                    val audioUrl = item.audioUrl
+                    val isCurrentAudio = audioVersion >= 0 && audioUrl == currentAudioUrl
+                    val audioTextRes = when {
+                        isCurrentAudio && isAudioPreparing -> R.string.loading
+                        isCurrentAudio && reviewAudioPlayer?.isPlaying == true -> R.string.review_pause_audio
+                        else -> R.string.review_play_audio
+                    }
+                    val audioIconRes = if (isCurrentAudio && reviewAudioPlayer?.isPlaying == true) {
+                        R.drawable.ic_pause_24dp
+                    } else {
+                        R.drawable.ic_play_24dp
+                    }
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .height(28.dp)
+                            .background(
+                                color = secondaryColor.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .clickable { toggleAudioPlayback(audioUrl) }
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(audioIconRes),
+                            contentDescription = null,
+                            tint = secondaryColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = stringResource(audioTextRes),
+                            color = secondaryColor,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                if (!item.time.isNullOrBlank()) {
+                    Text(
+                        text = item.time.orEmpty(),
+                        color = secondaryColor,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 7.dp)
+                    )
+                }
+            }
+
+            val likeCount = item.likeCount
+            val showLikeArea = !item.isReply || (likeCount != null && likeCount > 0)
+            if (showLikeArea) {
+                Column(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .padding(top = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_review_like),
+                        contentDescription = null,
+                        tint = secondaryColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    if (likeCount != null && likeCount > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = likeCount.toString(),
+                            color = secondaryColor,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     private companion object {
         private const val DEFAULT_HEIGHT_RATIO = 0.68f
         private const val MIN_HEIGHT_RATIO = 0.35f
@@ -870,289 +1289,6 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         const val ARG_RULE_HASH = "ruleHash"
         const val TYPE_NORMAL = 0
         const val TYPE_MORE = 1
-        const val PAYLOAD_AUDIO_STATE = "review_audio_state"
         private var lastHeightRatio = DEFAULT_HEIGHT_RATIO
-    }
-
-    private inner class ReviewAdapter(context: Context) :
-        RecyclerAdapter<ReviewUiItem, ItemReviewCommentBinding>(context) {
-
-        private val imageSizes = HashMap<String, Size>()
-
-        override fun getViewBinding(parent: ViewGroup): ItemReviewCommentBinding {
-            return ItemReviewCommentBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemReviewCommentBinding,
-            item: ReviewUiItem,
-            payloads: MutableList<Any>
-        ) {
-            if (payloads.any { it == PAYLOAD_AUDIO_STATE }) {
-                bindAudioState(binding, item)
-                return
-            }
-            val tvContentLp = binding.tvContent.layoutParams as ViewGroup.MarginLayoutParams
-            val basePadding = 8.dpToPx()
-            val mainAvatarSize = 36.dpToPx()
-            binding.root.isEnabled = !item.isLoading
-            if (item.itemType == TYPE_MORE) {
-                binding.root.updatePaddingRelative(
-                    start = basePadding,
-                    top = 2.dpToPx(),
-                    end = basePadding,
-                    bottom = 2.dpToPx()
-                )
-                binding.ivAvatar.updateLayoutParams<ViewGroup.LayoutParams> {
-                    width = mainAvatarSize
-                    height = mainAvatarSize
-                }
-                binding.ivAvatar.visibility = View.INVISIBLE
-                binding.llLikeArea.gone()
-                binding.tvName.gone()
-                binding.llBadges.gone()
-                binding.tvTime.gone()
-                binding.ivMedia.gone()
-                binding.tvAudio.gone()
-                binding.tvContent.visible()
-                binding.tvContent.text = if (item.isLoading) {
-                    context.getString(R.string.loading)
-                } else {
-                    context.getString(R.string.review_more_replies, item.moreCount)
-                }
-                binding.tvContent.textSize = 14f
-                binding.tvContent.setTextColor(context.getCompatColor(R.color.accent))
-                binding.tvContent.setPadding(0, 0, 0, 0)
-                tvContentLp.topMargin = 0
-                binding.tvContent.layoutParams = tvContentLp
-                binding.llContentCard.background = null
-                return
-            }
-
-            // 子评论缩进：使用主评论头像宽度作为占位，避免写死 magic number
-            val replyIndent = mainAvatarSize
-            val startPadding = if (item.isReply) basePadding + replyIndent else basePadding
-            binding.root.updatePaddingRelative(
-                start = startPadding,
-                top = basePadding,
-                end = basePadding,
-                bottom = basePadding
-            )
-
-            binding.llContentCard.background = null
-
-            val avatarSize = if (item.isReply) 28.dpToPx() else 36.dpToPx()
-            binding.ivAvatar.updateLayoutParams<ViewGroup.LayoutParams> {
-                width = avatarSize
-                height = avatarSize
-            }
-
-            if (item.avatar.isNullOrBlank()) {
-                binding.ivAvatar.gone()
-            } else {
-                binding.ivAvatar.visible()
-                ImageLoader.load(context, item.avatar)
-                    .apply(sourceImageOptions)
-                    .circleCrop()
-                    .into(binding.ivAvatar)
-            }
-
-            val primaryColor = context.getCompatColor(R.color.primaryText)
-            val secondaryColor = context.getCompatColor(R.color.secondaryText)
-            val contentColor = context.getCompatColor(R.color.reviewContentText)
-            binding.llBadges.visibility = if (item.badges.isEmpty()) View.GONE else View.VISIBLE
-            bindBadges(binding.llBadges, item.badges)
-            binding.tvName.text = item.name.orEmpty()
-            binding.tvName.visibility = if (item.name.isNullOrBlank()) View.GONE else View.VISIBLE
-            binding.tvName.setTextColor(primaryColor)
-            if (item.isReply) {
-                val content = item.content.orEmpty().trim()
-                val replyToName = item.replyToName.orEmpty().trim()
-                binding.tvContent.text = when {
-                    content.isEmpty() || replyToName.isEmpty() -> content
-                    else -> SpannableStringBuilder().apply {
-                        val prefix = "回复 $replyToName："
-                        append(prefix)
-                        setSpan(
-                            ForegroundColorSpan(secondaryColor),
-                            0,
-                            prefix.length,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                        )
-                        append(content)
-                    }
-                }
-            } else {
-                binding.tvContent.text = item.content.orEmpty()
-            }
-            val hasText = binding.tvContent.text?.isNotBlank() == true
-            binding.tvContent.visibility = if (hasText) View.VISIBLE else View.GONE
-            binding.tvContent.textSize = if (item.isReply) 14f else 16f
-            binding.tvContent.setTextColor(contentColor)
-            binding.tvContent.setPadding(0, 0, 0, 0)
-            tvContentLp.topMargin = if (item.isReply) 0 else 4.dpToPx()
-            binding.tvContent.layoutParams = tvContentLp
-
-            bindReviewImage(binding, item.imageUrl)
-
-            bindAudioState(binding, item)
-
-            binding.tvTime.text = item.time.orEmpty()
-            binding.tvTime.visibility = if (item.time.isNullOrBlank()) View.GONE else View.VISIBLE
-            val likeCount = item.likeCount
-            val showLikeArea = !item.isReply || (likeCount != null && likeCount > 0)
-            if (showLikeArea) {
-                binding.ivLike.visible()
-                binding.llLikeArea.visible()
-                if (likeCount != null && likeCount > 0) {
-                    binding.tvLikeCount.text = likeCount.toString()
-                    binding.tvLikeCount.visible()
-                } else {
-                    binding.tvLikeCount.gone()
-                }
-            } else {
-                binding.ivLike.gone()
-                binding.tvLikeCount.gone()
-                binding.llLikeArea.gone()
-            }
-
-        }
-
-        private fun bindReviewImage(binding: ItemReviewCommentBinding, imageUrl: String?) {
-            val imageView = binding.ivMedia
-            Glide.with(context).clear(imageView)
-            imageView.setImageDrawable(null)
-            imageView.updateLayoutParams<ViewGroup.LayoutParams> {
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
-            }
-            if (imageUrl.isNullOrBlank()) {
-                imageView.gone()
-                return
-            }
-
-            val imageRequest = ImageLoader.load(context, imageUrl)
-                .apply(sourceImageOptions)
-                .addListener(object : RequestListener<Drawable> {
-                    override fun onLoadFailed(
-                        e: GlideException?,
-                        model: Any?,
-                        target: Target<Drawable>,
-                        isFirstResource: Boolean
-                    ): Boolean = false
-
-                    override fun onResourceReady(
-                        resource: Drawable,
-                        model: Any,
-                        target: Target<Drawable>?,
-                        dataSource: DataSource,
-                        isFirstResource: Boolean
-                    ): Boolean {
-                        val width = resource.intrinsicWidth
-                        val height = resource.intrinsicHeight
-                        if (width > 0 && height > 0) {
-                            imageSizes[imageUrl] = Size(width, height)
-                        }
-                        return false
-                    }
-                })
-            imageSizes[imageUrl]?.let { size ->
-                val placeholder = ShapeDrawable().apply {
-                    intrinsicWidth = size.width
-                    intrinsicHeight = size.height
-                    paint.color = Color.TRANSPARENT
-                }
-                imageRequest.placeholder(placeholder).error(placeholder)
-            }
-            imageView.visible()
-            imageRequest.into(imageView)
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemReviewCommentBinding) {
-            binding.root.setOnClickListener {
-                val item = getItemByLayoutPosition(holder.layoutPosition) ?: return@setOnClickListener
-                if (item.itemType == TYPE_MORE) {
-                    if (item.isLoading) return@setOnClickListener
-                    val parentKey = item.parentKey ?: return@setOnClickListener
-                    loadReplies(parentKey)
-                }
-            }
-            binding.ivMedia.setOnClickListener {
-                val item = getItemByLayoutPosition(holder.layoutPosition) ?: return@setOnClickListener
-                val imageUrl = item.imageUrl ?: return@setOnClickListener
-                PhotoDialog(imageUrl, sourceKey)
-                    .show(this@ReviewDetailDialog.childFragmentManager, "reviewPhoto")
-            }
-            binding.tvAudio.setOnClickListener {
-                val item = getItemByLayoutPosition(holder.layoutPosition) ?: return@setOnClickListener
-                val audioUrl = item.audioUrl ?: return@setOnClickListener
-                toggleAudioPlayback(audioUrl)
-            }
-        }
-
-        private fun bindAudioState(binding: ItemReviewCommentBinding, item: ReviewUiItem) {
-            if (item.itemType == TYPE_MORE || item.audioUrl.isNullOrBlank()) {
-                binding.tvAudio.gone()
-                return
-            }
-            val isCurrentAudio = item.audioUrl == currentAudioUrl
-            val audioTextRes = when {
-                isCurrentAudio && isAudioPreparing -> R.string.loading
-                isCurrentAudio && reviewAudioPlayer?.isPlaying == true -> R.string.review_pause_audio
-                else -> R.string.review_play_audio
-            }
-            val audioIconRes = if (isCurrentAudio && reviewAudioPlayer?.isPlaying == true) {
-                R.drawable.ic_pause_24dp
-            } else {
-                R.drawable.ic_play_24dp
-            }
-            binding.tvAudio.visible()
-            binding.tvAudio.text = context.getString(audioTextRes)
-            binding.tvAudio.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                audioIconRes,
-                0,
-                0,
-                0
-            )
-        }
-
-        private fun bindBadges(container: FlexboxLayout, badges: List<String>) {
-            container.removeAllViews()
-            if (badges.isEmpty()) {
-                container.gone()
-                return
-            }
-            container.visible()
-            badges.forEach { badge ->
-                if (badge.isAbsUrl() || badge.isDataUrl()) {
-                    val badgeHeight = 20.dpToPx()
-                    val iv = ImageView(context).apply {
-                        layoutParams = FlexboxLayout.LayoutParams(
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            badgeHeight
-                        ).apply { setMargins(0, 0, 6.dpToPx(), 0) }
-                        scaleType = ImageView.ScaleType.FIT_CENTER
-                        adjustViewBounds = true
-                    }
-                    ImageLoader.load(context, badge)
-                        .apply(sourceImageOptions)
-                        .into(iv)
-                    container.addView(iv)
-                } else {
-                    val tv = TextView(context).apply {
-                        layoutParams = FlexboxLayout.LayoutParams(
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT
-                        ).apply { setMargins(0, 0, 6.dpToPx(), 0) }
-                        setPadding(6.dpToPx(), 2.dpToPx(), 6.dpToPx(), 2.dpToPx())
-                        setTextColor(context.getCompatColor(R.color.secondaryText))
-                        textSize = 11f
-                        text = badge
-                        setBackgroundResource(R.drawable.bg_review_badge_chip)
-                    }
-                    container.addView(tv)
-                }
-            }
-        }
     }
 }

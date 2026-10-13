@@ -884,6 +884,12 @@ class SharedFileImportTest {
     }
 }
 
-class SharedImportTagTestDialog : BaseDialogFragment(R.layout.dialog_recycler_view) {
+class SharedImportTagTestDialog : BaseDialogFragment() {
+    override fun onCreateView(
+        inflater: android.view.LayoutInflater,
+        container: android.view.ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View = View(requireContext())
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
 }

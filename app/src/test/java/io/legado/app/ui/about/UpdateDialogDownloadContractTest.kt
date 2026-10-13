@@ -9,12 +9,12 @@ class UpdateDialogDownloadContractTest {
 
     @Test
     fun `beta update uses the system download flow`() {
-        val source = File(
+        val source = projectFile(
             "src/main/java/io/legado/app/ui/about/UpdateDialog.kt"
         ).readText()
         val clickHandler = source.substringAfter(
-            "binding.btnBetaUpdate.setOnClickListener"
-        ).substringBefore("if (!isBetaUpdate)")
+            "// btnBetaUpdate"
+        ).substringBefore("private fun formatUpdateMetadata")
 
         assertTrue(clickHandler.contains("startDownload(arguments?.getString(\"url\"))"))
         assertFalse(clickHandler.contains("openUrl"))
@@ -22,9 +22,15 @@ class UpdateDialogDownloadContractTest {
 
     @Test
     fun `beta update exposes browser fallback in toolbar`() {
-        val source = File("src/main/java/io/legado/app/ui/about/UpdateDialog.kt").readText()
-        assertTrue(source.contains("binding.toolBar.inflateMenu(R.menu.app_update)"))
-        assertTrue(source.contains("binding.toolBar.menu.findItem(R.id.menu_open_in_browser).isVisible = true"))
+        val source = projectFile("src/main/java/io/legado/app/ui/about/UpdateDialog.kt").readText()
+        assertTrue(source.contains("val showOpenInBrowser = true"))
+        assertTrue(source.contains("R.string.open_in_browser"))
         assertTrue(source.contains("arguments?.getString(\"url\").orEmpty()"))
+    }
+
+    private fun projectFile(pathInApp: String): File {
+        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
+            .firstOrNull(File::isFile)
+            ?: error("Project file not found: $pathInApp")
     }
 }

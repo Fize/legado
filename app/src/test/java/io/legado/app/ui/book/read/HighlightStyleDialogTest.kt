@@ -74,18 +74,17 @@ class HighlightStyleDialogTest {
 
     @Test
     fun `underline tuning entry uses the shared half dp controls`() {
-        val row = projectFile("src/main/res/layout/item_highlight_channel.xml").readText()
-        val dialog = projectFile("src/main/res/layout/dialog_highlight_underline.xml").readText()
+        val dialog = projectFile("src/main/java/io/legado/app/ui/book/read/UnderlineEditDialog.kt").readText()
         val source = projectFile(
             "src/main/java/io/legado/app/ui/book/read/HighlightStyleDialog.kt"
         ).readText()
 
-        assertTrue(row.contains("@+id/tv_tune"))
+        assertTrue(source.contains("tv_tune"))
         assertTrue(source.contains("highlight_underline_adjust"))
-        assertTrue(dialog.contains("@+id/dsb_width"))
-        assertTrue(dialog.contains("@+id/dsb_distance"))
-        assertTrue(dialog.contains("app:max=\"20\""))
-        assertTrue(dialog.contains("app:max=\"60\""))
+        assertTrue(dialog.contains("R.string.highlight_underline_width"))
+        assertTrue(dialog.contains("R.string.highlight_underline_distance"))
+        assertTrue(dialog.contains("max = 20"))
+        assertTrue(dialog.contains("max = 60"))
     }
 
     @Test
