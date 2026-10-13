@@ -78,7 +78,22 @@ class VideoPlayService : BaseService() {
         MediaSessionCompat(this, "videoPlayService")
     }
     private val floatingView by lazy {
-        LayoutInflater.from(this).inflate(R.layout.floating_video_player, FrameLayout(this), false)
+        FrameLayout(this).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            addView(
+                FloatingPlayer(this@VideoPlayService).apply {
+                    id = R.id.floatingPlayerView
+                    layoutParams = FrameLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        Gravity.CENTER
+                    )
+                }
+            )
+        }
     }
     private val playerView by lazy { floatingView.findViewById<FloatingPlayer>(R.id.floatingPlayerView) }
     private var isNew = true

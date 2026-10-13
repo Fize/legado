@@ -24,17 +24,15 @@ class DialogMultipleEditTextLayoutTest {
 
     @Test
     fun singleFieldDialogUsesFloatingLabelForRuntimeHints() {
-        val document = parseProjectXml("src/main/res/layout/dialog_edit_text.xml")
-        val field = document.findElementById("@+id/edit_view")
-        val inputLayout = field.parentNode as Element
-
-        assertEquals("io.legado.app.ui.widget.text.TextInputLayout", inputLayout.tagName)
-        assertEquals("48dp", field.androidAttribute("minHeight"))
-        assertEquals("12dp", field.androidAttribute("paddingStart"))
-        assertEquals("6dp", field.androidAttribute("paddingTop"))
-        assertEquals("12dp", field.androidAttribute("paddingEnd"))
-        assertEquals("6dp", field.androidAttribute("paddingBottom"))
-        assertFalse(field.hasAttributeNS(androidNamespace, "singleLine"))
+        val bindingSource = readProjectFile(
+            "src/main/java/io/legado/app/databinding/ProgrammaticBindings.kt"
+        )
+        assertTrue(bindingSource.contains("class DialogEditTextBinding"))
+        assertTrue(bindingSource.contains("val editView = AutoCompleteTextView(context)"))
+        assertTrue(bindingSource.contains("val textInputLayout = TextInputLayout(context)"))
+        assertTrue(bindingSource.contains("minHeight = 48.dpToPx()"))
+        assertTrue(bindingSource.contains("setPaddingRelative(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())"))
+        assertFalse(bindingSource.contains("DialogEditTextBinding(context: Context) : ViewBinding {\n    val editView = AutoCompleteTextView(context).apply {\n        isSingleLine = true"))
 
         val source = readProjectFile(
             "src/main/java/io/legado/app/ui/widget/text/AutoCompleteTextView.kt"

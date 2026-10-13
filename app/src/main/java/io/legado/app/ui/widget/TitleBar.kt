@@ -99,11 +99,26 @@ class TitleBar @JvmOverloads constructor(
         titleTextColorFromAttrs = a.hasValue(R.styleable.TitleBar_titleTextColor)
         subtitleTextColorFromAttrs = a.hasValue(R.styleable.TitleBar_subtitleTextColor)
 
-        when (themeMode) {
-            1 -> inflate(context, R.layout.view_title_bar_dark, this)
-            else -> inflate(context, R.layout.view_title_bar, this)
+        val toolbarContext = if (themeMode == 1) {
+            androidx.appcompat.view.ContextThemeWrapper(context, R.style.AppTheme_AppBarOverlay_Dark)
+        } else {
+            val tv = android.util.TypedValue()
+            if (context.theme.resolveAttribute(androidx.appcompat.R.attr.actionBarStyle, tv, true) && tv.resourceId != 0) {
+                androidx.appcompat.view.ContextThemeWrapper(context, tv.resourceId)
+            } else {
+                context
+            }
         }
-        toolbar = findViewById(R.id.toolbar)
+        toolbar = Toolbar(toolbarContext).apply {
+            id = R.id.toolbar
+            layoutParams = LayoutParams(
+                LayoutParams.MATCH_PARENT,
+                LayoutParams.WRAP_CONTENT
+            )
+            setTitleTextAppearance(context, R.style.ToolbarTitle)
+            popupTheme = R.style.AppTheme_PopupOverlay
+        }
+        addView(toolbar)
 
         toolbar.apply {
             navigationIcon?.let {

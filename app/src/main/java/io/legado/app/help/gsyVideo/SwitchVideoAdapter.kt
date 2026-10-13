@@ -15,8 +15,21 @@ class SwitchVideoAdapter<T>(
 ) : ArrayAdapter<T>(context, 0, dataList) {
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-        val view = convertView ?: LayoutInflater.from(context)
-            .inflate(R.layout.switch_video_dialog_item, parent, false)
+        val density = context.resources.displayMetrics.density
+        val padH = (15 * density).toInt()
+        val padV = (10 * density).toInt()
+        val view = convertView ?: TextView(context).apply {
+            id = R.id.text1
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(R.drawable.card_video_background)
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(padH, padV, padH, padV)
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 15f
+        }
         val textView = view.findViewById<TextView>(R.id.text1)
         val item = dataList[position]
         textView.text = titleProvider(item)

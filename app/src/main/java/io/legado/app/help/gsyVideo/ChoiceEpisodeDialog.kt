@@ -47,10 +47,51 @@ class ChoiceEpisodeDialog(private val mContext: Context) : Dialog(
     ) {
         this.onItemClickListener = onItemClickListener
         this.data = data
-        val inflater = LayoutInflater.from(mContext)
-        val view: View = inflater.inflate(R.layout.switch_episode_video_dialog, null)
-        view.findViewById<TextView>(R.id.listCount).text = "选集（${data.size}）"
-        listView = view.findViewById(R.id.switch_dialog_list)
+        val d = mContext.resources.displayMetrics
+        val pad8 = (8 * d.density).toInt()
+        val pad16 = (16 * d.density).toInt()
+        val div4 = (4 * d.density).toInt()
+        val view = android.widget.LinearLayout(mContext).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(0x80121212.toInt())
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(0, 0, 0, pad8)
+            addView(
+                TextView(mContext).apply {
+                    id = R.id.listCount
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        setMargins(pad8, pad8, pad8, pad8)
+                    }
+                    gravity = Gravity.CENTER
+                    minEms = 2
+                    text = "选集（${data.size}）"
+                    setTextColor(0x88FFFFFF.toInt())
+                }
+            )
+            addView(
+                ListView(mContext).apply {
+                    id = R.id.switch_dialog_list
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    ).apply {
+                        marginStart = pad8
+                        marginEnd = pad16
+                    }
+                    background = null
+                    cacheColorHint = 0x00000000
+                    divider = android.graphics.drawable.ColorDrawable(0x00000000)
+                    dividerHeight = div4
+                    setSelector(android.R.color.transparent)
+                }.also { listView = it }
+            )
+        }
         setContentView(view)
         adapter = SwitchVideoAdapter(mContext, data) { item -> item.title }
         listView!!.setAdapter(adapter)
@@ -60,7 +101,6 @@ class ChoiceEpisodeDialog(private val mContext: Context) : Dialog(
         listView!!.onItemClickListener = this@ChoiceEpisodeDialog.OnItemClickListener()
         val dialogWindow = window
         val lp = dialogWindow!!.attributes
-        val d = mContext.resources.displayMetrics // 获取屏幕宽、高用
         lp.width = (d.widthPixels * 0.4).toInt() // 宽度设置为屏幕的0.4
         lp.height = d.heightPixels
         lp.gravity = Gravity.END // 设置靠右对齐

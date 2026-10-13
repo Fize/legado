@@ -51,11 +51,436 @@ class VideoPlayer: StandardGSYVideoPlayer {
     private var mDanmakuStartSeekPosition: Long = -1
 
 
-    override fun getLayoutId(): Int {
-        return if (mIfCurrentIsFullscreen)
-            R.layout.video_layout_controller_full
-        else R.layout.video_layout_controller
+    override fun initInflate(context: Context?) {
+        val ctx = context ?: this.context
+        val d = ctx.resources.displayMetrics.density
+        fun dp(v: Float) = (v * d).toInt().coerceAtLeast(1)
+        val root = android.widget.RelativeLayout(ctx).apply {
+            layoutParams = LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(android.graphics.Color.BLACK)
+            addView(
+                android.widget.RelativeLayout(ctx).apply {
+                    id = R.id.surface_container
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    gravity = android.view.Gravity.CENTER
+                }
+            )
+            addView(
+                DanmakuView(ctx).apply {
+                    id = R.id.danmaku_view
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    visibility = View.GONE
+                }
+            )
+            addView(
+                android.widget.RelativeLayout(ctx).apply {
+                    id = R.id.thumb
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    ).apply {
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_START)
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP)
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_END)
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)
+                    }
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                }
+            )
+            if (mIfCurrentIsFullscreen) {
+                addView(
+                    androidx.constraintlayout.widget.ConstraintLayout(ctx).apply {
+                        id = R.id.layout_bottom
+                        layoutParams = android.widget.RelativeLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)
+                        }
+                        setBackgroundColor(0x80000000.toInt())
+                        setPadding(0, 0, 0, dp(12f))
+                        visibility = View.INVISIBLE
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.current
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    marginStart = dp(12f)
+                                    startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                                    topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                                }
+                                text = "00:00"
+                                setTextColor(android.graphics.Color.WHITE)
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.sprit
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    startToEnd = R.id.current
+                                    topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                                }
+                                text = "/"
+                                setTextColor(android.graphics.Color.WHITE)
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.total
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    startToEnd = R.id.sprit
+                                    topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                                }
+                                text = "00:00"
+                                setTextColor(android.graphics.Color.WHITE)
+                            }
+                        )
+                        addView(
+                            android.widget.SeekBar(ctx).apply {
+                                id = R.id.progress
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    topToBottom = R.id.sprit
+                                }
+                                background = null
+                                max = 100
+                                setPadding(0, dp(8f), 0, dp(8f))
+                                progressDrawable = androidx.core.content.ContextCompat.getDrawable(ctx, com.shuyu.gsyvideoplayer.R.drawable.video_seek_progress)
+                                thumb = androidx.core.content.ContextCompat.getDrawable(ctx, com.shuyu.gsyvideoplayer.R.drawable.video_seek_thumb)
+                            }
+                        )
+                        addView(
+                            ImageView(ctx).apply {
+                                id = R.id.start
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    dp(24f),
+                                    dp(24f)
+                                ).apply {
+                                    marginStart = dp(12f)
+                                    startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                                    topToBottom = R.id.progress
+                                }
+                                setImageResource(R.drawable.ic_play_24dp)
+                            }
+                        )
+                        addView(
+                            ImageView(ctx).apply {
+                                id = R.id.next
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    dp(24f),
+                                    dp(24f)
+                                ).apply {
+                                    marginStart = dp(12f)
+                                    startToEnd = R.id.start
+                                    topToBottom = R.id.progress
+                                }
+                                setImageResource(R.drawable.ic_skip_next)
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.toggle_danmaku
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    marginEnd = dp(16f)
+                                    endToStart = R.id.episode_list
+                                    topToBottom = R.id.progress
+                                }
+                                gravity = android.view.Gravity.CENTER
+                                minEms = 2
+                                text = "关弹幕"
+                                setTextColor(android.graphics.Color.WHITE)
+                                visibility = View.INVISIBLE
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.episode_list
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    marginEnd = dp(16f)
+                                    endToStart = R.id.playback_speed
+                                    topToBottom = R.id.progress
+                                }
+                                gravity = android.view.Gravity.CENTER
+                                minEms = 2
+                                text = "选集"
+                                setTextColor(android.graphics.Color.WHITE)
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.playback_speed
+                                layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    marginEnd = dp(32f)
+                                    endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                                    topToBottom = R.id.progress
+                                }
+                                gravity = android.view.Gravity.CENTER
+                                minEms = 2
+                                text = "倍速"
+                                setTextColor(android.graphics.Color.WHITE)
+                            }
+                        )
+                    }
+                )
+            } else {
+                addView(
+                    android.widget.LinearLayout(ctx).apply {
+                        id = R.id.layout_bottom
+                        layoutParams = android.widget.RelativeLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            dp(50f)
+                        ).apply {
+                            addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)
+                        }
+                        setBackgroundColor(0x99000000.toInt())
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        orientation = android.widget.LinearLayout.HORIZONTAL
+                        visibility = View.INVISIBLE
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.current
+                                layoutParams = android.widget.LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    marginStart = dp(16f)
+                                }
+                                text = "00:00"
+                                setTextColor(android.graphics.Color.WHITE)
+                            }
+                        )
+                        addView(
+                            android.widget.SeekBar(ctx).apply {
+                                id = R.id.progress
+                                layoutParams = android.widget.LinearLayout.LayoutParams(
+                                    0,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    1f
+                                ).apply {
+                                    gravity = android.view.Gravity.CENTER_VERTICAL
+                                }
+                                background = null
+                                max = 100
+                                setPadding(0, dp(8f), 0, dp(8f))
+                                progressDrawable = androidx.core.content.ContextCompat.getDrawable(ctx, com.shuyu.gsyvideoplayer.R.drawable.video_seek_progress)
+                                thumb = androidx.core.content.ContextCompat.getDrawable(ctx, com.shuyu.gsyvideoplayer.R.drawable.video_seek_thumb)
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.total
+                                layoutParams = android.widget.LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    marginEnd = dp(16f)
+                                }
+                                text = "00:00"
+                                setTextColor(android.graphics.Color.WHITE)
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.toggle_danmaku
+                                layoutParams = android.widget.LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                                gravity = android.view.Gravity.CENTER
+                                minEms = 2
+                                text = "关弹幕"
+                                setTextColor(android.graphics.Color.WHITE)
+                                visibility = View.GONE
+                            }
+                        )
+                        addView(
+                            ImageView(ctx).apply {
+                                id = R.id.fullscreen
+                                layoutParams = android.widget.LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                                val pad16 = dp(16f)
+                                setPadding(pad16, pad16, pad16, pad16)
+                                scaleType = ImageView.ScaleType.CENTER
+                                setImageResource(com.shuyu.gsyvideoplayer.R.drawable.video_enlarge)
+                            }
+                        )
+                    }
+                )
+            }
+            addView(
+                android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    id = R.id.bottom_progressbar
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(1.5f)
+                    ).apply {
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)
+                    }
+                    max = 100
+                    progressDrawable = androidx.core.content.ContextCompat.getDrawable(ctx, com.shuyu.gsyvideoplayer.R.drawable.video_progress)
+                }
+            )
+            addView(
+                ImageView(ctx).apply {
+                    id = R.id.back_tiny
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(dp(24f), dp(24f)).apply {
+                        marginStart = dp(6f)
+                        topMargin = dp(6f)
+                    }
+                    visibility = View.GONE
+                }
+            )
+            addView(
+                moe.codeest.enviews.ENDownloadView(ctx).apply {
+                    id = R.id.loading
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(dp(28f), dp(28f)).apply {
+                        addRule(android.widget.RelativeLayout.CENTER_HORIZONTAL)
+                        addRule(android.widget.RelativeLayout.CENTER_VERTICAL)
+                    }
+                    visibility = View.INVISIBLE
+                }
+            )
+            if (mIfCurrentIsFullscreen) {
+                addView(
+                    ImageView(ctx).apply {
+                        id = R.id.small_close
+                        layoutParams = android.widget.RelativeLayout.LayoutParams(dp(30f), dp(30f))
+                        setPaddingRelative(dp(10f), dp(10f), 0, 0)
+                        scaleType = ImageView.ScaleType.CENTER_INSIDE
+                        setImageResource(com.shuyu.gsyvideoplayer.R.drawable.video_small_close)
+                        visibility = View.GONE
+                    }
+                )
+                addView(
+                    ImageView(ctx).apply {
+                        id = R.id.lock_screen
+                        layoutParams = android.widget.RelativeLayout.LayoutParams(dp(30f), dp(30f)).apply {
+                            addRule(android.widget.RelativeLayout.ALIGN_PARENT_END)
+                            addRule(android.widget.RelativeLayout.CENTER_VERTICAL)
+                            marginEnd = dp(50f)
+                        }
+                        scaleType = ImageView.ScaleType.CENTER_INSIDE
+                        setImageResource(com.shuyu.gsyvideoplayer.R.drawable.unlock)
+                        visibility = View.GONE
+                    }
+                )
+                addView(
+                    android.widget.LinearLayout(ctx).apply {
+                        id = R.id.layout_top
+                        layoutParams = android.widget.RelativeLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            dp(48f)
+                        ).apply {
+                            addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP)
+                            addRule(android.widget.RelativeLayout.END_OF, R.id.back_tiny)
+                        }
+                        setBackgroundResource(com.shuyu.gsyvideoplayer.R.drawable.video_title_bg)
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        addView(
+                            ImageView(ctx).apply {
+                                id = R.id.back
+                                layoutParams = android.widget.LinearLayout.LayoutParams(dp(48f), dp(48f))
+                                setPaddingRelative(dp(10f), 0, 0, 0)
+                                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                                setImageResource(com.shuyu.gsyvideoplayer.R.drawable.video_back)
+                            }
+                        )
+                        addView(
+                            TextView(ctx).apply {
+                                id = R.id.title
+                                layoutParams = android.widget.LinearLayout.LayoutParams(
+                                    0,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    1f
+                                )
+                                setPaddingRelative(dp(10f), 0, 0, 0)
+                                setTextColor(android.graphics.Color.WHITE)
+                                textSize = 18f
+                            }
+                        )
+                    }
+                )
+            } else {
+                addView(
+                    moe.codeest.enviews.ENPlayView(ctx).apply {
+                        id = R.id.start
+                        layoutParams = android.widget.RelativeLayout.LayoutParams(dp(60f), dp(60f)).apply {
+                            addRule(android.widget.RelativeLayout.CENTER_HORIZONTAL)
+                            addRule(android.widget.RelativeLayout.CENTER_VERTICAL)
+                        }
+                    }
+                )
+            }
+            addView(
+                android.widget.RelativeLayout(ctx).apply {
+                    id = R.id.preview_layout
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        ctx.resources.getDimensionPixelSize(com.shuyu.gsyvideoplayer.R.dimen.seek_bar_image),
+                        dp(100f)
+                    ).apply {
+                        addRule(android.widget.RelativeLayout.ABOVE, R.id.layout_bottom)
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)
+                        bottomMargin = dp(30f)
+                    }
+                    visibility = View.GONE
+                }
+            )
+            addView(
+                TextView(ctx).apply {
+                    id = R.id.tip_view
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP)
+                        addRule(android.widget.RelativeLayout.CENTER_IN_PARENT)
+                        topMargin = dp(50f)
+                    }
+                    alpha = 0f
+                    setBackgroundResource(R.drawable.bg_fillet_btn)
+                    elevation = dp(4f).toFloat()
+                    gravity = android.view.Gravity.CENTER
+                    val pad12 = dp(12f)
+                    setPadding(pad12, pad12, pad12, pad12)
+                    setTextColor(android.graphics.Color.WHITE)
+                    visibility = View.INVISIBLE
+                }
+            )
+        }
+        addView(root)
     }
+
+    override fun getLayoutId(): Int = 0
 
     override fun getFullWindowPlayer(): VideoPlayer? {
         val activity = CommonUtil.scanForActivity(context) ?: return null

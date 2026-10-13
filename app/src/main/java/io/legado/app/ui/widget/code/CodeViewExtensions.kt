@@ -34,5 +34,15 @@ fun CodeView.addJsPattern() {
 }
 
 fun Context.arrayAdapter(keywords: Array<String>): ArrayAdapter<String> {
-    return ArrayAdapter(this, R.layout.item_1line_text_and_del, R.id.text_view, keywords)
+    return object : ArrayAdapter<String>(this, 0, keywords) {
+        override fun getView(
+            position: Int,
+            convertView: android.view.View?,
+            parent: android.view.ViewGroup
+        ): android.view.View {
+            val view = convertView ?: io.legado.app.ui.widget.text.create1LineTextAndDelView(context)
+            view.findViewById<android.widget.TextView>(R.id.text_view).text = getItem(position)
+            return view
+        }
+    }
 }

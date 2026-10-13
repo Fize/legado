@@ -7,6 +7,7 @@ import android.content.Context
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageButton
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
@@ -17,6 +18,7 @@ import io.legado.app.R
 import io.legado.app.constant.Theme
 import io.legado.app.lib.theme.getToolbarTextColor
 import io.legado.app.lib.theme.primaryTextColor
+import splitties.init.appCtx
 import java.lang.reflect.Method
 
 @SuppressLint("RestrictedApi")
@@ -79,7 +81,14 @@ fun Menu.applyOpenTint(context: Context, showIcon: Boolean = true) {
 
 fun Menu.iconItemOnLongClick(id: Int, function: (view: View) -> Unit) {
     findItem(id)?.let { item ->
-        item.setActionView(R.layout.view_action_button)
+        val context = (this as? MenuBuilder)?.context ?: appCtx
+        item.actionView = ImageButton(context, null, android.R.attr.actionButtonStyle).apply {
+            this.id = R.id.item
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
         item.actionView?.run {
             contentDescription = item.title
             findViewById<ImageButton>(R.id.item).setImageDrawable(item.icon)

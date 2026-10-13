@@ -197,4 +197,60 @@
     <item name="menu_reader_more" type="id" />
     <item name="menu_reader_all_features" type="id" />
 
+    <item name="edit_view_c" type="id" />
+    <item name="edit_view" type="id" />
+    <item name="iv_delete" type="id" />
+    <item name="item" type="id" />
+    <item name="tv_seek_title" type="id" />
+    <item name="iv_seek_reduce" type="id" />
+    <item name="seek_bar" type="id" />
+    <item name="iv_seek_plus" type="id" />
+    <item name="tv_seek_value" type="id" />
+    <item name="error_view_stub" type="id" />
+    <item name="progress_view_stub" type="id" />
+    <item name="iv_error_image" type="id" />
+    <item name="tv_error_message" type="id" />
+    <item name="btn_error_retry" type="id" />
+    <item name="fastscroll_bubble" type="id" />
+    <item name="fastscroll_scrollbar" type="id" />
+    <item name="fastscroll_track" type="id" />
+    <item name="fastscroll_handle" type="id" />
+    <item name="loading_progress" type="id" />
+    <item name="tv_loading_message" type="id" />
+    <item name="cb_selected_all" type="id" />
+    <item name="btn_revert_selection" type="id" />
+    <item name="btn_select_action_main" type="id" />
+    <item name="toolbar" type="id" />
+    <item name="cv_toast" type="id" />
+    <item name="tv_text" type="id" />
+    <item name="floatingPlayerView" type="id" />
+    <item name="listCount" type="id" />
+    <item name="switch_dialog_list" type="id" />
+    <item name="text1" type="id" />
+    <item name="surface_container" type="id" />
+    <item name="danmaku_view" type="id" />
+    <item name="thumb" type="id" />
+    <item name="layout_bottom" type="id" />
+    <item name="current" type="id" />
+    <item name="progress" type="id" />
+    <item name="total" type="id" />
+    <item name="toggle_danmaku" type="id" />
+    <item name="fullscreen" type="id" />
+    <item name="bottom_progressbar" type="id" />
+    <item name="back_tiny" type="id" />
+    <item name="loading" type="id" />
+    <item name="start" type="id" />
+    <item name="preview_layout" type="id" />
+    <item name="tip_view" type="id" />
+    <item name="sprit" type="id" />
+    <item name="next" type="id" />
+    <item name="episode_list" type="id" />
+    <item name="playback_speed" type="id" />
+    <item name="small_close" type="id" />
+    <item name="lock_screen" type="id" />
+    <item name="layout_top" type="id" />
+    <item name="back" type="id" />
+    <item name="title" type="id" />
+    <item name="fullscreenB" type="id" />
+
 </resources>

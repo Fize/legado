@@ -496,13 +496,60 @@ class FastScroller : LinearLayout {
     }
 
     private fun layout(context: Context, attrs: AttributeSet?) {
-        View.inflate(context, R.layout.view_fastscroller, this)
         clipChildren = false
         orientation = HORIZONTAL
-        mBubbleView = findViewById(R.id.fastscroll_bubble)
-        mHandleView = findViewById(R.id.fastscroll_handle)
-        mTrackView = findViewById(R.id.fastscroll_track)
-        mScrollbar = findViewById(R.id.fastscroll_scrollbar)
+        mBubbleView = android.widget.TextView(context).apply {
+            id = R.id.fastscroll_bubble
+            layoutParams = LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.END
+            }
+            gravity = android.view.Gravity.CENTER
+            maxLines = 1
+            setTextSize(
+                android.util.TypedValue.COMPLEX_UNIT_PX,
+                resources.getDimension(R.dimen.fastscroll_bubble_textsize)
+            )
+            visibility = View.GONE
+        }
+        mTrackView = android.widget.ImageView(context).apply {
+            id = R.id.fastscroll_track
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+            }
+        }
+        mHandleView = android.widget.ImageView(context).apply {
+            id = R.id.fastscroll_handle
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+            }
+            setPaddingRelative(
+                resources.getDimensionPixelSize(R.dimen.fastscroll_scrollbar_padding_start),
+                0,
+                resources.getDimensionPixelSize(R.dimen.fastscroll_scrollbar_padding_end),
+                0
+            )
+        }
+        mScrollbar = android.widget.FrameLayout(context).apply {
+            id = R.id.fastscroll_scrollbar
+            layoutParams = LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            visibility = View.GONE
+            addView(mTrackView)
+            addView(mHandleView)
+        }
+        addView(mBubbleView)
+        addView(mScrollbar)
         @ColorInt var bubbleColor = ColorUtils.adjustAlpha(context.accentColor, 0.8f)
         @ColorInt var handleColor = context.accentColor
         @ColorInt var trackColor = context.getCompatColor(R.color.transparent30)

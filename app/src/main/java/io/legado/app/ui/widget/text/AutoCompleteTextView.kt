@@ -77,8 +77,7 @@ class AutoCompleteTextView @JvmOverloads constructor(
         ArrayAdapter<String>(context, android.R.layout.simple_dropdown_item_1line, values) {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val view = convertView ?: LayoutInflater.from(context)
-                .inflate(R.layout.item_1line_text_and_del, parent, false)
+            val view = convertView ?: create1LineTextAndDelView(context)
             val textView = view.findViewById<TextView>(R.id.text_view)
             textView.text = getItem(position)
             val ivDelete = view.findViewById<ImageView>(R.id.iv_delete)
@@ -94,4 +93,41 @@ class AutoCompleteTextView @JvmOverloads constructor(
         }
     }
 
+}
+
+fun create1LineTextAndDelView(context: Context): View {
+    val pad = (6 * context.resources.displayMetrics.density).toInt()
+    val iconSize = (24 * context.resources.displayMetrics.density).toInt()
+    val primaryColor = androidx.core.content.ContextCompat.getColor(context, R.color.primaryText)
+    return android.widget.LinearLayout(context).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        gravity = android.view.Gravity.CENTER_VERTICAL
+        orientation = android.widget.LinearLayout.HORIZONTAL
+        setPadding(pad, pad, pad, pad)
+        addView(
+            TextView(context).apply {
+                id = R.id.text_view
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+                isSingleLine = true
+                setTextColor(primaryColor)
+            }
+        )
+        addView(
+            ImageView(context).apply {
+                id = R.id.iv_delete
+                layoutParams = android.widget.LinearLayout.LayoutParams(iconSize, iconSize)
+                contentDescription = context.getString(R.string.delete)
+                setImageResource(R.drawable.ic_clear_all)
+                visibility = View.GONE
+                setColorFilter(primaryColor)
+            }
+        )
+    }
 }

@@ -6,7 +6,10 @@ import com.google.android.material.textfield.TextInputLayout
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.ThemeStore
 
-class TextInputLayout(context: Context, attrs: AttributeSet?) : TextInputLayout(context, attrs) {
+class TextInputLayout @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) : TextInputLayout(context, attrs) {
 
     init {
         if (!isInEditMode) {

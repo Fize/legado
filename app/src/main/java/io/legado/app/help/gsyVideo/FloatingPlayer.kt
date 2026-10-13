@@ -39,8 +39,90 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         fullscreenB = findViewById(R.id.fullscreenB)
     }
 
+    override fun initInflate(context: Context?) {
+        val ctx = context ?: this.context
+        val d = ctx.resources.displayMetrics.density
+        fun dp(v: Float) = (v * d).toInt().coerceAtLeast(1)
+        val root = android.widget.RelativeLayout(ctx).apply {
+            layoutParams = LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundResource(R.drawable.floating_rounded_background)
+            clipChildren = true
+            clipToOutline = true
+            clipToPadding = true
+            addView(
+                android.widget.FrameLayout(ctx).apply {
+                    id = R.id.surface_container
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                }
+            )
+            addView(
+                android.widget.LinearLayout(ctx).apply {
+                    id = R.id.layout_top
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(48f)
+                    )
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    addView(
+                        ImageView(ctx).apply {
+                            id = R.id.back
+                            layoutParams = android.widget.LinearLayout.LayoutParams(dp(36f), dp(36f))
+                            setPaddingRelative(dp(6f), 0, 0, 0)
+                            scaleType = ImageView.ScaleType.CENTER_INSIDE
+                            setImageResource(R.drawable.ic_close_with__shadow)
+                        }
+                    )
+                    addView(
+                        android.widget.Space(ctx).apply {
+                            layoutParams = android.widget.LinearLayout.LayoutParams(0, dp(1f), 1f)
+                        }
+                    )
+                    addView(
+                        ImageView(ctx).apply {
+                            id = R.id.fullscreenB
+                            layoutParams = android.widget.LinearLayout.LayoutParams(dp(36f), dp(36f))
+                            setPaddingRelative(0, 0, dp(10f), 0)
+                            scaleType = ImageView.ScaleType.CENTER
+                            setImageResource(R.drawable.ic_fullscreen)
+                        }
+                    )
+                }
+            )
+            addView(
+                moe.codeest.enviews.ENPlayView(ctx).apply {
+                    id = R.id.start
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(dp(35f), dp(35f)).apply {
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)
+                        addRule(android.widget.RelativeLayout.CENTER_HORIZONTAL)
+                        bottomMargin = dp(20f)
+                    }
+                }
+            )
+            addView(
+                android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    id = R.id.bottom_progressbar
+                    layoutParams = android.widget.RelativeLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(1.5f)
+                    ).apply {
+                        addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)
+                    }
+                    max = 100
+                    progressDrawable = androidx.core.content.ContextCompat.getDrawable(ctx, com.shuyu.gsyvideoplayer.R.drawable.video_progress)
+                }
+            )
+        }
+        addView(root)
+    }
+
     override fun getLayoutId(): Int {
-        return R.layout.video_layout_floating
+        return 0
     }
 
 

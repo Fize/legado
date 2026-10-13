@@ -13,8 +13,11 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
 
-class AccentStrokeTextView(context: Context, attrs: AttributeSet) :
-    AppCompatTextView(context, attrs) {
+class AccentStrokeTextView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defaultIsBottomBackground: Boolean = false
+) : AppCompatTextView(context, attrs) {
 
     private var radius = 3.dpToPx()
     private val isBottomBackground: Boolean
@@ -23,7 +26,7 @@ class AccentStrokeTextView(context: Context, attrs: AttributeSet) :
         val typedArray = context.obtainStyledAttributes(attrs, R.styleable.AccentStrokeTextView)
         radius = typedArray.getDimensionPixelOffset(R.styleable.StrokeTextView_radius, radius)
         isBottomBackground =
-            typedArray.getBoolean(R.styleable.StrokeTextView_isBottomBackground, false)
+            typedArray.getBoolean(R.styleable.StrokeTextView_isBottomBackground, defaultIsBottomBackground)
         typedArray.recycle()
         upStyle()
     }
