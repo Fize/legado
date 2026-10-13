@@ -3,25 +3,28 @@ package io.legado.app.ui.widget
 import android.content.Context
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.PopupWindow
+import android.widget.TextView
+import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewbinding.ViewBinding
 import com.google.android.flexbox.FlexDirection
 import com.google.android.flexbox.FlexWrap
 import com.google.android.flexbox.FlexboxLayoutManager
 import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.databinding.ItemPopupActionBinding
-import io.legado.app.databinding.PopupActionBinding
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.theme.secondaryDisabledTextColor
 import io.legado.app.utils.applyMd3PopupStyle
@@ -29,12 +32,90 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.resolveDropDownYOffset
 import io.legado.app.utils.setTintMutate
-import splitties.systemservices.layoutInflater
 
 class PopupAction(private val context: Context) :
     PopupWindow(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {
 
-    val binding = PopupActionBinding.inflate(context.layoutInflater)
+    class PopupActionViewHolder(context: Context) : ViewBinding {
+        val recyclerView = RecyclerView(context).apply {
+            id = R.id.recycler_view
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            layoutManager = FlexboxLayoutManager(context).apply {
+                flexDirection = FlexDirection.ROW
+                flexWrap = FlexWrap.WRAP
+            }
+        }
+        val root = LinearLayout(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.shape_card_view)
+            val pad = 5.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            addView(recyclerView)
+        }
+
+        override fun getRoot(): View = root
+    }
+
+    class ItemPopupActionViewHolder(context: Context) : ViewBinding {
+        val ivIcon = AppCompatImageView(context).apply {
+            id = R.id.iv_icon
+            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
+                marginEnd = 12.dpToPx()
+            }
+            visibility = View.GONE
+        }
+        val textView = TextView(context).apply {
+            id = R.id.text_view
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            val value = TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, value, true)
+            setBackgroundResource(value.resourceId)
+            isDuplicateParentStateEnabled = true
+            ellipsize = TextUtils.TruncateAt.END
+            maxLines = 1
+            val pad = 5.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            setTextColor(context.getCompatColor(R.color.primaryText))
+            textSize = 14f
+        }
+        val ivCheckEnd = AppCompatImageView(context).apply {
+            id = R.id.iv_check_end
+            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
+                marginStart = 8.dpToPx()
+            }
+            setImageResource(R.drawable.ic_check)
+            visibility = View.GONE
+        }
+        val root = LinearLayout(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            isClickable = true
+            isFocusable = true
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            addView(ivIcon)
+            addView(textView)
+            addView(ivCheckEnd)
+        }
+
+        override fun getRoot(): View = root
+    }
+
+    val binding = PopupActionViewHolder(context)
     val adapter by lazy {
         Adapter(context).apply {
             setHasStableIds(true)
@@ -48,7 +129,7 @@ class PopupAction(private val context: Context) :
     private var reserveIconColumn = false
     private var reserveCheckColumn = false
     private val measureRow by lazy {
-        ItemPopupActionBinding.inflate(context.layoutInflater).apply {
+        ItemPopupActionViewHolder(context).apply {
             textView.setPadding(0, 0, 0, 0)
             textView.minWidth = 0
             textView.minHeight = 0
@@ -172,19 +253,19 @@ class PopupAction(private val context: Context) :
     )
 
     inner class Adapter(context: Context) :
-        RecyclerAdapter<PopupActionItem, ItemPopupActionBinding>(context) {
+        RecyclerAdapter<PopupActionItem, ItemPopupActionViewHolder>(context) {
 
         override fun getItemId(position: Int): Long {
             return position.toLong()
         }
 
-        override fun getViewBinding(parent: ViewGroup): ItemPopupActionBinding {
-            return ItemPopupActionBinding.inflate(inflater, parent, false)
+        override fun getViewBinding(parent: ViewGroup): ItemPopupActionViewHolder {
+            return ItemPopupActionViewHolder(context)
         }
 
         override fun convert(
             holder: ItemViewHolder,
-            binding: ItemPopupActionBinding,
+            binding: ItemPopupActionViewHolder,
             item: PopupActionItem,
             payloads: MutableList<Any>
         ) {
@@ -299,7 +380,7 @@ class PopupAction(private val context: Context) :
             }
         }
 
-        override fun registerListener(holder: ItemViewHolder, binding: ItemPopupActionBinding) {
+        override fun registerListener(holder: ItemViewHolder, binding: ItemPopupActionViewHolder) {
             holder.itemView.setOnClickListener {
                 getItem(holder.layoutPosition)?.takeIf(::isItemEnabled)?.let { item ->
                     onActionClick?.invoke(item.value)

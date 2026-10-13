@@ -39,7 +39,8 @@ import splitties.views.topPadding
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 class TitleBar @JvmOverloads constructor(
     context: Context,
-    attrs: AttributeSet? = null
+    attrs: AttributeSet? = null,
+    defaultOpaque: Boolean = false
 ) : AppBarLayout(context, attrs) {
 
     val toolbar: Toolbar
@@ -85,7 +86,7 @@ class TitleBar @JvmOverloads constructor(
         displayHomeAsUp = a.getBoolean(R.styleable.TitleBar_displayHomeAsUp, true)
         fitStatusBar = a.getBoolean(R.styleable.TitleBar_fitStatusBar, true)
         fitNavigationBar = a.getBoolean(R.styleable.TitleBar_fitNavigationBar, false)
-        opaque = a.getBoolean(R.styleable.TitleBar_opaque, false)
+        opaque = a.getBoolean(R.styleable.TitleBar_opaque, defaultOpaque)
         val themeMode = a.getInt(R.styleable.TitleBar_themeMode, 0)
         automaticForeground = themeMode == 0 && !opaque
 

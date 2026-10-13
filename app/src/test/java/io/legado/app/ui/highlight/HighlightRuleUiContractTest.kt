@@ -13,13 +13,12 @@ class HighlightRuleUiContractTest {
     @Test
     fun `rule manager is registered and reachable from reading`() {
         val manifest = projectFile("src/main/AndroidManifest.xml").readText()
-        val readMenu = parseXml("src/main/res/menu/book_read.xml")
         val activity = projectFile(
             "src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
         ).readText()
 
         assertTrue(manifest.contains(".ui.highlight.HighlightRuleActivity"))
-        assertEquals(1, readMenu.elementsWithAndroidId("@+id/menu_highlight_rule"))
+        assertTrue(activity.contains("menu.add(Menu.NONE, R.id.menu_highlight_rule, Menu.NONE, R.string.highlight_rule)"))
         assertTrue(activity.contains("R.id.menu_highlight_rule -> startActivity<HighlightRuleActivity>()"))
     }
 

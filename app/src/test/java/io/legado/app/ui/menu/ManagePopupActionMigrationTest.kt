@@ -11,7 +11,6 @@ class ManagePopupActionMigrationTest {
     fun `shared popup adds vertical danger styling without losing existing behavior`() {
         val popup = readProjectFile("src/main/java/io/legado/app/ui/widget/PopupAction.kt")
         val builder = readProjectFile("src/main/java/io/legado/app/ui/widget/PopupActionMenu.kt")
-        val row = readProjectFile("src/main/res/layout/item_popup_action.xml")
 
         listOf(
             "applyMd3PopupStyle()",
@@ -30,15 +29,12 @@ class ManagePopupActionMigrationTest {
             "AccessibilityNodeInfoCompat.CHECKED_STATE_TRUE",
             "AccessibilityNodeInfoCompat.CHECKED_STATE_FALSE",
             "imageView.visibility = View.INVISIBLE",
-            "takeIf(::isItemEnabled)"
+            "takeIf(::isItemEnabled)",
+            "R.id.iv_icon",
+            "R.id.text_view",
+            "R.id.iv_check_end",
+            "isDuplicateParentStateEnabled = true"
         ).forEach { expected -> assertContains("PopupAction.kt", popup, expected) }
-        listOf(
-            "@+id/iv_icon",
-            "@+id/text_view",
-            "@+id/iv_check_end",
-            "android:duplicateParentState=\"true\""
-        ).forEach { expected -> assertContains("item_popup_action.xml", row, expected) }
-        assertFalse(row.contains("app:tint="))
 
         listOf(
             "setVertical(true)",

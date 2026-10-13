@@ -2,9 +2,12 @@ package io.legado.app.ui.book.read.page
 
 import android.content.Context
 import android.graphics.drawable.LayerDrawable
-import android.view.LayoutInflater
+import android.text.TextUtils
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
@@ -18,7 +21,6 @@ import io.legado.app.R
 import io.legado.app.constant.AppConst.timeFormat
 import io.legado.app.data.entities.BookHighlight
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.databinding.ViewBookPageBinding
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
@@ -55,7 +57,215 @@ internal object BookmarkIndicatorGeometry {
  */
 class PageView(context: Context) : FrameLayout(context) {
 
-    private val binding = ViewBookPageBinding.inflate(LayoutInflater.from(context), this, true)
+    class ViewBookPageViewHolder(context: Context, parent: ViewGroup) {
+        val vwStatusBar = FrameLayout(context).apply {
+            id = R.id.vw_status_bar
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val tvHeaderLeft = BatteryView(context).apply {
+            id = R.id.tv_header_left
+            ellipsize = TextUtils.TruncateAt.END
+            isSingleLine = true
+            textSize = 12f
+            layoutParams = ConstraintLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                horizontalWeight = 1f
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                rightToLeft = R.id.tv_header_right
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val tvHeaderMiddle = BatteryView(context).apply {
+            id = R.id.tv_header_middle
+            ellipsize = TextUtils.TruncateAt.END
+            isSingleLine = true
+            textSize = 12f
+            visibility = View.GONE
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val tvHeaderRight = BatteryView(context).apply {
+            id = R.id.tv_header_right
+            ellipsize = TextUtils.TruncateAt.END
+            isSingleLine = true
+            textSize = 12f
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = 3.dpToPx()
+                rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val llHeader = ConstraintLayout(context).apply {
+            id = R.id.ll_header
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topToBottom = R.id.vw_status_bar
+            }
+            addView(tvHeaderLeft)
+            addView(tvHeaderMiddle)
+            addView(tvHeaderRight)
+        }
+        val vwTopDivider = View(context).apply {
+            id = R.id.vw_top_divider
+            setBackgroundResource(R.color.divider)
+            visibility = View.INVISIBLE
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (0.5f.dpToPx()).toInt().coerceAtLeast(1)
+            ).apply {
+                topToBottom = R.id.ll_header
+            }
+        }
+        val contentTextView = ContentTextView(context, null).apply {
+            id = R.id.content_text_view
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0
+            ).apply {
+                topToBottom = R.id.vw_top_divider
+                bottomToTop = R.id.vw_bottom_divider
+            }
+        }
+        val vwBottomDivider = View(context).apply {
+            id = R.id.vw_bottom_divider
+            setBackgroundResource(R.color.divider)
+            visibility = View.INVISIBLE
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (0.5f.dpToPx()).toInt().coerceAtLeast(1)
+            ).apply {
+                bottomToTop = R.id.ll_footer
+            }
+        }
+        val tvFooterLeft = BatteryView(context).apply {
+            id = R.id.tv_footer_left
+            ellipsize = TextUtils.TruncateAt.END
+            isSingleLine = true
+            textSize = 12f
+            layoutParams = ConstraintLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                horizontalWeight = 1f
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                rightToLeft = R.id.tv_footer_right
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val tvFooterMiddle = BatteryView(context).apply {
+            id = R.id.tv_footer_middle
+            ellipsize = TextUtils.TruncateAt.END
+            isSingleLine = true
+            textSize = 12f
+            visibility = View.GONE
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val tvFooterRight = BatteryView(context).apply {
+            id = R.id.tv_footer_right
+            ellipsize = TextUtils.TruncateAt.END
+            isSingleLine = true
+            textSize = 12f
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = 3.dpToPx()
+                rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val llFooter = ConstraintLayout(context).apply {
+            id = R.id.ll_footer
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomToTop = R.id.vw_navigation_bar
+            }
+            addView(tvFooterLeft)
+            addView(tvFooterMiddle)
+            addView(tvFooterRight)
+        }
+        val vwNavigationBar = FrameLayout(context).apply {
+            id = R.id.vw_navigation_bar
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val pageBookmarkIndicator = ImageView(context).apply {
+            id = R.id.page_bookmark_indicator
+            alpha = 0.88f
+            contentDescription = context.getString(R.string.bookmark)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            val pad = 4.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            setImageResource(R.drawable.ic_bookmark_filled)
+            visibility = View.GONE
+            layoutParams = ConstraintLayout.LayoutParams(
+                32.dpToPx(),
+                32.dpToPx()
+            ).apply {
+                rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val vwRoot = ConstraintLayout(context).apply {
+            id = R.id.vw_root
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundResource(R.color.background)
+            addView(vwStatusBar)
+            addView(llHeader)
+            addView(vwTopDivider)
+            addView(contentTextView)
+            addView(vwBottomDivider)
+            addView(llFooter)
+            addView(vwNavigationBar)
+            addView(pageBookmarkIndicator)
+        }
+
+        init {
+            parent.addView(vwRoot)
+        }
+    }
+
+    private val binding = ViewBookPageViewHolder(context, this)
     private val readBookActivity get() = activity as? ReadBookActivity
     private var battery = 100
     private var readerInfoValues = ReaderInfoValues(battery = 100)

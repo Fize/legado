@@ -25,20 +25,19 @@ class ReadAloudFloatingBarTest {
 
     @Test
     fun `floating actions and host include remain wired`() {
-        val layout = projectFile("src/main/res/layout/view_read_aloud_float_bar.xml").readText()
-        val host = projectFile("src/main/res/layout/activity_book_read.xml").readText()
+        val controls = projectFile("src/main/java/io/legado/app/ui/book/read/ReadAloudControls.kt").readText()
+        val host = projectFile("src/main/java/io/legado/app/ui/book/read/BaseReadBookActivity.kt").readText()
         val activity = projectFile(
             "src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
         ).readText()
 
-        assertTrue(layout.contains("@+id/ll_back_to_speech"))
-        assertTrue(layout.contains("@+id/ll_read_from_here"))
-        assertTrue(layout.contains("android:layout_width=\"match_parent\""))
-        assertTrue(layout.contains("android:maxLines=\"2\""))
-        assertTrue(host.contains("@layout/view_read_aloud_float_bar"))
+        assertTrue(controls.contains("R.id.ll_back_to_speech"))
+        assertTrue(controls.contains("R.id.ll_read_from_here"))
+        assertTrue(controls.contains("ViewGroup.LayoutParams.MATCH_PARENT"))
+        assertTrue(controls.contains("maxLines = 2"))
+        assertTrue(host.contains("ReadAloudFloatBarViewHolder"))
         assertTrue(activity.contains("backToSpeakingPosition()"))
         assertTrue(activity.contains("ReadBook.readAloud()"))
-        val controls = projectFile("src/main/java/io/legado/app/ui/book/read/ReadAloudControls.kt").readText()
         assertTrue(controls.contains("ReadAloudBarVisibility.shouldShow"))
     }
 

@@ -4,13 +4,21 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.PorterDuff
+import android.text.TextUtils
 import android.util.AttributeSet
-import android.view.LayoutInflater
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import android.view.animation.Animation
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.isVisible
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import io.legado.app.R
-import io.legado.app.databinding.ViewSearchMenuBinding
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
@@ -19,6 +27,7 @@ import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.invisible
 import io.legado.app.utils.loadAnimation
 import io.legado.app.utils.visible
@@ -30,8 +39,282 @@ class SearchMenu @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : FrameLayout(context, attrs) {
 
+    class ViewSearchMenuViewHolder(context: Context, parent: ViewGroup) {
+        private val borderlessBgResId: Int = TypedValue().let {
+            context.theme.resolveAttribute(
+                android.R.attr.selectableItemBackgroundBorderless,
+                it,
+                true
+            )
+            it.resourceId
+        }
+
+        val vwMenuBg = View(context).apply {
+            id = R.id.vw_menu_bg
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            contentDescription = context.getString(R.string.content)
+        }
+        val fabLeft = FloatingActionButton(context).apply {
+            id = R.id.fabLeft
+            size = FloatingActionButton.SIZE_MINI
+            contentDescription = "上个结果"
+            rotation = 180f
+            setImageResource(R.drawable.ic_arrow_right)
+            compatElevation = 2f.dpToPx()
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                val m = 16.dpToPx()
+                setMargins(m, m, m, m)
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val fabRight = FloatingActionButton(context).apply {
+            id = R.id.fabRight
+            size = FloatingActionButton.SIZE_MINI
+            contentDescription = "下个结果"
+            setImageResource(R.drawable.ic_arrow_right)
+            compatElevation = 2f.dpToPx()
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                val m = 16.dpToPx()
+                setMargins(m, m, m, m)
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val ivSearchContentUp = AppCompatImageView(context).apply {
+            id = R.id.iv_search_content_up
+            layoutParams = LinearLayout.LayoutParams(
+                36.dpToPx(),
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundResource(borderlessBgResId)
+            contentDescription = context.getString(R.string.go_to_top)
+            setImageResource(R.drawable.ic_arrow_drop_up)
+        }
+        val ivSearchContentDown = AppCompatImageView(context).apply {
+            id = R.id.iv_search_content_down
+            layoutParams = LinearLayout.LayoutParams(
+                36.dpToPx(),
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundResource(borderlessBgResId)
+            contentDescription = context.getString(R.string.go_to_bottom)
+            setImageResource(R.drawable.ic_arrow_drop_down)
+        }
+        val tvCurrentSearchInfo = TextView(context).apply {
+            id = R.id.tv_current_search_info
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                1f
+            )
+            setBackgroundResource(borderlessBgResId)
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
+            isSingleLine = true
+            textSize = 12f
+        }
+        val llSearchBaseInfo = LinearLayout(context).apply {
+            id = R.id.ll_search_base_info
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                36.dpToPx()
+            )
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
+            addView(ivSearchContentUp)
+            addView(ivSearchContentDown)
+            addView(tvCurrentSearchInfo)
+        }
+        val ivSearchResults = AppCompatImageView(context).apply {
+            id = R.id.iv_search_results
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            adjustViewBounds = true
+            contentDescription = "结果"
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_toc)
+        }
+        val tvSearchResults = TextView(context).apply {
+            id = R.id.tv_search_results
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            maxLines = 1
+            text = "结果"
+            textSize = 12f
+        }
+        val llSearchResults = LinearLayout(context).apply {
+            id = R.id.ll_search_results
+            layoutParams = LinearLayout.LayoutParams(
+                60.dpToPx(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = "结果"
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            addView(ivSearchResults)
+            addView(tvSearchResults)
+        }
+        val ivMainMenu = AppCompatImageView(context).apply {
+            id = R.id.iv_main_menu
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            adjustViewBounds = true
+            contentDescription = context.getString(R.string.main_menu)
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_menu)
+        }
+        val tvMainMenu = TextView(context).apply {
+            id = R.id.tv_main_menu
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            maxLines = 1
+            text = context.getString(R.string.main_menu)
+            textSize = 12f
+        }
+        val llMainMenu = LinearLayout(context).apply {
+            id = R.id.ll_main_menu
+            layoutParams = LinearLayout.LayoutParams(
+                60.dpToPx(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = context.getString(R.string.main_menu)
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            addView(ivMainMenu)
+            addView(tvMainMenu)
+        }
+        val ivSearchExit = AppCompatImageView(context).apply {
+            id = R.id.iv_search_exit
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            adjustViewBounds = true
+            contentDescription = "退出"
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_auto_page_stop)
+        }
+        val tvSearchExit = TextView(context).apply {
+            id = R.id.tv_search_exit
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            maxLines = 1
+            text = "退出"
+            textSize = 12f
+        }
+        val llSearchExit = LinearLayout(context).apply {
+            id = R.id.ll_search_exit
+            layoutParams = LinearLayout.LayoutParams(
+                60.dpToPx(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = "退出"
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            addView(ivSearchExit)
+            addView(tvSearchExit)
+        }
+        val llBottomBg = LinearLayout(context).apply {
+            id = R.id.ll_bottom_bg
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            isBaselineAligned = false
+            orientation = LinearLayout.HORIZONTAL
+            addView(View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            })
+            addView(llSearchResults)
+            addView(View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
+            })
+            addView(llMainMenu)
+            addView(View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
+            })
+            addView(llSearchExit)
+            addView(View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            })
+        }
+        val llBottomMenu = LinearLayout(context).apply {
+            id = R.id.ll_bottom_menu
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+            orientation = LinearLayout.VERTICAL
+            addView(llSearchBaseInfo)
+            addView(llBottomBg)
+        }
+        val root = ConstraintLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            addView(vwMenuBg)
+            addView(fabLeft)
+            addView(fabRight)
+            addView(llBottomMenu)
+        }
+
+        init {
+            parent.addView(root)
+        }
+    }
+
     private val callBack: CallBack get() = activity as CallBack
-    private val binding = ViewSearchMenuBinding.inflate(LayoutInflater.from(context), this, true)
+    private val binding = ViewSearchMenuViewHolder(context, this)
 
     private val menuBottomIn: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_in)
     private val menuBottomOut: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_out)

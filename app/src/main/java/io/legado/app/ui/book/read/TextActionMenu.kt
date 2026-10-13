@@ -7,24 +7,33 @@ import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Build
+import android.text.TextUtils
+import android.util.TypedValue
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.PopupWindow
+import android.widget.TextView
 import androidx.annotation.RequiresApi
-import androidx.appcompat.view.SupportMenuInflater
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
+import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewbinding.ViewBinding
+import com.google.android.flexbox.FlexDirection
+import com.google.android.flexbox.FlexWrap
+import com.google.android.flexbox.FlexboxLayoutManager
 import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ItemTextBinding
-import io.legado.app.databinding.PopupActionMenuBinding
 import io.legado.app.help.config.AppConfig
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.printOnDebug
@@ -37,7 +46,97 @@ import io.legado.app.utils.visible
 class TextActionMenu(private val context: Context, private val callBack: CallBack) :
     PopupWindow(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {
 
-    private val binding = PopupActionMenuBinding.inflate(LayoutInflater.from(context))
+    class PopupActionMenuViewHolder(context: Context) : ViewBinding {
+        val recyclerView = RecyclerView(context).apply {
+            id = R.id.recycler_view
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            layoutManager = FlexboxLayoutManager(context).apply {
+                flexDirection = FlexDirection.ROW
+                flexWrap = FlexWrap.WRAP
+            }
+        }
+        val ivMenuMore = AppCompatImageView(context).apply {
+            id = R.id.iv_menu_more
+            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx())
+            val value = TypedValue()
+            context.theme.resolveAttribute(
+                androidx.appcompat.R.attr.selectableItemBackgroundBorderless,
+                value,
+                true
+            )
+            setBackgroundResource(value.resourceId)
+            contentDescription = context.getString(R.string.more_menu)
+            setImageResource(R.drawable.ic_more_vert)
+            setColorFilter(context.getCompatColor(R.color.primaryText))
+            visibility = View.GONE
+        }
+        val recyclerViewMore = RecyclerView(context).apply {
+            id = R.id.recycler_view_more
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            layoutManager = LinearLayoutManager(context)
+            visibility = View.GONE
+        }
+        val root = LinearLayout(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(R.drawable.shape_card_view)
+            orientation = LinearLayout.VERTICAL
+            val pad = 5.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            addView(
+                LinearLayout(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                    gravity = Gravity.CENTER_VERTICAL
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(recyclerView)
+                    addView(ivMenuMore)
+                }
+            )
+            addView(recyclerViewMore)
+        }
+
+        override fun getRoot(): View = root
+    }
+
+    class ItemTextViewHolder(context: Context) : ViewBinding {
+        val textView = TextView(context).apply {
+            id = R.id.text_view
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            val value = TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, value, true)
+            setBackgroundResource(value.resourceId)
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+            val pad = 5.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            maxLines = 1
+            setTextColor(context.getCompatColor(R.color.primaryText))
+            textSize = 14f
+        }
+        val root = textView
+
+        override fun getRoot(): View = root
+    }
+
+    private val binding = PopupActionMenuViewHolder(context)
     private val adapter = Adapter(context).apply {
         setHasStableIds(true)
     }
@@ -55,7 +154,15 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
 
         val myMenu = MenuBuilder(context)
         val otherMenu = MenuBuilder(context)
-        SupportMenuInflater(context).inflate(R.menu.content_select_action, myMenu)
+        myMenu.add(Menu.NONE, R.id.menu_replace, Menu.NONE, R.string.replace)
+        myMenu.add(Menu.NONE, R.id.menu_copy, Menu.NONE, android.R.string.copy)
+        myMenu.add(Menu.NONE, R.id.menu_bookmark, Menu.NONE, R.string.bookmark)
+        myMenu.add(Menu.NONE, R.id.menu_highlight, Menu.NONE, R.string.highlight)
+        myMenu.add(Menu.NONE, R.id.menu_aloud, Menu.NONE, R.string.read_aloud)
+        myMenu.add(Menu.NONE, R.id.menu_dict, Menu.NONE, R.string.dict)
+        myMenu.add(Menu.NONE, R.id.menu_search_content, Menu.NONE, R.string.search_content)
+        myMenu.add(Menu.NONE, R.id.menu_browser, Menu.NONE, R.string.browser)
+        myMenu.add(Menu.NONE, R.id.menu_share_str, Menu.NONE, R.string.share)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             onInitializeMenu(otherMenu)
         }
@@ -152,19 +259,19 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
     }
 
     inner class Adapter(context: Context) :
-        RecyclerAdapter<MenuItemImpl, ItemTextBinding>(context) {
+        RecyclerAdapter<MenuItemImpl, ItemTextViewHolder>(context) {
 
         override fun getItemId(position: Int): Long {
             return position.toLong()
         }
 
-        override fun getViewBinding(parent: ViewGroup): ItemTextBinding {
-            return ItemTextBinding.inflate(inflater, parent, false)
+        override fun getViewBinding(parent: ViewGroup): ItemTextViewHolder {
+            return ItemTextViewHolder(context)
         }
 
         override fun convert(
             holder: ItemViewHolder,
-            binding: ItemTextBinding,
+            binding: ItemTextViewHolder,
             item: MenuItemImpl,
             payloads: MutableList<Any>
         ) {
@@ -173,7 +280,7 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
             }
         }
 
-        override fun registerListener(holder: ItemViewHolder, binding: ItemTextBinding) {
+        override fun registerListener(holder: ItemViewHolder, binding: ItemTextViewHolder) {
             holder.itemView.setOnClickListener {
                 getItem(holder.layoutPosition)?.let {
                     if (!callBack.onMenuItemSelected(it.itemId)) {

@@ -168,22 +168,17 @@ class PullBookmarkGestureTest {
         assertTrue(styleRefresh.indexOf("readView.upStyle()") <
                 styleRefresh.indexOf("upBookmarkIndicator()"))
 
-        val pageLayout = source("app/src/main/res/layout/view_book_page.xml")
-        val pageOverlayId = "android:id=\"@+id/page_bookmark_indicator\""
-        assertTrue(pageLayout.contains(pageOverlayId))
-        val pageOverlay = pageLayout.substringAfter(pageOverlayId)
-            .substringBefore("/>")
-        assertFalse(pageLayout.contains("android:id=\"@+id/bookmark_indicator\""))
-        assertTrue(pageOverlay.contains("android:layout_width=\"32dp\""))
-        assertTrue(pageOverlay.contains("android:layout_height=\"32dp\""))
-        assertTrue(pageOverlay.contains("android:contentDescription=\"@string/bookmark\""))
-        assertTrue(pageOverlay.contains("android:importantForAccessibility=\"no\""))
-        assertTrue(pageOverlay.contains("android:src=\"@drawable/ic_bookmark_filled\""))
-        assertTrue(pageOverlay.contains("app:layout_constraintTop_toTopOf=\"parent\""))
-        assertTrue(pageOverlay.contains("app:layout_constraintRight_toRightOf=\"parent\""))
+        assertTrue(pageView.contains("id = R.id.page_bookmark_indicator"))
+        assertFalse(pageView.contains("R.id.bookmark_indicator"))
+        assertTrue(pageView.contains("32.dpToPx()"))
+        assertTrue(pageView.contains("contentDescription = context.getString(R.string.bookmark)"))
+        assertTrue(pageView.contains("importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO"))
+        assertTrue(pageView.contains("setImageResource(R.drawable.ic_bookmark_filled)"))
+        assertTrue(pageView.contains("topToTop = ConstraintLayout.LayoutParams.PARENT_ID"))
+        assertTrue(pageView.contains("rightToRight = ConstraintLayout.LayoutParams.PARENT_ID"))
 
-        val activityLayout = source("app/src/main/res/layout/activity_book_read.xml")
-        assertFalse(activityLayout.contains("android:id=\"@+id/bookmark_indicator\""))
+        val baseActivity = source("app/src/main/java/io/legado/app/ui/book/read/BaseReadBookActivity.kt")
+        assertFalse(baseActivity.contains("R.id.bookmark_indicator"))
         assertFalse(activity.contains("override fun setPullBookmarkPageOffset"))
 
         val longIndicator = source("app/src/main/res/drawable/ic_bookmark_long.xml")

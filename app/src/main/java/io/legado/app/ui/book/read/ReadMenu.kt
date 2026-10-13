@@ -8,24 +8,35 @@ import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.provider.Settings
+import android.text.TextUtils
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
 import android.view.animation.Animation
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.SeekBar
+import android.widget.Space
+import android.widget.TextView
+import androidx.appcompat.view.ContextThemeWrapper
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.appcompat.widget.AppCompatSeekBar
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import io.legado.app.R
+import io.legado.app.constant.BookType
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
-import io.legado.app.databinding.ViewReadMenuBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
@@ -38,17 +49,22 @@ import io.legado.app.lib.theme.buttonDisabledColor
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.view.ThemeSeekBar
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.widget.popupActionMenu
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
+import io.legado.app.ui.widget.seekbar.VerticalSeekBarWrapper
+import io.legado.app.ui.widget.text.AccentBgTextView
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.ConstraintModify
 import io.legado.app.utils.activity
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.applyTint
+import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.gone
@@ -61,9 +77,6 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 import splitties.views.onClick
 import splitties.views.onLongClick
-import androidx.core.graphics.toColorInt
-import io.legado.app.constant.BookType
-import io.legado.app.utils.buildMainHandler
 
 /**
  * 阅读界面菜单
@@ -72,9 +85,576 @@ class ReadMenu @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : FrameLayout(context, attrs) {
+
+    class ViewReadMenuViewHolder(context: Context, parent: ViewGroup) {
+        private val borderlessBgResId: Int = TypedValue().let {
+            context.theme.resolveAttribute(
+                android.R.attr.selectableItemBackgroundBorderless,
+                it,
+                true
+            )
+            it.resourceId
+        }
+        private val compatBorderlessBgResId: Int = TypedValue().let {
+            context.theme.resolveAttribute(
+                androidx.appcompat.R.attr.selectableItemBackgroundBorderless,
+                it,
+                true
+            )
+            it.resourceId
+        }
+
+        val vwMenuBg = View(context).apply {
+            id = R.id.vw_menu_bg
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            contentDescription = context.getString(R.string.content)
+        }
+        val tvChapterName = TextView(context).apply {
+            id = R.id.tv_chapter_name
+            setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
+            gravity = Gravity.CENTER_VERTICAL
+            isSingleLine = true
+            visibility = View.GONE
+            layoutParams = ConstraintLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                rightToLeft = R.id.tv_custom_btn
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val tvChapterUrl = TextView(context).apply {
+            id = R.id.tv_chapter_url
+            setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
+            gravity = Gravity.CENTER_VERTICAL
+            isSingleLine = true
+            visibility = View.GONE
+            layoutParams = ConstraintLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                rightToLeft = R.id.tv_custom_btn
+                topToBottom = R.id.tv_chapter_name
+            }
+        }
+        val tvCustomBtn = AppCompatImageView(context).apply {
+            id = R.id.tv_custom_btn
+            setPaddingRelative(8.dpToPx(), 0, 4.dpToPx(), 0)
+            setImageResource(R.drawable.ic_custom)
+            contentDescription = context.getString(R.string.custom_button)
+            visibility = View.GONE
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                0
+            ).apply {
+                val m = 1.dpToPx()
+                setMargins(m, m, m, m)
+                bottomToBottom = R.id.tv_chapter_url
+                rightToLeft = R.id.tv_source_action
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val tvSourceAction = AccentBgTextView(context).apply {
+            id = R.id.tv_source_action
+            gravity = Gravity.CENTER
+            maxWidth = 120.dpToPx()
+            setPadding(6.dpToPx(), 0, 6.dpToPx(), 0)
+            setText(R.string.book_source)
+            setRadius(2)
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                0
+            ).apply {
+                val m = 1.dpToPx()
+                setMargins(m, m, m, m)
+                bottomToBottom = R.id.tv_chapter_url
+                rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+        }
+        val titleBarAddition = ConstraintLayout(context).apply {
+            id = R.id.title_bar_addition
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            addView(tvChapterName)
+            addView(tvChapterUrl)
+            addView(tvCustomBtn)
+            addView(tvSourceAction)
+        }
+        val titleBar = TitleBar(
+            ContextThemeWrapper(
+                context,
+                TypedValue().let {
+                    context.theme.resolveAttribute(androidx.appcompat.R.attr.actionBarStyle, it, true)
+                    it.resourceId
+                }
+            ),
+            defaultOpaque = true
+        ).apply {
+            id = R.id.title_bar
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+            addView(titleBarAddition)
+        }
+        val ivBrightnessAuto = ImageView(context).apply {
+            id = R.id.iv_brightness_auto
+            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
+                val m = 8.dpToPx()
+                setMargins(m, m, m, m)
+            }
+            contentDescription = context.getString(R.string.brightness_auto)
+            setImageResource(R.drawable.ic_brightness_auto)
+        }
+        val seekBrightness = AppCompatSeekBar(context).apply {
+            id = R.id.seek_brightness
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            max = 255
+            rotation = -90f
+        }
+        val vwBrightnessPosAdjust = AppCompatImageView(context).apply {
+            id = R.id.vw_brightness_pos_adjust
+            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
+                val m = 8.dpToPx()
+                setMargins(m, m, m, m)
+            }
+            contentDescription = context.getString(R.string.adjust_pos)
+            setImageResource(R.drawable.ic_swap_horiz)
+        }
+        val llBrightness = LinearLayout(context).apply {
+            id = R.id.ll_brightness
+            setBackgroundResource(R.color.transparent30)
+            gravity = Gravity.CENTER_HORIZONTAL
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                0
+            ).apply {
+                leftMargin = 16.dpToPx()
+                rightMargin = 16.dpToPx()
+                topMargin = 16.dpToPx()
+                bottomToTop = R.id.bottom_menu
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                topToBottom = R.id.title_bar
+            }
+            addView(ivBrightnessAuto)
+            addView(
+                VerticalSeekBarWrapper(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        0,
+                        1f
+                    )
+                    addView(seekBrightness)
+                }
+            )
+            addView(vwBrightnessPosAdjust)
+        }
+        val fabSearch = FloatingActionButton(context).apply {
+            id = R.id.fabSearch
+            size = FloatingActionButton.SIZE_MINI
+            contentDescription = context.getString(R.string.search_content)
+            setImageResource(R.drawable.ic_search)
+            compatElevation = 2f.dpToPx()
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                val m = 16.dpToPx()
+                setMargins(m, m, m, m)
+            }
+        }
+        val fabAutoPage = FloatingActionButton(context).apply {
+            id = R.id.fabAutoPage
+            size = FloatingActionButton.SIZE_MINI
+            contentDescription = context.getString(R.string.auto_next_page)
+            setImageResource(R.drawable.ic_auto_page)
+            compatElevation = 2f.dpToPx()
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                val m = 16.dpToPx()
+                setMargins(m, m, m, m)
+            }
+        }
+        val fabReplaceRule = FloatingActionButton(context).apply {
+            id = R.id.fabReplaceRule
+            size = FloatingActionButton.SIZE_MINI
+            contentDescription = context.getString(R.string.replace_rule_title)
+            setImageResource(R.drawable.ic_find_replace)
+            compatElevation = 2f.dpToPx()
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                val m = 16.dpToPx()
+                setMargins(m, m, m, m)
+            }
+        }
+        val fabNightTheme = FloatingActionButton(context).apply {
+            id = R.id.fabNightTheme
+            size = FloatingActionButton.SIZE_MINI
+            contentDescription = context.getString(R.string.dark_theme)
+            setImageResource(R.drawable.ic_brightness)
+            compatElevation = 2f.dpToPx()
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                val m = 16.dpToPx()
+                setMargins(m, m, m, m)
+            }
+        }
+        val llFloatingButton = LinearLayout(context).apply {
+            id = R.id.ll_floating_button
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            setPaddingRelative(16.dpToPx(), 0, 16.dpToPx(), 0)
+            addView(fabSearch)
+            addView(Space(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            addView(fabAutoPage)
+            addView(Space(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            addView(fabReplaceRule)
+            addView(Space(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            addView(fabNightTheme)
+        }
+        val tvPre = TextView(context).apply {
+            id = R.id.tv_pre
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = 10.dpToPx()
+                marginEnd = 10.dpToPx()
+            }
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isEnabled = false
+            isFocusable = true
+            setPadding(0, 10.dpToPx(), 0, 10.dpToPx())
+            setText(R.string.previous_chapter)
+            textSize = 14f
+        }
+        val seekReadPage = ThemeSeekBar(context).apply {
+            id = R.id.seek_read_page
+            layoutParams = LinearLayout.LayoutParams(0, 25.dpToPx(), 1f).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            }
+        }
+        val tvNext = TextView(context).apply {
+            id = R.id.tv_next
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = 10.dpToPx()
+                marginEnd = 10.dpToPx()
+            }
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isEnabled = false
+            isFocusable = true
+            setPadding(0, 10.dpToPx(), 0, 10.dpToPx())
+            setText(R.string.next_chapter)
+            textSize = 14f
+        }
+        val ivCatalog = AppCompatImageView(context).apply {
+            id = R.id.iv_catalog
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            adjustViewBounds = true
+            contentDescription = context.getString(R.string.chapter_list)
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_toc)
+        }
+        val tvCatalog = TextView(context).apply {
+            id = R.id.tv_catalog
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+            isSingleLine = true
+            setText(R.string.chapter_list)
+            textSize = 12f
+        }
+        val llCatalog = LinearLayout(context).apply {
+            id = R.id.ll_catalog
+            layoutParams = LinearLayout.LayoutParams(60.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = context.getString(R.string.chapter_list)
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            addView(ivCatalog)
+            addView(tvCatalog)
+        }
+        val ivReadAloud = AppCompatImageView(context).apply {
+            id = R.id.iv_read_aloud
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            adjustViewBounds = true
+            contentDescription = context.getString(R.string.read_aloud)
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_read_aloud)
+        }
+        val tvReadAloud = TextView(context).apply {
+            id = R.id.tv_read_aloud
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+            isSingleLine = true
+            setText(R.string.read_aloud)
+            textSize = 12f
+        }
+        val llReadAloud = LinearLayout(context).apply {
+            id = R.id.ll_read_aloud
+            layoutParams = LinearLayout.LayoutParams(60.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = context.getString(R.string.read_aloud)
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            addView(ivReadAloud)
+            addView(tvReadAloud)
+        }
+        val ivFont = AppCompatImageView(context).apply {
+            id = R.id.iv_font
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            adjustViewBounds = true
+            contentDescription = context.getString(R.string.interface_setting)
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_interface_setting)
+        }
+        val tvFont = TextView(context).apply {
+            id = R.id.tv_font
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+            isSingleLine = true
+            setText(R.string.interface_setting)
+            textSize = 12f
+        }
+        val llFont = LinearLayout(context).apply {
+            id = R.id.ll_font
+            layoutParams = LinearLayout.LayoutParams(60.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setBackgroundResource(compatBorderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = context.getString(R.string.interface_setting)
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            addView(ivFont)
+            addView(tvFont)
+        }
+        val ivSetting = AppCompatImageView(context).apply {
+            id = R.id.iv_setting
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            adjustViewBounds = true
+            contentDescription = context.getString(R.string.setting)
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_settings)
+        }
+        val tvSetting = TextView(context).apply {
+            id = R.id.tv_setting
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+            isSingleLine = true
+            setText(R.string.setting)
+            textSize = 12f
+        }
+        val llSetting = LinearLayout(context).apply {
+            id = R.id.ll_setting
+            layoutParams = LinearLayout.LayoutParams(60.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setBackgroundResource(borderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = context.getString(R.string.setting)
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            addView(ivSetting)
+            addView(tvSetting)
+        }
+        val memoSpacer = View(context).apply {
+            id = R.id.memo_spacer
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            visibility = View.GONE
+        }
+        val ivMemo = AppCompatImageView(context).apply {
+            id = R.id.iv_memo
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            adjustViewBounds = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            maxHeight = 20.dpToPx()
+            setImageResource(R.drawable.ic_edit)
+        }
+        val tvMemo = TextView(context).apply {
+            id = R.id.tv_memo
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 3.dpToPx()
+            }
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            isSingleLine = true
+            setText(R.string.book_memo)
+            textSize = 12f
+        }
+        val llMemo = LinearLayout(context).apply {
+            id = R.id.ll_memo
+            layoutParams = LinearLayout.LayoutParams(60.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setBackgroundResource(compatBorderlessBgResId)
+            isClickable = true
+            isFocusable = true
+            contentDescription = context.getString(R.string.book_memo)
+            minimumHeight = 48.dpToPx()
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 7.dpToPx())
+            visibility = View.GONE
+            addView(ivMemo)
+            addView(tvMemo)
+        }
+        val llBottomBg = LinearLayout(context).apply {
+            id = R.id.ll_bottom_bg
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(R.color.background_menu)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            orientation = LinearLayout.VERTICAL
+            addView(
+                LinearLayout(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        setMargins(20.dpToPx(), 5.dpToPx(), 20.dpToPx(), 5.dpToPx())
+                    }
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(tvPre)
+                    addView(seekReadPage)
+                    addView(tvNext)
+                }
+            )
+            addView(
+                LinearLayout(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                    isBaselineAligned = false
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(View(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    })
+                    addView(llCatalog)
+                    addView(View(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    })
+                    addView(llReadAloud)
+                    addView(View(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    })
+                    addView(llFont)
+                    addView(View(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    })
+                    addView(llSetting)
+                    addView(memoSpacer)
+                    addView(llMemo)
+                    addView(View(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    })
+                }
+            )
+        }
+        val bottomMenu = LinearLayout(context).apply {
+            id = R.id.bottom_menu
+            layoutParams = ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+            orientation = LinearLayout.VERTICAL
+            addView(llFloatingButton)
+            addView(llBottomBg)
+        }
+        val vwMenuRoot = ConstraintLayout(context).apply {
+            id = R.id.vw_menu_root
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            addView(vwMenuBg)
+            addView(titleBar)
+            addView(llBrightness)
+            addView(bottomMenu)
+        }
+        val root = vwMenuRoot
+
+        init {
+            parent.addView(root)
+        }
+    }
+
     var canShowMenu: Boolean = false
     private val callBack: CallBack get() = activity as CallBack
-    private val binding = ViewReadMenuBinding.inflate(LayoutInflater.from(context), this, true)
+    private val binding = ViewReadMenuViewHolder(context, this)
     private val chapterNameTextSize = binding.tvChapterName.textSize
     private var confirmSkipToChapter: Boolean = false
     private var isMenuOutAnimating = false

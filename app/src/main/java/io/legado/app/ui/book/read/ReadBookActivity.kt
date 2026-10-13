@@ -525,7 +525,101 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_read, menu)
+        menu.add(R.id.menu_group_on_line, R.id.menu_change_source, Menu.NONE, R.string.change_origin).apply {
+            setIcon(R.drawable.ic_exchange)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        menu.add(R.id.menu_group_on_line, R.id.menu_refresh, Menu.NONE, R.string.refresh).apply {
+            setIcon(R.drawable.ic_refresh_black_24dp)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        menu.add(R.id.menu_group_on_line, R.id.menu_download, Menu.NONE, R.string.offline_cache).apply {
+            setIcon(R.drawable.ic_download_line)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        menu.add(R.id.menu_group_text, R.id.menu_toc_regex, Menu.NONE, R.string.txt_toc_rule).apply {
+            setIcon(R.drawable.ic_exchange)
+            isVisible = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        menu.add(R.id.menu_group_local, R.id.menu_set_charset, Menu.NONE, R.string.set_charset).apply {
+            setIcon(R.drawable.ic_translate)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        menu.add(Menu.NONE, R.id.menu_add_bookmark, Menu.NONE, R.string.bookmark_add)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_highlight_rule, Menu.NONE, R.string.highlight_rule)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_edit_content, Menu.NONE, R.string.edit_content)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_page_anim, Menu.NONE, R.string.book_page_anim)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_get_progress, Menu.NONE, R.string.get_book_progress).apply {
+            isVisible = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_cover_progress, Menu.NONE, R.string.cover_book_progress).apply {
+            isVisible = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_reverse_content, Menu.NONE, R.string.reverse_content).apply {
+            isCheckable = true
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_simulated_reading, Menu.NONE, R.string.simulated_reading)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_enable_replace, Menu.NONE, R.string.replace_rule_title).apply {
+            isCheckable = true
+            isChecked = true
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_manual_replace_rule, Menu.NONE, R.string.manual_replace_rule).apply {
+            isVisible = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_same_title_removed, Menu.NONE, R.string.same_title_removed).apply {
+            isCheckable = true
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_re_segment, Menu.NONE, R.string.re_segment).apply {
+            isCheckable = true
+            isChecked = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_enable_review, Menu.NONE, R.string.review).apply {
+            isCheckable = true
+            isChecked = false
+            isVisible = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(R.id.menu_group_epub, R.id.menu_del_ruby_tag, Menu.NONE, R.string.del_ruby_tag).apply {
+            isCheckable = true
+            isChecked = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(R.id.menu_group_epub, R.id.menu_del_h_tag, Menu.NONE, R.string.del_h_tag).apply {
+            isCheckable = true
+            isChecked = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_image_style, Menu.NONE, R.string.image_style)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_reimport_source, Menu.NONE, R.string.reimport_book_source)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_update_toc, Menu.NONE, R.string.update_toc)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_effective_replaces, Menu.NONE, R.string.effective_replaces)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_log, Menu.NONE, R.string.log)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, R.id.menu_reader_more, Menu.NONE, R.string.reader_menu_more).apply {
+            isVisible = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+        menu.add(Menu.NONE, R.id.menu_reader_all_features, Menu.NONE, R.string.reader_menu_all_features).apply {
+            isVisible = false
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
         menu.iconItemOnLongClick(R.id.menu_change_source) {
             showChangeSourceMenu(it)
         }

@@ -9,13 +9,13 @@ class VerticalSeekBarMigrationTest {
 
     @Test
     fun brightnessControlUsesRotatedAppCompatSeekBar() {
-        val layout = projectFile("src/main/res/layout/view_read_menu.xml").readText()
+        val readMenu = projectFile("src/main/java/io/legado/app/ui/book/read/ReadMenu.kt").readText()
 
-        assertTrue(layout.contains("VerticalSeekBarWrapper"))
-        assertTrue(layout.contains("androidx.appcompat.widget.AppCompatSeekBar"))
-        assertTrue(layout.contains("android:id=\"@+id/seek_brightness\""))
-        assertTrue(layout.contains("android:max=\"255\""))
-        assertTrue(layout.contains("android:rotation=\"-90\""))
+        assertTrue(readMenu.contains("VerticalSeekBarWrapper"))
+        assertTrue(readMenu.contains("AppCompatSeekBar"))
+        assertTrue(readMenu.contains("id = R.id.seek_brightness"))
+        assertTrue(readMenu.contains("max = 255"))
+        assertTrue(readMenu.contains("rotation = -90f"))
     }
 
     @Test

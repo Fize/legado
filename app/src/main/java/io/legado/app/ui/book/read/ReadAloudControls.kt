@@ -1,16 +1,22 @@
 package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.appcompat.widget.AppCompatImageButton
+import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
@@ -18,7 +24,6 @@ import androidx.core.view.updateLayoutParams
 import androidx.core.widget.TextViewCompat
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.ViewReadAloudFloatBarBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
@@ -30,9 +35,137 @@ import io.legado.app.utils.dpToPx
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+class ReadAloudFloatBarViewHolder(context: Context) {
+    private val borderlessBgResId: Int = TypedValue().let {
+        context.theme.resolveAttribute(
+            android.R.attr.selectableItemBackgroundBorderless,
+            it,
+            true
+        )
+        it.resourceId
+    }
+
+    val ivPauseAloud = AppCompatImageButton(context).apply {
+        id = R.id.iv_pause_aloud
+        layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx())
+        minimumWidth = 48.dpToPx()
+        minimumHeight = 48.dpToPx()
+        setBackgroundResource(borderlessBgResId)
+        contentDescription = context.getString(R.string.pause)
+        val pad = 12.dpToPx()
+        setPadding(pad, pad, pad, pad)
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        setImageResource(R.drawable.ic_pause_24dp)
+        visibility = View.GONE
+    }
+    val ivBackToSpeech = AppCompatImageView(context).apply {
+        id = R.id.iv_back_to_speech
+        layoutParams = LinearLayout.LayoutParams(20.dpToPx(), 20.dpToPx())
+        contentDescription = context.getString(R.string.back_to_speaking_position)
+        setImageResource(R.drawable.ic_read_aloud)
+    }
+    val tvBackToSpeech = TextView(context).apply {
+        id = R.id.tv_back_to_speech
+        layoutParams = LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        ).apply {
+            marginStart = 4.dpToPx()
+        }
+        gravity = Gravity.CENTER
+        maxLines = 2
+        setText(R.string.back_to_speaking_position)
+        textSize = 14f
+    }
+    val llBackToSpeech = LinearLayout(context).apply {
+        id = R.id.ll_back_to_speech
+        layoutParams = LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        )
+        setBackgroundResource(borderlessBgResId)
+        isClickable = true
+        isFocusable = true
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = 48.dpToPx()
+        setPaddingRelative(8.dpToPx(), 0, 8.dpToPx(), 0)
+        addView(ivBackToSpeech)
+        addView(tvBackToSpeech)
+    }
+    val vBarDivider = View(context).apply {
+        id = R.id.v_bar_divider
+        layoutParams = LinearLayout.LayoutParams(
+            1.dpToPx().coerceAtLeast(1),
+            20.dpToPx()
+        ).apply {
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        setBackgroundResource(R.color.bg_divider_line)
+    }
+    val ivReadFromHere = AppCompatImageView(context).apply {
+        id = R.id.iv_read_from_here
+        layoutParams = LinearLayout.LayoutParams(20.dpToPx(), 20.dpToPx())
+        contentDescription = context.getString(R.string.read_aloud_from_here)
+        setImageResource(R.drawable.ic_play_24dp)
+    }
+    val tvReadFromHere = TextView(context).apply {
+        id = R.id.tv_read_from_here
+        layoutParams = LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        ).apply {
+            marginStart = 4.dpToPx()
+        }
+        gravity = Gravity.CENTER
+        maxLines = 2
+        setText(R.string.read_aloud_from_here)
+        textSize = 14f
+    }
+    val llReadFromHere = LinearLayout(context).apply {
+        id = R.id.ll_read_from_here
+        layoutParams = LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        )
+        setBackgroundResource(borderlessBgResId)
+        isClickable = true
+        isFocusable = true
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = 48.dpToPx()
+        setPaddingRelative(8.dpToPx(), 0, 8.dpToPx(), 0)
+        addView(ivReadFromHere)
+        addView(tvReadFromHere)
+    }
+    val readAloudFloatBar = LinearLayout(context).apply {
+        id = R.id.read_aloud_float_bar
+        layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+            marginStart = 16.dpToPx()
+            marginEnd = 16.dpToPx()
+            bottomMargin = 24.dpToPx()
+        }
+        setBackgroundResource(R.drawable.bg_read_aloud_float_bar)
+        elevation = 6f.dpToPx()
+        orientation = LinearLayout.HORIZONTAL
+        visibility = View.GONE
+        addView(ivPauseAloud)
+        addView(llBackToSpeech)
+        addView(vBarDivider)
+        addView(llReadFromHere)
+    }
+    val root = readAloudFloatBar
+}
+
 /** Reader-only controls; positions are fractions of the safe viewport, so rotation stays reachable. */
 class ReadAloudControls(
-    private val binding: ViewReadAloudFloatBarBinding,
+    private val binding: ReadAloudFloatBarViewHolder,
     private val refresh: () -> Unit,
 ) : SharedPreferences.OnSharedPreferenceChangeListener {
     private val bar = binding.root
