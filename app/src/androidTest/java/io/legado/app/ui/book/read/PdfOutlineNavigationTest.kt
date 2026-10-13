@@ -30,8 +30,6 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.ReadManga
 import io.legado.app.model.localBook.PdfFile
 import io.legado.app.ui.book.manga.ReadMangaActivity
-import io.legado.app.ui.book.manga.entities.MangaPage
-import io.legado.app.ui.book.manga.recyclerview.MangaAdapter
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.toc.ChapterListFragment
@@ -157,17 +155,9 @@ class PdfOutlineNavigationTest {
             waitUntil {
                 var ready = false
                 mangaScenario.onActivity { activity ->
-                    val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                    val adapter = recycler.adapter as? MangaAdapter
                     ready = ReadManga.book?.bookUrl == book.bookUrl &&
-                        activity.findViewById<View>(R.id.fl_loading).visibility != View.VISIBLE &&
-                        recycler.isLaidOut && !recycler.hasPendingAdapterUpdates() &&
-                        (0 until recycler.childCount).any { index ->
-                            val child = recycler.getChildAt(index)
-                            val position = recycler.getChildAdapterPosition(child)
-                            (adapter?.getItem(position) as? MangaPage)?.chapterIndex == ReadManga.durChapterIndex &&
-                                child.width > 0 && child.height > 0
-                        }
+                        !activity.isReaderLoading() &&
+                        activity.visibleReaderPage()?.chapterIndex == ReadManga.durChapterIndex
                 }
                 ready
             }
@@ -180,14 +170,9 @@ class PdfOutlineNavigationTest {
             waitUntil {
                 var targetVisible = false
                 mangaScenario.onActivity { activity ->
-                    val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                    val adapter = recycler.adapter as MangaAdapter
-                    targetVisible = (0 until recycler.childCount).any { index ->
-                        val position = recycler.getChildAdapterPosition(recycler.getChildAt(index))
-                        (adapter.getItem(position) as? MangaPage)?.let {
-                            it.chapterIndex == 1 && it.index == 2 && it.mImageUrl == "12"
-                        } == true
-                    }
+                    targetVisible = activity.visibleReaderPage()?.let {
+                        it.chapterIndex == 1 && it.index == 2 && it.mImageUrl == "12"
+                    } == true
                 }
                 ReadManga.durChapterIndex == 1 && ReadManga.durChapterPos == 2 && targetVisible
             }
@@ -231,22 +216,12 @@ class PdfOutlineNavigationTest {
     private fun recordMangaFailure(scenario: ActivityScenario<ReadMangaActivity>) {
         val state = StringBuilder()
         scenario.onActivity { activity ->
-            val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-            val adapter = recycler.adapter as? MangaAdapter
             state.appendLine("chapter=${ReadManga.durChapterIndex}, position=${ReadManga.durChapterPos}")
             state.appendLine("chapters=${listOf(ReadManga.prevMangaChapter, ReadManga.curMangaChapter,
                 ReadManga.nextMangaChapter).map { it?.chapter?.index }}")
-            state.appendLine("loading=${activity.findViewById<View>(R.id.fl_loading).visibility}, " +
-                "size=${recycler.width}x${recycler.height}, laidOut=${recycler.isLaidOut}, " +
-                "pendingUpdates=${recycler.hasPendingAdapterUpdates()}")
-            state.appendLine("items=${adapter?.getItems()}")
-            repeat(recycler.childCount) { index ->
-                val child = recycler.getChildAt(index)
-                val position = recycler.getChildAdapterPosition(child)
-                val page = adapter?.getItem(position) as? MangaPage
-                state.appendLine("attached=$position, page=${page?.chapterIndex}/${page?.index}/${page?.mImageUrl}, " +
-                    "bounds=${child.left},${child.top},${child.right},${child.bottom}")
-            }
+            state.appendLine("loading=${activity.isReaderLoading()}")
+            state.appendLine("visible=${activity.visibleReaderPage()}")
+            state.appendLine("items=${activity.readerItems()}")
         }
         File(context.getExternalFilesDir("ui-regression"), "pdf-manga-failure-state.txt").writeText(state.toString())
         screenshot("pdf-manga-failure")

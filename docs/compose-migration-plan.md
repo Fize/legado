@@ -98,9 +98,9 @@ flowchart TD
 
 ---
 
-## 4. 漫画阅读器迁移方案（独立后续阶段）
+## 4. 漫画阅读器迁移方案（已完成）
 
-漫画阅读器的菜单、设置和外围容器可以继续使用 Compose；图片阅读区域单列为后续迁移阶段。在此阶段完成前，允许其保留原生 View 实现，但不得重新引入任何 `res/layout*` XML 文件。
+漫画阅读器已直接切换为纯 Compose 阅读区域，没有保留 RecyclerView 双轨或渐进式兼容层。
 
 ### 4.1 目标架构
 
@@ -130,6 +130,14 @@ flowchart LR
 - 图片加载、失败重试、预下载、灰阶、墨水屏、颜色滤镜、页脚、长按保存和自动翻页功能保持可用。
 - 缩放状态下的拖动不误触翻页；未缩放时翻页和滚动响应正常。
 - 删除 `MangaAdapter`、`MangaLayoutManager`、`WebtoonRecyclerView` 及只为漫画阅读保留的 RecyclerView 代码后，构建和关键阅读流程验证通过。
+
+### 4.4 2026-10-13 实施记录
+
+- 新增单一 `MangaReaderUiState` 与命令通道，章节内容、阅读模式、RTL、缩放、滤镜、加载状态和稳定锚点由 Compose 状态统一驱动。
+- 条漫改为 `LazyColumn`，横向单页改为 `HorizontalPager`，横向双页使用显式 `MangaSpread` 模型；跨章节、奇数末页和 RTL 不再依赖 adapter position 修正。
+- 页面组件支持双指缩放、双击缩放、放大后平移、长按保存、失败重试、灰阶、墨水屏、颜色滤镜、预加载、页脚和自动翻页；横向翻页使用 Compose `Canvas` 绘制卷页阴影层。
+- 已删除 `MangaAdapter`、`MangaLayoutManager`、`WebtoonRecyclerView`、`WebtoonFrame`、`MangaVH`、`MangaSimulationCurlHelper`、`ScrollTimer` 与手势探测 View 实现，共移除约 2,100 行 RecyclerView 专用代码。
+- 单元测试改为验证 `MangaReaderUiState` 和 `MangaSpread` 行为，设备测试改为通过稳定页面身份验证 LTR、RTL、条漫/页漫切换与旋转恢复。
 
 ---
 

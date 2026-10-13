@@ -20,17 +20,17 @@ class ReadMangaOfflineActionsTest {
             "src/main/java/io/legado/app/ui/book/read/BaseReadBookActivity.kt"
         ).readText()
         val cacheBook = projectFile("src/main/java/io/legado/app/model/CacheBook.kt").readText()
-        val mangaViewHolder = projectFile(
-            "src/main/java/io/legado/app/ui/book/manga/recyclerview/MangaVH.kt"
+        val mangaContent = projectFile(
+            "src/main/java/io/legado/app/ui/book/manga/MangaReaderContent.kt"
         ).readText()
         val bookCover = projectFile("src/main/java/io/legado/app/model/BookCover.kt").readText()
 
         assertTrue(activity.contains("R.string.offline_cache"))
         assertTrue(activity.contains("R.string.manga_long_click_save_image"))
         assertTrue(activity.contains("showBookDownloadDialog"))
-        assertTrue(activity.contains("longTapListener ="))
+        assertTrue(mangaContent.contains("onLongPress = { onSaveImage(page.mImageUrl) }"))
         assertTrue(activity.contains("AppConfig.mangaLongClickSaveImage"))
-        assertTrue(activity.contains("as? MangaPage"))
+        assertTrue(activity.contains("onSaveImage ="))
         assertTrue(downloadDialog.contains("fun Context.showBookDownloadDialog(book: Book)"))
         assertTrue(viewModel.contains("BookHelp.saveImage(ReadManga.bookSource, book, src)"))
         assertTrue(viewModel.contains("createFileIfNotExist(image.name).writeFile(image)"))
@@ -43,8 +43,8 @@ class ReadMangaOfflineActionsTest {
         assertTrue(cacheSuccess.contains("BookHelp.saveImages(source, requestBook, chapter, content, 1)"))
         assertTrue(cacheSuccess.contains("val currentContent = BookHelp.getContent(requestBook, chapter) ?: content"))
         assertTrue(cacheSuccess.indexOf("BookHelp.saveImages") < cacheSuccess.indexOf("onSuccess(ticket"))
-        assertTrue(mangaViewHolder.contains("mangaImagePath(imageUrl)"))
-        assertTrue(mangaViewHolder.contains("takeIf { it.isFile }?.absolutePath ?: imageUrl"))
+        assertTrue(mangaContent.contains("mangaImagePath(page.mImageUrl)"))
+        assertTrue(mangaContent.contains("takeIf { it.isFile }?.absolutePath ?: imageUrl"))
         assertTrue(bookCover.contains("ImageLoader.loadFile(context, path).apply(options)"))
         assertTrue(preferKey.contains("mangaLongClickSaveImage = \"mangaLongClickSaveImage\""))
         assertTrue(appConfig.contains("getPrefBoolean(PreferKey.mangaLongClickSaveImage, true)"))
