@@ -46,7 +46,6 @@ import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.book.ContentProcessor
@@ -60,6 +59,7 @@ import io.legado.app.ui.compose.component.LegadoMenuAction
 import io.legado.app.ui.compose.component.LegadoSelectActionBar
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.dialog.ComposeTextInputDialog
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.utils.ACache
@@ -119,18 +119,13 @@ class ReplaceRuleActivity : VMBaseComposeActivity<ReplaceRuleViewModel>() {
             val url = uri.toString()
             alert(R.string.export_success) {
                 if (url.isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + url)
                     sourceSharePassphraseButton(
-                        layoutInflater,
                         url,
                         SourceSharePassphrase.Type.REPLACE_RULE,
                     )
                 }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(url)
-                }
-                customView { alertBinding.root }
+                if (!url.isAbsUrl()) setMessage(url)
                 okButton {
                     sendToClip(url)
                 }
@@ -574,77 +569,56 @@ class ReplaceRuleActivity : VMBaseComposeActivity<ReplaceRuleViewModel>() {
         }
     }
 
-    @SuppressLint("InflateParams")
     private fun selectionAddToGroups(selectedRules: List<ReplaceRule>) {
-        alert(titleResource = R.string.add_group) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setFilterValues(groupsState)
-                editView.dropDownHeight = 180.dpToPx()
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotEmpty()) {
-                        viewModel.selectionAddToGroups(selectedRules, it)
-                    }
+        showDialogFragment(
+            ComposeTextInputDialog(
+                title = getString(R.string.add_group),
+                hint = getString(R.string.group_name),
+                suggestions = groupsState,
+                onConfirm = {
+                    if (it.isNotEmpty()) viewModel.selectionAddToGroups(selectedRules, it)
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 
-    @SuppressLint("InflateParams")
     private fun selectionRemoveFromGroups(selectedRules: List<ReplaceRule>) {
-        alert(titleResource = R.string.remove_group) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setFilterValues(groupsState)
-                editView.dropDownHeight = 180.dpToPx()
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotEmpty()) {
-                        viewModel.selectionRemoveFromGroups(selectedRules, it)
-                    }
+        showDialogFragment(
+            ComposeTextInputDialog(
+                title = getString(R.string.remove_group),
+                hint = getString(R.string.group_name),
+                suggestions = groupsState,
+                onConfirm = {
+                    if (it.isNotEmpty()) viewModel.selectionRemoveFromGroups(selectedRules, it)
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 
-    @SuppressLint("InflateParams")
     private fun showImportDialog() {
         val aCache = ACache.get(cacheDir = false)
         val cacheUrls: MutableList<String> = aCache
             .getAsString(importRecordKey)
             ?.splitNotBlank(",")
             ?.toMutableList() ?: mutableListOf()
-        alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
+        showDialogFragment(
+            ComposeTextInputDialog(
+                title = getString(R.string.import_on_line),
+                hint = "url",
+                suggestions = cacheUrls,
+                onDeleteSuggestion = {
                     cacheUrls.remove(it)
                     aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                }
-            }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
+                },
+                onConfirm = { text ->
+                    if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                        cacheUrls.add(0, text)
                         aCache.put(importRecordKey, cacheUrls.joinToString(","))
                     }
-                    showDialogFragment(
-                        ImportReplaceRuleDialog(it)
-                    )
+                    showDialogFragment(ImportReplaceRuleDialog(text))
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 
     override fun onDestroy() {

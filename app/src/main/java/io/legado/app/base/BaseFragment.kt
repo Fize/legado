@@ -46,7 +46,7 @@ abstract class BaseFragment(@LayoutRes layoutID: Int = 0) : Fragment(layoutID) {
     }
 
     private fun onMultiWindowModeChanged() {
-        (activity as? BaseActivity<*>)?.let {
+        (activity as? BaseActivity)?.let {
             view?.findViewById<TitleBar>(R.id.title_bar)
                 ?.onMultiWindowModeChanged(it.isInMultiWindow, it.fullScreen)
         }

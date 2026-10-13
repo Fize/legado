@@ -85,7 +85,6 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.SearchKeyword
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.about.AppLogDialog
@@ -746,26 +745,22 @@ class SearchActivity :
     }
 
     private fun showSearchResultFilterDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.search_result_filter_hint)
-            editView.setSingleLine(false)
-            editView.minLines = 4
-            editView.maxLines = 8
-            editView.setText(getPrefString(PreferKey.searchResultFilter).orEmpty())
-            editView.setSelection(editView.text?.length ?: 0)
-        }
-        alert(R.string.search_result_filter) {
-            customView { alertBinding.root }
-            okButton {
-                val filter = alertBinding.editView.text?.toString().orEmpty().trim()
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.search_result_filter),
+                initialValue = getPrefString(PreferKey.searchResultFilter).orEmpty(),
+                hint = getString(R.string.search_result_filter_hint),
+                singleLine = false,
+                onConfirm = { value ->
+                val filter = value.trim()
                 putPrefString(PreferKey.searchResultFilter, filter)
                 searchBooksState = filterSearchResults(
                     viewModel.searchBookLiveData.value.orEmpty(),
                     filter,
                 )
-            }
-            cancelButton()
-        }
+                },
+            )
+        )
     }
 
     private fun alertClearHistory() {

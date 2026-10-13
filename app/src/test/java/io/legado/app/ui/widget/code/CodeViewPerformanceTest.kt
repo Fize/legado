@@ -51,17 +51,11 @@ class CodeViewPerformanceTest {
             root,
             "app/src/main/java/io/legado/app/ui/widget/code/CodeView.kt"
         ).readText()
-        val adapter = File(
-            root,
-            "app/src/main/java/io/legado/app/base/adapter/DiffRecyclerAdapter.kt"
-        ).readText()
+        val adapter = File(root, "app/src/main/java/io/legado/app/base/adapter/DiffRecyclerAdapter.kt")
 
         assertFalse(codeView.contains("val s = editable.toString()"))
         assertFalse(File(root, "app/src/main/res/layout/view_refresh_recycler.xml").exists())
-        assertFalse(adapter.contains("fun setItem(position: Int, item: ITEM)"))
-        assertFalse(adapter.contains("fun updateItem(item: ITEM)"))
-        assertFalse(adapter.contains("fun updateItem(position: Int, payload: Any)"))
-        assertTrue(adapter.contains("fun updateItems("))
+        assertFalse(adapter.exists())
     }
 
     private fun repositoryRoot(): File {

@@ -60,7 +60,6 @@ import io.legado.app.R
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.book.cacheLocalUri
 import io.legado.app.help.book.removeLocalUriCache
 import io.legado.app.help.config.AppConfig
@@ -81,6 +80,7 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isUri
 import io.legado.app.utils.launch
 import io.legado.app.utils.putPrefInt
+import io.legado.app.utils.showDialogFragment
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
@@ -607,18 +607,15 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>() {
     }
 
     private fun alertImportFileName() {
-        alert(R.string.import_file_name) {
-            setMessage("""使用js处理文件名变量src，将书名作者分别赋值到变量name author""")
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "js"
-                editView.setText(AppConfig.bookImportFileName)
-            }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.bookImportFileName = alertBinding.editView.text?.toString()
-            }
-            cancelButton()
-        }
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.import_file_name),
+                initialValue = AppConfig.bookImportFileName.orEmpty(),
+                message = "使用js处理文件名变量src，将书名作者分别赋值到变量name author",
+                hint = "js",
+                onConfirm = { AppConfig.bookImportFileName = it },
+            )
+        )
     }
 
     @Synchronized

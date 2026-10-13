@@ -30,7 +30,6 @@ import com.bumptech.glide.ListPreloader.PreloadModelProvider
 import com.bumptech.glide.RequestBuilder
 import com.bumptech.glide.load.resource.bitmap.BitmapTransformation
 import io.legado.app.R
-import io.legado.app.base.adapter.RecyclerAdapter.Companion.TYPE_FOOTER_VIEW
 import io.legado.app.help.glide.progress.ProgressManager
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadManga
@@ -63,6 +62,7 @@ class MangaAdapter(private val context: Context) :
     companion object {
         private const val LOADING_VIEW = 0
         private const val CONTENT_VIEW = 1
+        private const val TYPE_FOOTER_VIEW = Int.MAX_VALUE - 999
     }
 
     var isHorizontal = false

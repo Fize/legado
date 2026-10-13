@@ -15,25 +15,16 @@ class ManagePopupActionMigrationTest {
         listOf(
             "applyMd3PopupStyle()",
             "resolveDropDownYOffset(",
-            "LinearLayoutManager(context)",
-            "private var actionItems: List<PopupActionItem> = emptyList()",
-            "items.any { it.icon != null }",
-            "items.any { it.checkable }",
-            "textView.measuredWidth",
-            "textView.minHeight = 48.dpToPx()",
-            "textView.setPadding(5.dpToPx(), 5.dpToPx(), 5.dpToPx(), 5.dpToPx())",
-            "val enabled = isItemEnabled(item)",
-            "item.enabled && item.value !in disabledValues",
-            "context.secondaryDisabledTextColor",
-            "info.isCheckable = item.checkable",
-            "AccessibilityNodeInfoCompat.CHECKED_STATE_TRUE",
-            "AccessibilityNodeInfoCompat.CHECKED_STATE_FALSE",
-            "imageView.visibility = View.INVISIBLE",
-            "takeIf(::isItemEnabled)",
-            "R.id.iv_icon",
-            "R.id.text_view",
-            "R.id.iv_check_end",
-            "isDuplicateParentStateEnabled = true"
+            "private var displayedItems by mutableStateOf",
+            "displayedItems.any { it.icon != null }",
+            "displayedItems.any { it.checkable }",
+            ".heightIn(min = 48.dp)",
+            "item.enabled && item.value !in disabledActions",
+            "MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)",
+            "MaterialTheme.colorScheme.error",
+            "Icon(Icons.Rounded.Check",
+            "onActionLongClick",
+            "LegadoTheme"
         ).forEach { expected -> assertContains("PopupAction.kt", popup, expected) }
 
         listOf(

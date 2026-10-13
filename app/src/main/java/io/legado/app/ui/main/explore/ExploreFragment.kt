@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,7 +39,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,8 +59,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -83,7 +79,6 @@ import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.book.explore.ExploreShowActivity
-import io.legado.app.ui.book.explore.ExploreShowFragment
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
@@ -99,7 +94,6 @@ import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.resolveTabletContentPadding
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.useTwoPaneLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -169,7 +163,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(),
 
     override val viewModel by viewModels<ExploreViewModel>()
 
-    private val detailContainerId = View.generateViewId()
     private val groups = linkedSetOf<String>()
     private var groupsState by mutableStateOf<Set<String>>(emptySet())
     private var sourcesState by mutableStateOf<List<BookSourcePart>>(emptyList())
@@ -178,7 +171,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(),
     private var loadingSourceUrlState by mutableStateOf<String?>(null)
     private var kindLoadVersion by mutableIntStateOf(0)
     private val sourceKindsMap = mutableStateMapOf<String, List<ExploreKind>>()
-    private var hasDetailState by mutableStateOf(false)
     private var exploreFlowJob: Job? = null
     private var saveInfoMapJob: Job? = null
     private val listState = LazyListState()
@@ -212,21 +204,16 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(),
         val context = LocalContext.current
         val configuration = LocalConfiguration.current
         val density = LocalDensity.current
-        val twoPane = context.useTwoPaneLayout
         var groupMenuExpanded by remember { mutableStateOf(false) }
 
-        val hPaddingDp = remember(twoPane, configuration.screenWidthDp) {
-            if (!twoPane) {
-                val px = resolveTabletContentPadding(
-                    containerWidthPx = configuration.screenWidthDp.dpToPx(),
-                    screenWidthDp = configuration.screenWidthDp,
-                    maxContentWidthPx = 720.dpToPx(),
-                    minTabletPaddingPx = 24.dpToPx(),
-                )
-                with(density) { px.toDp() }
-            } else {
-                0.dp
-            }
+        val hPaddingDp = remember(configuration.screenWidthDp) {
+            val px = resolveTabletContentPadding(
+                containerWidthPx = configuration.screenWidthDp.dpToPx(),
+                screenWidthDp = configuration.screenWidthDp,
+                maxContentWidthPx = 720.dpToPx(),
+                minTabletPaddingPx = 24.dpToPx(),
+            )
+            with(density) { px.toDp() }
         }
 
         Scaffold(
@@ -302,15 +289,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(),
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
-                Box(
-                    modifier = if (twoPane) {
-                        Modifier
-                            .width(340.dp)
-                            .fillMaxHeight()
-                    } else {
-                        Modifier.fillMaxSize()
-                    },
-                ) {
+                Box(modifier = Modifier.fillMaxSize()) {
                     if (sourcesState.isEmpty() && searchQueryState.isEmpty()) {
                         Text(
                             text = stringResource(R.string.explore_empty),
@@ -451,38 +430,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(),
                     }
                 }
 
-                if (twoPane) {
-                    VerticalDivider(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(1.dp),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    ) {
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { ctx ->
-                                FragmentContainerView(ctx).apply {
-                                    id = detailContainerId
-                                }
-                            },
-                        )
-                        if (!hasDetailState) {
-                            Text(
-                                text = "点击左侧书源分类标签查看书籍列表",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .padding(24.dp),
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -909,18 +856,10 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(),
 
     fun openExplore(sourceUrl: String, title: String, exploreUrl: String?) {
         if (exploreUrl.isNullOrBlank()) return
-        if (requireContext().useTwoPaneLayout) {
-            hasDetailState = true
-            val detailFragment = ExploreShowFragment.newInstance(sourceUrl, title, exploreUrl)
-            childFragmentManager.beginTransaction()
-                .replace(detailContainerId, detailFragment, "exploreDetail:${sourceUrl}:${exploreUrl}")
-                .commitAllowingStateLoss()
-        } else {
-            startActivity<ExploreShowActivity> {
-                putExtra("exploreName", title)
-                putExtra("sourceUrl", sourceUrl)
-                putExtra("exploreUrl", exploreUrl)
-            }
+        startActivity<ExploreShowActivity> {
+            putExtra("exploreName", title)
+            putExtra("sourceUrl", sourceUrl)
+            putExtra("exploreUrl", exploreUrl)
         }
     }
 

@@ -11,30 +11,11 @@ import javax.xml.parsers.DocumentBuilderFactory
 class SelectActionBarPopupActionMigrationTest {
 
     @Test
-    fun `select action bar uses the themed popup and preserves listener behavior`() {
-        val source = readProjectFile(SELECT_ACTION_BAR)
-
-        listOf(
-            "private var selMenu: Menu? = null",
-            "private var menuItemClickListener: PopupMenu.OnMenuItemClickListener? = null",
-            "MenuBuilder(context)",
-            "SupportMenuInflater(context).inflate(resId, this)",
-            "private fun showMoreMenu()",
-            "setVertical(true)",
-            "setDangerValues(",
-            "setDisabledValues(",
-            "if (item.isVisible)",
-            "it.isEnabled && it.itemId.toString() == action",
-            "menuItemClickListener?.onMenuItemClick(menuItem)",
-            "R.id.menu_del"
-        ).forEach { expected ->
-            assertTrue("SelectActionBar should contain $expected", source.contains(expected))
+    fun `legacy select action bar is replaced by Compose action bars`() {
+        assertFalse(resolveFile(SELECT_ACTION_BAR).exists())
+        expectedComposeMenuLabels.keys.forEach { path ->
+            assertTrue(readProjectFile(path).contains("LegadoSelectActionBar("))
         }
-
-        assertFalse(source.contains("selMenu?.show()"))
-        assertFalse(source.contains("PopupMenu(context"))
-        assertFalse(source.contains("selMenu?.setOnMenuItemClickListener"))
-        assertFalse(source.contains("import android.view.MenuInflater"))
     }
 
     @Test
@@ -42,10 +23,10 @@ class SelectActionBarPopupActionMigrationTest {
         val source = readProjectFile(POPUP_ACTION)
 
         listOf(
-            "private var disabledValues: Set<String> = emptySet()",
+            "private var disabledActions by mutableStateOf",
             "fun setDisabledValues(values: Set<String>)",
-            "item.enabled && item.value !in disabledValues",
-            "context.secondaryDisabledTextColor"
+            "item.enabled && item.value !in disabledActions",
+            "MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)"
         ).forEach { expected ->
             assertTrue("PopupAction should contain $expected", source.contains(expected))
         }

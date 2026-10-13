@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.view.View
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.fragment.app.FragmentContainerView
 import com.google.zxing.Result
 import io.legado.app.R
 import io.legado.app.base.BaseComposeActivity
@@ -65,7 +65,7 @@ class QrCodeActivity : BaseComposeActivity(), ScanResultCallback {
                     .fillMaxSize()
                     .padding(innerPadding),
                 factory = { ctx ->
-                    FragmentContainerView(ctx).apply {
+                    FrameLayout(ctx).apply {
                         id = containerId
                         val fTag = "qrCodeFragment"
                         if (supportFragmentManager.findFragmentByTag(fTag) == null) {

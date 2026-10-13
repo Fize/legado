@@ -47,7 +47,6 @@ import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.lib.dialogs.alert
@@ -99,18 +98,13 @@ class TxtTocRuleActivity : VMBaseComposeActivity<TxtTocRuleViewModel>(),
             val url = uri.toString()
             alert(R.string.export_success) {
                 if (url.isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + url)
                     sourceSharePassphraseButton(
-                        layoutInflater,
                         url,
                         SourceSharePassphrase.Type.TOC_RULE,
                     )
                 }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(url)
-                }
-                customView { alertBinding.root }
+                if (!url.isAbsUrl()) setMessage(url)
                 okButton {
                     sendToClip(url)
                 }
@@ -398,7 +392,6 @@ class TxtTocRuleActivity : VMBaseComposeActivity<TxtTocRuleViewModel>(),
         }
     }
 
-    @SuppressLint("InflateParams")
     private fun showImportDialog() {
         val aCache = ACache.get(cacheDir = false)
         val defaultUrl = "https://gitee.com/fisher52/YueDuJson/raw/master/myTxtChapterRule.json"
@@ -410,28 +403,24 @@ class TxtTocRuleActivity : VMBaseComposeActivity<TxtTocRuleViewModel>(),
         if (!cacheUrls.contains(defaultUrl)) {
             cacheUrls.add(0, defaultUrl)
         }
-        alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.import_on_line),
+                hint = "url",
+                suggestions = cacheUrls,
+                onDeleteSuggestion = {
                     cacheUrls.remove(it)
                     aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
-                }
-            }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
+                },
+                onConfirm = { text ->
+                    if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                        cacheUrls.add(0, text)
                         aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
                     }
-                    showDialogFragment(ImportTxtTocRuleDialog(it))
+                    showDialogFragment(ImportTxtTocRuleDialog(text))
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 
     private fun shareSelection(rules: List<TxtTocRule>) {

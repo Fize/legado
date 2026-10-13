@@ -7,13 +7,14 @@ import java.io.File
 class TocReverseNoDiffTest {
 
     @Test
-    fun `full list replacement bypasses diff and suppresses intermediate callback`() {
-        val adapter = source("app/src/main/java/io/legado/app/base/adapter/DiffRecyclerAdapter.kt")
-
-        assertTrue(adapter.contains("fun setItemsNoDiff(items: List<ITEM>)"))
-        assertTrue(adapter.contains("suppressNextListChange = true"))
-        assertTrue(adapter.contains("asyncListDiffer.submitList(null)"))
-        assertTrue(adapter.contains("asyncListDiffer.submitList(items.toMutableList())"))
+    fun `full list replacement invalidates the Compose render cache`() {
+        val fragment = source("app/src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt")
+        val block = fragment.substringAfter("private fun setChapterItemsNoDiff")
+            .substringBefore("private suspend fun queryChapterList")
+        assertTrue(block.contains("chapterItemsState = items"))
+        assertTrue(block.contains("cacheRenderVersion++"))
+        assertTrue(block.contains("onListChanged()"))
+        assertTrue(block.contains("onItemsUpdated()"))
     }
 
     @Test

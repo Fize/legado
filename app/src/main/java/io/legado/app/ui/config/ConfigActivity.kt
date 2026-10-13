@@ -2,6 +2,7 @@ package io.legado.app.ui.config
 
 import android.os.Bundle
 import android.view.View
+import android.widget.FrameLayout
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentContainerView
 import io.legado.app.R
 import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.EventBus
@@ -113,7 +113,7 @@ class ConfigActivity : BaseComposeActivity() {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
-                        FragmentContainerView(ctx).apply {
+                        FrameLayout(ctx).apply {
                             id = hostId
                             when (tag) {
                                 ConfigTag.MY_MORE -> replaceFragment<MyPreferenceFragment>(tag)

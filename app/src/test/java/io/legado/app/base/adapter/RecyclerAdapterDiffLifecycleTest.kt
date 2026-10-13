@@ -1,6 +1,5 @@
 package io.legado.app.base.adapter
 
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -8,20 +7,12 @@ import java.io.File
 class RecyclerAdapterDiffLifecycleTest {
 
     @Test
-    fun `diff result is applied on main only while resumed`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/base/adapter/RecyclerAdapter.kt"
-        ).readText().replace("\r\n", "\n")
-        val diffBlock = source.substringAfter("diffJob = Coroutine.async")
-            .substringBefore("fun setItem(")
-        val lifecycleBlock = source.substringAfter("fun upResumed(")
-            .substringBefore("private fun isHeader")
-
-        assertTrue(diffBlock.contains("withContext(Main)"))
-        assertTrue(diffBlock.contains("if (!isResumed || diffResult == null)"))
-        assertFalse(diffBlock.contains("handler.post"))
-        assertFalse(diffBlock.contains("@post"))
-        assertFalse(lifecycleBlock.contains("removeCallbacksAndMessages"))
+    fun `legacy diff adapters are removed after Compose migration`() {
+        assertTrue(!projectPath("src/main/java/io/legado/app/base/adapter/RecyclerAdapter.kt").exists())
+        assertTrue(!projectPath("src/main/java/io/legado/app/base/adapter/DiffRecyclerAdapter.kt").exists())
+        val manga = projectFile("src/main/java/io/legado/app/ui/book/manga/recyclerview/MangaAdapter.kt")
+            .readText()
+        assertTrue(manga.contains("AsyncListDiffer(this, mDiffCallback)"))
     }
 
     private fun projectFile(pathInApp: String): File {
@@ -29,4 +20,7 @@ class RecyclerAdapterDiffLifecycleTest {
             .firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
+
+    private fun projectPath(pathInApp: String): File =
+        if (File("app").isDirectory) File("app/$pathInApp") else File(pathInApp)
 }

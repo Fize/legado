@@ -2,18 +2,17 @@ package io.legado.app.base
 
 import android.view.View
 import androidx.lifecycle.ViewModel
-import androidx.viewbinding.ViewBinding
 import com.google.android.material.textfield.TextInputLayout
 import io.legado.app.constant.Theme
 
-abstract class VMBaseActivity<VB : ViewBinding, VM : ViewModel>(
+abstract class VMBaseActivity<VM : ViewModel>(
     fullScreen: Boolean = true,
     theme: Theme = Theme.Auto,
     toolBarTheme: Theme = Theme.Auto,
     transparent: Boolean = false,
     imageBg: Boolean = true,
     showOpenMenuIcon: Boolean = true
-) : BaseActivity<VB>(fullScreen, theme, toolBarTheme, transparent, imageBg, showOpenMenuIcon) {
+) : BaseActivity(fullScreen, theme, toolBarTheme, transparent, imageBg, showOpenMenuIcon) {
 
     protected abstract val viewModel: VM
 

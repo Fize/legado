@@ -1,6 +1,5 @@
 package io.legado.app.ui.replace
 
-import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -32,12 +31,10 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.appDb
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTextInputDialog
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.utils.requestInputMethod
 import io.legado.app.utils.setLayout
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
@@ -46,6 +43,8 @@ class GroupManageDialog : BaseDialogFragment() {
 
     private val viewModel: ReplaceRuleViewModel by activityViewModels()
     private var groupsState by mutableStateOf<List<String>>(emptyList())
+    private var isAddingGroup by mutableStateOf(false)
+    private var editingGroup by mutableStateOf<String?>(null)
 
     override fun onStart() {
         super.onStart()
@@ -79,7 +78,7 @@ class GroupManageDialog : BaseDialogFragment() {
                                         title = stringResource(R.string.add_group),
                                         iconRes = R.drawable.ic_add,
                                         showAsAction = true,
-                                        onClick = ::addGroup,
+                                        onClick = { isAddingGroup = true },
                                     ),
                                 ),
                             )
@@ -121,42 +120,33 @@ class GroupManageDialog : BaseDialogFragment() {
                             }
                         }
                     }
+                if (isAddingGroup) {
+                    LegadoTextInputDialog(
+                        title = stringResource(R.string.add_group),
+                        initialValue = "",
+                        hint = stringResource(R.string.group_name),
+                        onDismiss = { isAddingGroup = false },
+                        onConfirm = { value ->
+                            value.takeIf { it.isNotBlank() }?.let(viewModel::addGroup)
+                        },
+                    )
+                }
+                editingGroup?.let { group ->
+                    LegadoTextInputDialog(
+                        title = stringResource(R.string.group_edit),
+                        initialValue = group,
+                        hint = stringResource(R.string.group_name),
+                        onDismiss = { editingGroup = null },
+                        onConfirm = { value -> viewModel.upGroup(group, value) },
+                    )
+                }
                 }
             }
         }
     }
 
-    @SuppressLint("InflateParams")
-    private fun addGroup() {
-        alert(title = getString(R.string.add_group)) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotBlank()) {
-                        viewModel.addGroup(it)
-                    }
-                }
-            }
-            cancelButton()
-        }.requestInputMethod()
-    }
-
-    @SuppressLint("InflateParams")
     private fun editGroup(group: String) {
-        alert(title = getString(R.string.group_edit)) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setText(group)
-            }
-            customView { alertBinding.root }
-            okButton {
-                viewModel.upGroup(group, alertBinding.editView.text?.toString())
-            }
-            cancelButton()
-        }.requestInputMethod()
+        editingGroup = group
     }
 
 }

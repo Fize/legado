@@ -8,32 +8,25 @@ class SourceLoginWebViewLayoutTest {
 
     @Test
     fun `web login root paints the runtime theme background`() {
-        val fragment = readProjectFile(
-            "src/main/java/io/legado/app/ui/login/WebViewLoginFragment.kt"
+        val activity = readProjectFile(
+            "src/main/java/io/legado/app/ui/login/SourceLoginActivity.kt"
         )
 
         assertTrue(
             "Web login must paint an opaque runtime theme background",
-            fragment.contains("setBackgroundColor(requireContext().backgroundColor)")
+            activity.contains("setBackgroundColor(backgroundColor)")
         )
     }
 
     @Test
     fun `web view roots stay above system bars and keyboard`() {
-        val sources = listOf(
-            readProjectFile("src/main/java/io/legado/app/ui/login/WebViewLoginFragment.kt"),
-            readProjectFile("src/main/java/io/legado/app/ui/browser/WebViewActivity.kt")
-        )
-
-        sources.forEach { source ->
-            assertTrue(source.contains("setOnApplyWindowInsetsListenerCompat"))
-            assertTrue(
-                source.contains(
-                    "WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()"
-                )
-            )
-            assertTrue(source.contains("bottomPadding = windowInsets.getInsets(typeMask).bottom"))
-        }
+        val login = readProjectFile("src/main/java/io/legado/app/ui/login/SourceLoginActivity.kt")
+        assertTrue(login.contains(".imePadding()"))
+        assertTrue(login.contains("Scaffold("))
+        val browser = readProjectFile("src/main/java/io/legado/app/ui/browser/WebViewActivity.kt")
+        assertTrue(browser.contains("setOnApplyWindowInsetsListenerCompat"))
+        assertTrue(browser.contains("WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()"))
+        assertTrue(browser.contains("bottomPadding = windowInsets.getInsets(typeMask).bottom"))
     }
 
     private fun readProjectFile(pathInApp: String): String {

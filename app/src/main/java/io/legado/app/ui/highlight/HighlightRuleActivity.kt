@@ -45,7 +45,6 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.HighlightRuleFile
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.ReadBook
@@ -86,13 +85,9 @@ class HighlightRuleActivity : VMBaseComposeActivity<HighlightRuleViewModel>() {
             val url = uri.toString()
             alert(R.string.export_success) {
                 if (url.isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + url)
                 }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(url)
-                }
-                customView { alertBinding.root }
+                if (!url.isAbsUrl()) setMessage(url)
                 okButton { sendToClip(url) }
             }
         }

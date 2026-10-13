@@ -5,44 +5,28 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentContainerView
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.ThemeConfig
@@ -60,11 +44,8 @@ import io.legado.app.ui.compose.prefs.ListPreferenceItem
 import io.legado.app.ui.compose.prefs.PreferenceCategoryHeader
 import io.legado.app.ui.compose.prefs.PreferenceItem
 import io.legado.app.ui.compose.prefs.rememberPrefStringSet
-import io.legado.app.ui.config.BackupConfigFragment
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
-import io.legado.app.ui.config.OtherConfigFragment
-import io.legado.app.ui.config.ThemeConfigFragment
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.main.MainFragmentInterface
@@ -73,7 +54,6 @@ import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.useTwoPaneLayout
 
 class MyFragment() : Fragment(), MainFragmentInterface {
 
@@ -84,19 +64,6 @@ class MyFragment() : Fragment(), MainFragmentInterface {
     }
 
     override val position: Int? get() = arguments?.getInt("position")
-
-    private var currentDetailTag by mutableStateOf(ConfigTag.OTHER_CONFIG)
-    private var detailContainerId: Int = View.NO_ID
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        currentDetailTag = savedInstanceState?.getString("currentDetailTag") ?: ConfigTag.OTHER_CONFIG
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putString("currentDetailTag", currentDetailTag)
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -115,19 +82,7 @@ class MyFragment() : Fragment(), MainFragmentInterface {
 
     @Composable
     private fun MyRootScreen() {
-        val configuration = LocalConfiguration.current
-        val context = LocalContext.current
-        val twoPane = remember(configuration) { context.useTwoPaneLayout }
         val leftId = remember { View.generateViewId() }
-        val rightId = remember {
-            View.generateViewId().also { detailContainerId = it }
-        }
-        val detailTitleRes = when (currentDetailTag) {
-            ConfigTag.BACKUP_CONFIG -> R.string.backup_restore
-            ConfigTag.THEME_CONFIG -> R.string.theme_setting
-            ConfigTag.MY_MORE -> R.string.reader_menu_more
-            else -> R.string.other_setting
-        }
 
         Scaffold(
             topBar = {
@@ -148,24 +103,18 @@ class MyFragment() : Fragment(), MainFragmentInterface {
                 )
             }
         ) { innerPadding ->
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
                 Box(
-                    modifier = if (twoPane) {
-                        Modifier
-                            .width(360.dp)
-                            .fillMaxHeight()
-                    } else {
-                        Modifier.fillMaxSize()
-                    }
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
-                            FragmentContainerView(ctx).apply {
+                            FrameLayout(ctx).apply {
                                 id = leftId
                                 val fragmentTag = "prefFragment"
                                 val preferenceFragment =
@@ -178,112 +127,12 @@ class MyFragment() : Fragment(), MainFragmentInterface {
                         }
                     )
                 }
-
-                if (twoPane) {
-                    VerticalDivider()
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(detailTitleRes),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            when (currentDetailTag) {
-                                ConfigTag.THEME_CONFIG -> {
-                                    TextButton(
-                                        onClick = {
-                                            (childFragmentManager.findFragmentByTag("detail:${ConfigTag.THEME_CONFIG}")
-                                                as? ThemeConfigFragment)?.toggleThemeMode()
-                                        }
-                                    ) {
-                                        Text(stringResource(R.string.theme_mode))
-                                    }
-                                }
-                                ConfigTag.BACKUP_CONFIG -> {
-                                    LegadoOverflowMenuButton { dismiss ->
-                                        LegadoDropdownMenuItem(
-                                            text = stringResource(R.string.menu_import_old_version),
-                                            onClick = {
-                                                dismiss()
-                                                (childFragmentManager.findFragmentByTag("detail:${ConfigTag.BACKUP_CONFIG}")
-                                                    as? BackupConfigFragment)?.launchImportOld()
-                                            }
-                                        )
-                                        LegadoDropdownMenuItem(
-                                            text = stringResource(R.string.log),
-                                            onClick = {
-                                                dismiss()
-                                                (childFragmentManager.findFragmentByTag("detail:${ConfigTag.BACKUP_CONFIG}")
-                                                    as? BackupConfigFragment)?.showAppLog()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        HorizontalDivider()
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                        ) {
-                            AndroidView(
-                                modifier = Modifier.fillMaxSize(),
-                                factory = { ctx ->
-                                    FragmentContainerView(ctx).apply {
-                                        id = rightId
-                                        bindDetailFragment(rightId, currentDetailTag)
-                                    }
-                                },
-                                update = {
-                                    bindDetailFragment(rightId, currentDetailTag)
-                                }
-                            )
-                        }
-                    }
-                }
             }
         }
-    }
-
-    private fun bindDetailFragment(containerId: Int, configTag: String) {
-        val tag = "detail:$configTag"
-        val currentInContainer = childFragmentManager.findFragmentById(containerId)
-        if (currentInContainer?.tag == tag) return
-        val existing = childFragmentManager.findFragmentByTag(tag)
-        val detailFragment: Fragment = existing ?: when (configTag) {
-            ConfigTag.BACKUP_CONFIG -> BackupConfigFragment()
-            ConfigTag.THEME_CONFIG -> ThemeConfigFragment()
-            ConfigTag.MY_MORE -> MyPreferenceFragment().apply {
-                arguments = Bundle().apply {
-                    putString("configTag", ConfigTag.MY_MORE)
-                }
-            }
-            else -> OtherConfigFragment()
-        }
-        childFragmentManager.beginTransaction()
-            .replace(containerId, detailFragment, tag)
-            .commitAllowingStateLoss()
     }
 
     fun openConfigDetail(configTag: String): Boolean {
-        if (!requireContext().useTwoPaneLayout) return false
-        currentDetailTag = configTag
-        if (detailContainerId != View.NO_ID) {
-            bindDetailFragment(detailContainerId, configTag)
-        }
-        return true
+        return false
     }
 
     /**

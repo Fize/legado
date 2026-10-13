@@ -33,8 +33,6 @@ import com.jeremyliao.liveeventbus.LiveEventBus
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogEditCodeBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppFreezeMonitor
 import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.config.AppConfig
@@ -45,6 +43,7 @@ import io.legado.app.model.CheckSource
 import io.legado.app.model.ImageProvider
 import io.legado.app.receiver.SharedReceiverActivity
 import io.legado.app.ui.compose.component.LegadoTextInputDialog
+import io.legado.app.ui.compose.component.LegadoCodeInputDialog
 import io.legado.app.ui.compose.prefs.ListPreferenceItem
 import io.legado.app.ui.compose.prefs.PreferenceCategoryHeader
 import io.legado.app.ui.compose.prefs.PreferenceItem
@@ -53,7 +52,6 @@ import io.legado.app.ui.compose.prefs.rememberPrefBoolean
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.video.config.SettingsDialog
-import io.legado.app.ui.widget.code.addJsonPattern
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.defaultSharedPreferences
@@ -84,6 +82,8 @@ class OtherConfigFragment : Fragment(),
         SharedReceiverActivity::class.java.name
     )
     private var refreshTick by mutableIntStateOf(0)
+    private var showUserAgentDialog by mutableStateOf(false)
+    private var showCustomHostsDialog by mutableStateOf(false)
 
     private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { treeUri ->
@@ -125,8 +125,8 @@ class OtherConfigFragment : Fragment(),
 
     private fun onOtherPreferenceClick(key: String) {
         when (key) {
-            PreferKey.userAgent -> showUserAgentDialog()
-            PreferKey.customHosts -> showCustomHostsDialog()
+            PreferKey.userAgent -> showUserAgentDialog = true
+            PreferKey.customHosts -> showCustomHostsDialog = true
             PreferKey.videoSetting -> showDialogFragment(SettingsDialog(requireActivity()))
             PreferKey.defaultBookTreeUri -> localBookTreeSelect.launch {
                 title = getString(R.string.select_book_folder)
@@ -609,48 +609,40 @@ class OtherConfigFragment : Fragment(),
                 }
             )
         }
-    }
 
-    @SuppressLint("InflateParams")
-    private fun showUserAgentDialog() {
-        alert(getString(R.string.user_agent)) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = getString(R.string.user_agent)
-                editView.setText(AppConfig.userAgent)
-            }
-            customView { alertBinding.root }
-            okButton {
-                val userAgent = alertBinding.editView.text?.toString()
-                if (userAgent.isNullOrBlank()) {
-                    removePref(PreferKey.userAgent)
-                } else {
-                    putPrefString(PreferKey.userAgent, userAgent)
-                }
-                refreshTick++
-            }
-            cancelButton()
+        if (showUserAgentDialog) {
+            LegadoTextInputDialog(
+                title = stringResource(R.string.user_agent),
+                initialValue = AppConfig.userAgent.orEmpty(),
+                hint = stringResource(R.string.user_agent),
+                onDismiss = { showUserAgentDialog = false },
+                onConfirm = { userAgent ->
+                    if (userAgent.isBlank()) {
+                        removePref(PreferKey.userAgent)
+                    } else {
+                        putPrefString(PreferKey.userAgent, userAgent)
+                    }
+                    refreshTick++
+                },
+            )
         }
-    }
 
-    @SuppressLint("InflateParams")
-    private fun showCustomHostsDialog() {
-        alert(getString(R.string.custom_hosts)) {
-            val alertBinding = DialogEditCodeBinding.inflate(layoutInflater).apply {
-                editViewC.hint = getString(R.string.json_format)
-                editView.addJsonPattern()
-                editView.setText(AppConfig.customHosts)
-            }
-            customView { alertBinding.root }
-            okButton {
-                val customHosts = alertBinding.editView.text?.toString()
-                if (customHosts.isJsonObject()) {
-                    putPrefString(PreferKey.customHosts, customHosts!!)
-                } else {
-                    removePref(PreferKey.customHosts)
-                }
-                refreshTick++
-            }
-            cancelButton()
+        if (showCustomHostsDialog) {
+            LegadoCodeInputDialog(
+                title = stringResource(R.string.custom_hosts),
+                initialValue = AppConfig.customHosts.orEmpty(),
+                hint = stringResource(R.string.json_format),
+                jsonSyntax = true,
+                onDismiss = { showCustomHostsDialog = false },
+                onConfirm = { customHosts ->
+                    if (customHosts.isJsonObject()) {
+                        putPrefString(PreferKey.customHosts, customHosts)
+                    } else {
+                        removePref(PreferKey.customHosts)
+                    }
+                    refreshTick++
+                },
+            )
         }
     }
 

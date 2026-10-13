@@ -1,26 +1,37 @@
 package io.legado.app.ui.widget.keyboard
 
-import android.animation.AnimatorInflater
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Rect
-import android.os.Build
-import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.Window
 import android.widget.PopupWindow
-import android.widget.TextView
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import androidx.viewbinding.ViewBinding
 import io.legado.app.R
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -28,10 +39,9 @@ import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyMd3PopupStyle
-import io.legado.app.utils.dpToPx
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.windowSize
@@ -42,88 +52,108 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import splitties.systemservices.windowManager
 
-/**
- * 键盘帮助浮窗
- */
+/** Compose keyboard assistance bar shown immediately above the IME. */
 class KeyboardToolPop(
     private val context: Context,
     private val scope: CoroutineScope,
     private val rootView: View,
-    private val callBack: CallBack
+    private val callBack: CallBack,
 ) : PopupWindow(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
     ViewTreeObserver.OnGlobalLayoutListener {
 
-    private val helpChar = "❓"
-
-    private val recyclerView = RecyclerView(context).apply {
-        id = R.id.recycler_view
-        layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        setBackgroundColor(context.getCompatColor(R.color.background_card))
-        val pad = 5.dpToPx()
-        setPadding(pad, pad, pad, pad)
-        layoutManager = GridLayoutManager(
-            context,
-            AppConfig.showBoardLine.coerceIn(1, 5),
-            GridLayoutManager.HORIZONTAL,
-            false
-        )
-    }
-    private val adapter = Adapter(context)
-    private var mIsSoftKeyBoardShowing = false
+    private var keyboardItems by mutableStateOf<List<KeyboardAssist>>(emptyList())
+    private var rowCount by mutableIntStateOf(AppConfig.showBoardLine.coerceIn(1, 5))
+    private var softKeyboardShowing = false
     var initialPadding = 0
 
     init {
-        contentView = recyclerView
+        contentView = ComposeView(context).apply {
+            setContent {
+                LegadoTheme {
+                    val actions = buildList {
+                        add(ToolAction("❓") { helpAlert() })
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                            add(ToolAction("↩\uFE0F", callBack::onUndoClicked))
+                            add(ToolAction("↪\uFE0F", callBack::onRedoClicked))
+                        }
+                        keyboardItems.forEach { item ->
+                            add(ToolAction(item.key) { callBack.sendText(item.value) })
+                        }
+                    }
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 3.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height((rowCount * 42 + 10).dp)
+                                .horizontalScroll(rememberScrollState())
+                                .padding(5.dp),
+                        ) {
+                            actions.chunked(rowCount).forEach { columnItems ->
+                                Column {
+                                    columnItems.forEach { action -> ToolButton(action) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         applyMd3PopupStyle()
-
         isTouchable = true
         isOutsideTouchable = false
         isFocusable = false
-        inputMethodMode = INPUT_METHOD_NEEDED //解决遮盖输入法
-        initRecyclerView()
+        inputMethodMode = INPUT_METHOD_NEEDED
         upAdapterData()
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
+    @androidx.compose.runtime.Composable
+    private fun ToolButton(action: ToolAction) {
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier
+                .padding(3.dp)
+                .height(36.dp)
+                .combinedClickable(onClick = action.onClick),
+        ) {
+            Text(
+                text = action.label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            )
+        }
     }
 
     fun attachToWindow(window: Window) {
         window.decorView.viewTreeObserver.addOnGlobalLayoutListener(this)
         contentView.activity?.observeEvent<Int>(PreferKey.showBoardLine) { rows ->
-            updateRowCount(rows)
+            rowCount = rows.coerceIn(1, 5)
+            contentView.requestLayout()
         }
-        contentView.measure(
-            View.MeasureSpec.UNSPECIFIED,
-            View.MeasureSpec.UNSPECIFIED,
-        )
-    }
-
-    private fun updateRowCount(rows: Int) {
-        if (recyclerView.isComputingLayout) {
-            recyclerView.post { updateRowCount(rows) }
-            return
-        }
-        (recyclerView.layoutManager as GridLayoutManager).run {
-            spanCount = rows.coerceIn(1, 5)
-            requestLayout()
-        }
+        contentView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
     }
 
     override fun onGlobalLayout() {
         val keyboardHeight = resolveKeyboardHeight()
-        val preShowing = mIsSoftKeyBoardShowing
+        val wasShowing = softKeyboardShowing
         if (keyboardHeight > 0) {
-            mIsSoftKeyBoardShowing = true
+            softKeyboardShowing = true
+            contentView.measure(
+                View.MeasureSpec.makeMeasureSpec(rootView.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.UNSPECIFIED,
+            )
             rootView.setPadding(0, 0, 0, initialPadding + contentView.measuredHeight)
-            if (!isShowing) {
-                showAtLocation(rootView, Gravity.BOTTOM, 0, 0)
-            }
+            if (!isShowing) showAtLocation(rootView, Gravity.BOTTOM, 0, 0)
         } else {
-            mIsSoftKeyBoardShowing = false
-            rootView.setPadding(0, 0, 0, 0)
-            if (preShowing) {
-                dismiss()
-            }
+            softKeyboardShowing = false
+            rootView.setPadding(0, 0, 0, initialPadding)
+            if (wasShowing) dismiss()
         }
     }
 
@@ -136,72 +166,26 @@ class KeyboardToolPop(
                 visibleFrameBottom = 0,
             )
         }
-
         val rect = Rect()
         rootView.getWindowVisibleDisplayFrame(rect)
         val screenHeight = windowManager.windowSize.heightPixels
-        return resolveKeyboardToolHeight(
-            imeVisible = null,
-            imeInsetBottom = 0,
-            screenHeight = screenHeight,
-            visibleFrameBottom = rect.bottom,
-        )
+        return resolveKeyboardToolHeight(null, 0, screenHeight, rect.bottom)
     }
 
-    @SuppressLint("SetTextI18n")
-    private fun initRecyclerView() {
-        (recyclerView.layoutManager as GridLayoutManager).spanCount = AppConfig.showBoardLine
-        recyclerView.adapter = adapter
-        adapter.addHeaderView {
-            FilletTextItemBinding(context).apply {
-                textView.text = helpChar
-                root.setOnClickListener {
-                    helpAlert()
-                }
-            }
-        }
-        // 安卓6以上支持撤销重做
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            adapter.addHeaderView {
-                FilletTextItemBinding(context).apply {
-                    textView.text = "↩\uFE0F"
-                    root.setOnClickListener {
-                        callBack.onUndoClicked()
-                    }
-                }
-            }
-            adapter.addHeaderView {
-                FilletTextItemBinding(context).apply {
-                    textView.text = "↪\uFE0F"
-                    root.setOnClickListener {
-                        callBack.onRedoClicked()
-                    }
-                }
-            }
-        }
-    }
-
-    @Suppress("MemberVisibilityCanBePrivate")
     fun upAdapterData() {
         scope.launch {
-            appDb.keyboardAssistsDao.flowByType(0).catch {
-                AppLog.put("键盘帮助浮窗获取数据失败\n${it.localizedMessage}", it)
-            }.flowOn(IO).collect {
-                adapter.setItems(it)
-            }
+            appDb.keyboardAssistsDao.flowByType(0)
+                .catch { AppLog.put("键盘帮助浮窗获取数据失败\n${it.localizedMessage}", it) }
+                .flowOn(IO)
+                .collect { keyboardItems = it }
         }
     }
 
     private fun helpAlert() {
-        val items = arrayListOf(
-            SelectItem(context.getString(R.string.assists_key_config), "keyConfig")
-        )
+        val items = arrayListOf(SelectItem(context.getString(R.string.assists_key_config), "keyConfig"))
         items.addAll(callBack.helpActions())
-        context.selector(context.getString(R.string.help), items) { _, selectItem, _ ->
-            when (selectItem.value) {
-                "keyConfig" -> config()
-                else -> callBack.onHelpActionSelect(selectItem.value)
-            }
+        context.selector(context.getString(R.string.help), items) { _, item, _ ->
+            if (item.value == "keyConfig") config() else callBack.onHelpActionSelect(item.value)
         }
     }
 
@@ -209,79 +193,15 @@ class KeyboardToolPop(
         contentView.activity?.showDialogFragment<KeyboardAssistsConfig>()
     }
 
-    class FilletTextItemBinding(context: Context) : ViewBinding {
-        val textView = TextView(context).apply {
-            val margin = 3.dpToPx()
-            layoutParams = RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(margin, margin, margin, margin)
-            }
-            setBackgroundResource(R.drawable.bg_fillet_btn)
-            stateListAnimator = AnimatorInflater.loadStateListAnimator(
-                context,
-                R.animator.button_scale_animator
-            )
-            ellipsize = TextUtils.TruncateAt.END
-            gravity = Gravity.CENTER
-            setPadding(12.dpToPx(), 4.dpToPx(), 12.dpToPx(), 4.dpToPx())
-            maxLines = 1
-            setTextColor(context.getCompatColor(R.color.primaryText))
-            textSize = 14f
-        }
-
-        override fun getRoot(): TextView = textView
-    }
-
-    inner class Adapter(context: Context) :
-        RecyclerAdapter<KeyboardAssist, FilletTextItemBinding>(context) {
-
-        private val itemClickListener = View.OnClickListener { view ->
-            val holder = view.tag as? ItemViewHolder
-            holder?.let {
-                val position = holder.layoutPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    getItemByLayoutPosition(position)?.let { item ->
-                        callBack.sendText(item.value)
-                    }
-                }
-            }
-        }
-
-        override fun getViewBinding(parent: ViewGroup): FilletTextItemBinding {
-            return FilletTextItemBinding(context)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: FilletTextItemBinding,
-            item: KeyboardAssist,
-            payloads: MutableList<Any>
-        ) {
-            binding.run {
-                textView.text = item.key
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: FilletTextItemBinding) {
-            holder.itemView.tag = holder
-            holder.itemView.setOnClickListener(itemClickListener)
-        }
-    }
+    private data class ToolAction(val label: String, val onClick: () -> Unit)
 
     interface CallBack {
-
         fun helpActions(): List<SelectItem<String>> = arrayListOf()
-
         fun onHelpActionSelect(action: String)
-
         fun sendText(text: String)
-
         fun onUndoClicked()
         fun onRedoClicked()
     }
-
 }
 
 internal fun resolveKeyboardToolHeight(
@@ -290,13 +210,8 @@ internal fun resolveKeyboardToolHeight(
     screenHeight: Int,
     visibleFrameBottom: Int,
 ): Int {
-    if (imeVisible != null) {
-        return if (imeVisible) imeInsetBottom.coerceAtLeast(0) else 0
-    }
-
-    if (screenHeight <= 0 || visibleFrameBottom !in 1..screenHeight) {
-        return 0
-    }
+    if (imeVisible != null) return if (imeVisible) imeInsetBottom.coerceAtLeast(0) else 0
+    if (screenHeight <= 0 || visibleFrameBottom !in 1..screenHeight) return 0
     val hiddenHeight = screenHeight - visibleFrameBottom
     return hiddenHeight.takeIf { it > screenHeight / 5 } ?: 0
 }

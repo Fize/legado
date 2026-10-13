@@ -24,22 +24,15 @@ class DialogMultipleEditTextLayoutTest {
 
     @Test
     fun singleFieldDialogUsesFloatingLabelForRuntimeHints() {
-        val bindingSource = readProjectFile(
-            "src/main/java/io/legado/app/databinding/ProgrammaticBindings.kt"
-        )
-        assertTrue(bindingSource.contains("class DialogEditTextBinding"))
-        assertTrue(bindingSource.contains("val editView = AutoCompleteTextView(context)"))
-        assertTrue(bindingSource.contains("val textInputLayout = TextInputLayout(context)"))
-        assertTrue(bindingSource.contains("minHeight = 48.dpToPx()"))
-        assertTrue(bindingSource.contains("setPaddingRelative(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())"))
-        assertFalse(bindingSource.contains("DialogEditTextBinding(context: Context) : ViewBinding {\n    val editView = AutoCompleteTextView(context).apply {\n        isSingleLine = true"))
-
+        assertFalse(projectPath("src/main/java/io/legado/app/databinding/ProgrammaticBindings.kt").exists())
         val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/widget/text/AutoCompleteTextView.kt"
+            "src/main/java/io/legado/app/ui/compose/component/LegadoCommonComponents.kt"
         )
-        assertTrue(source.contains("override fun onAttachedToWindow()"))
-        assertTrue(source.contains("ancestor.hint = currentHint"))
-        assertTrue(source.contains("hint = null"))
+        val dialog = source.substringAfter("fun LegadoTextInputDialog(")
+            .substringBefore("fun LegadoCodeInputDialog(")
+        assertTrue(dialog.contains("OutlinedTextField("))
+        assertTrue(dialog.contains("label = if (hint.isNotBlank()) ({ Text(hint) }) else null"))
+        assertTrue(dialog.contains("singleLine = singleLine"))
     }
 
     private fun parseProjectXml(pathInApp: String): Document {
@@ -54,6 +47,9 @@ class DialogMultipleEditTextLayoutTest {
         listOf(File(pathInApp), File("app/$pathInApp"))
             .firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
+
+    private fun projectPath(pathInApp: String): File =
+        if (File("app").isDirectory) File("app/$pathInApp") else File(pathInApp)
 
     private fun Document.findElementById(id: String): Element {
         return getElementsByTagName("*").let { nodes ->

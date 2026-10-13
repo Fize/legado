@@ -20,7 +20,6 @@ import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
-import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
@@ -48,7 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-abstract class BaseActivity<VB : ViewBinding>(
+abstract class BaseActivity(
     val fullScreen: Boolean = true,
     private val theme: Theme = Theme.Auto,
     private val toolBarTheme: Theme = Theme.Auto,
@@ -57,7 +56,7 @@ abstract class BaseActivity<VB : ViewBinding>(
     private val showOpenMenuIcon: Boolean = true
 ) : AppCompatActivity() {
 
-    protected abstract val binding: VB
+    protected abstract val rootView: View
 
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
@@ -95,7 +94,7 @@ abstract class BaseActivity<VB : ViewBinding>(
         if (!shouldCreateContentView()) return
         setupSystemBar()
         setupPredictiveBack()
-        setContentView(binding.root)
+        setContentView(rootView)
         upBackgroundImage()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             findViewById<TitleBar>(R.id.title_bar)

@@ -51,7 +51,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.contains
 import io.legado.app.help.book.isLocal
@@ -114,13 +113,9 @@ class BookshelfManageActivity :
         it.uri?.let { uri ->
             alert(R.string.export_success) {
                 if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + uri)
                 }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
+                if (!uri.toString().isAbsUrl()) setMessage(uri.toString())
                 okButton {
                     sendToClip(uri.toString())
                 }

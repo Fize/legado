@@ -74,7 +74,6 @@ import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourceCheckState
 import io.legado.app.data.entities.BookSourcePart
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.config.AppConfig
@@ -184,18 +183,13 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
             val url = uri.toString()
             alert(R.string.export_success) {
                 if (url.isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + url)
                     sourceSharePassphraseButton(
-                        layoutInflater,
                         url,
                         SourceSharePassphrase.Type.BOOK_SOURCE,
                     )
                 }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(url)
-                }
-                customView { alertBinding.root }
+                if (!url.isAbsUrl()) setMessage(url)
                 okButton {
                     sendToClip(url)
                 }
@@ -1069,31 +1063,27 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
         }
     }
 
-    @SuppressLint("InflateParams")
     private fun checkSource() {
-        val dialog = alert(titleResource = R.string.search_book_key) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "search word"
-                editView.setText(CheckSource.keyword)
-            }
-            customView { alertBinding.root }
-            okButton {
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.search_book_key),
+                initialValue = CheckSource.keyword,
+                hint = "search word",
+                neutralText = getString(R.string.check_source_config),
+                onNeutral = { showDialogFragment<CheckSourceConfig>() },
+                onConfirm = { keyword ->
                 keepScreenOn(true)
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotEmpty()) {
-                        CheckSource.keyword = it
-                    }
-                }
+                if (keyword.isNotEmpty()) CheckSource.keyword = keyword
                 val selectItems = selection
                 if (selectItems.isEmpty()) {
                     keepScreenOn(false)
-                    return@okButton
+                    return@ComposeTextInputDialog
                 }
                 val checkSessionId = Debug.tryStartCheckSession()
                 if (checkSessionId == null) {
                     keepScreenOn(false)
                     toastOnUi("书源调试通道占用中，请稍后重试")
-                    return@okButton
+                    return@ComposeTextInputDialog
                 }
                 lifecycleScope.launch {
                     try {
@@ -1105,13 +1095,9 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                         toastOnUi(error.localizedMessage ?: "无法启动书源检验")
                     }
                 }
-            }
-            neutralButton(R.string.check_source_config)
-            cancelButton()
-        }
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
-            showDialogFragment<CheckSourceConfig>()
-        }
+                },
+            )
+        )
     }
 
     private fun resumeCheckSource() {
@@ -1123,75 +1109,56 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
         startCheckMessageRefreshJob()
     }
 
-    @SuppressLint("InflateParams")
     private fun selectionAddToGroups() {
-        alert(titleResource = R.string.add_group) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setFilterValues(groups.toList())
-                editView.dropDownHeight = 180.dpToPx()
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotEmpty()) {
-                        viewModel.selectionAddToGroups(selection, it)
-                    }
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.add_group),
+                hint = getString(R.string.group_name),
+                suggestions = groups.toList(),
+                onConfirm = {
+                    if (it.isNotEmpty()) viewModel.selectionAddToGroups(selection, it)
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 
-    @SuppressLint("InflateParams")
     private fun selectionRemoveFromGroups() {
-        alert(titleResource = R.string.remove_group) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setFilterValues(groups.toList())
-                editView.dropDownHeight = 180.dpToPx()
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotEmpty()) {
-                        viewModel.selectionRemoveFromGroups(selection, it)
-                    }
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.remove_group),
+                hint = getString(R.string.group_name),
+                suggestions = groups.toList(),
+                onConfirm = {
+                    if (it.isNotEmpty()) viewModel.selectionRemoveFromGroups(selection, it)
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 
-    @SuppressLint("InflateParams")
     private fun showImportDialog() {
         val aCache = ACache.get(cacheDir = false)
         val cacheUrls: MutableList<String> = aCache
             .getAsString(importRecordKey)
             ?.splitNotBlank(",")
             ?.toMutableList() ?: mutableListOf()
-        alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.import_on_line),
+                hint = "url",
+                suggestions = cacheUrls,
+                onDeleteSuggestion = {
                     cacheUrls.remove(it)
                     aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                }
-            }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
+                },
+                onConfirm = { text ->
+                    if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                        cacheUrls.add(0, text)
                         aCache.put(importRecordKey, cacheUrls.joinToString(","))
                     }
-                    showDialogFragment(ImportBookSourceDialog(it))
+                    showDialogFragment(ImportBookSourceDialog(text))
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 
     override fun observeLiveBus() {

@@ -20,7 +20,6 @@ import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
@@ -33,6 +32,7 @@ import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.manage.BookshelfManageActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.dialog.ComposeTextInputDialog
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
 import io.legado.app.ui.widget.dialog.WaitDialog
@@ -74,13 +74,9 @@ abstract class BaseBookshelfFragment(@LayoutRes layoutId: Int = 0) : VMBaseFragm
         it.uri?.let { uri ->
             alert(R.string.export_success) {
                 if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + uri)
                 }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
+                if (!uri.toString().isAbsUrl()) setMessage(uri.toString())
                 okButton {
                     requireContext().sendToClip(uri.toString())
                 }
@@ -248,22 +244,18 @@ abstract class BaseBookshelfFragment(@LayoutRes layoutId: Int = 0) : VMBaseFragm
         }
     }
 
-    @SuppressLint("InflateParams")
     fun showAddBookByUrlAlert() {
-        alert(titleResource = R.string.add_book_url) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
+        showDialogFragment(
+            ComposeTextInputDialog(
+                title = getString(R.string.add_book_url),
+                hint = "url",
+                onConfirm = {
                     waitDialog.setText("添加中...")
                     waitDialog.show()
                     viewModel.addBookByUrl(it, groupId)
-                }
-            }
-            cancelButton()
-        }
+                },
+            )
+        )
     }
 
     fun configBookshelf() {
@@ -334,24 +326,20 @@ abstract class BaseBookshelfFragment(@LayoutRes layoutId: Int = 0) : VMBaseFragm
     }
 
     private fun importBookshelfAlert(groupId: Long) {
-        alert(titleResource = R.string.import_bookshelf) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url/json"
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    viewModel.importBookshelf(it, groupId)
-                }
-            }
-            cancelButton()
-            neutralButton(R.string.select_file) {
-                importBookshelf.launch {
-                    mode = HandleFileContract.FILE
-                    allowExtensions = arrayOf("txt", "json")
-                }
-            }
-        }
+        showDialogFragment(
+            ComposeTextInputDialog(
+                title = getString(R.string.import_bookshelf),
+                hint = "url/json",
+                neutralText = getString(R.string.select_file),
+                onNeutral = {
+                    importBookshelf.launch {
+                        mode = HandleFileContract.FILE
+                        allowExtensions = arrayOf("txt", "json")
+                    }
+                },
+                onConfirm = { viewModel.importBookshelf(it, groupId) },
+            )
+        )
     }
 
 }

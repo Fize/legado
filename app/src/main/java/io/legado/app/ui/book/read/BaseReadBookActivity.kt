@@ -39,13 +39,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
-import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst.charsets
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.book.cacheLocalUri
 import io.legado.app.help.book.savePreservingCustomCoverUrl
 import io.legado.app.help.config.AppConfig
@@ -128,7 +126,7 @@ fun Context.showBookDownloadDialog(book: Book) {
     }
 }
 
-class ActivityBookReadViewHolder(context: Context) : ViewBinding {
+class ActivityBookReadViewHolder(context: Context) {
     val readView = ReadView(context, null).apply {
         id = R.id.read_view
         layoutParams = FrameLayout.LayoutParams(
@@ -204,16 +202,17 @@ class ActivityBookReadViewHolder(context: Context) : ViewBinding {
         addView(readAloudFloatBarContainer.root)
     }
 
-    override fun getRoot(): View = root
 }
 
 /**
  * 阅读界面
  */
 abstract class BaseReadBookActivity :
-    VMBaseActivity<ActivityBookReadViewHolder, ReadBookViewModel>(imageBg = false) {
+    VMBaseActivity<ReadBookViewModel>(imageBg = false) {
 
-    override val binding by lazy { ActivityBookReadViewHolder(this) }
+    protected val binding by lazy { ActivityBookReadViewHolder(this) }
+    override val rootView: View
+        get() = binding.root
     override val viewModel by viewModels<ReadBookViewModel>()
     protected val menuLayoutIsVisible
         get() = bottomDialog > 0 || binding.readMenu.isVisible || binding.searchMenu.bottomMenuVisible
@@ -530,20 +529,15 @@ abstract class BaseReadBookActivity :
     }
 
     fun showCharsetConfig() {
-        alert(R.string.set_charset) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "charset"
-                editView.setFilterValues(charsets)
-                editView.setText(ReadBook.book?.charset)
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    ReadBook.setCharset(it)
-                }
-            }
-            cancelButton()
-        }
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.set_charset),
+                initialValue = ReadBook.book?.charset.orEmpty(),
+                hint = "charset",
+                suggestions = charsets,
+                onConfirm = { ReadBook.setCharset(it) },
+            )
+        )
     }
 
     fun showPageAnimConfig(success: () -> Unit) {

@@ -63,7 +63,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.widget.doAfterTextChanged
 import io.legado.app.R
+import io.legado.app.ui.widget.code.CodeView
+import io.legado.app.ui.widget.code.addJsonPattern
 import io.legado.app.ui.widget.image.CoverImageView
 import kotlin.math.roundToInt
 
@@ -482,6 +485,10 @@ fun LegadoTextInputDialog(
     hint: String = "",
     isPassword: Boolean = false,
     singleLine: Boolean = true,
+    suggestions: List<String> = emptyList(),
+    onDeleteSuggestion: ((String) -> Unit)? = null,
+    neutralText: String? = null,
+    onNeutral: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -516,7 +523,91 @@ fun LegadoTextInputDialog(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                suggestions
+                    .asSequence()
+                    .filter { text.isBlank() || it.contains(text, ignoreCase = true) }
+                    .take(6)
+                    .forEach { suggestion ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickableCompat(onClick = { text = suggestion })
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = suggestion,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (onDeleteSuggestion != null) {
+                                IconButton(onClick = { onDeleteSuggestion(suggestion) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.delete),
+                                    )
+                                }
+                            }
+                        }
+                    }
             }
+        },
+        dismissButton = {
+            Row {
+                if (neutralText != null && onNeutral != null) {
+                    TextButton(onClick = {
+                        onNeutral()
+                        onDismiss()
+                    }) {
+                        Text(neutralText)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(text)
+                onDismiss()
+            }) {
+                Text(stringResource(R.string.ok))
+            }
+        },
+    )
+}
+
+@Composable
+fun LegadoCodeInputDialog(
+    title: String,
+    initialValue: String,
+    hint: String = "",
+    jsonSyntax: Boolean = false,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember(initialValue) { mutableStateOf(initialValue) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.widthIn(max = 720.dp),
+        title = { Text(title) },
+        text = {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 180.dp, max = 520.dp),
+                factory = { context ->
+                    CodeView(context).apply {
+                        this.hint = hint
+                        minLines = 8
+                        if (jsonSyntax) addJsonPattern()
+                        setText(text)
+                        doAfterTextChanged { text = it?.toString().orEmpty() }
+                    }
+                },
+            )
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {

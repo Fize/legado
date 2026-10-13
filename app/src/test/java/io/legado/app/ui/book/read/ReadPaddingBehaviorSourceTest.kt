@@ -8,28 +8,21 @@ import java.io.File
 class ReadPaddingBehaviorSourceTest {
 
     @Test
-    fun `detail seek bar preserves final callback order`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/widget/DetailSeekBar.kt"
-        ).readText().normalizeLines()
-
-        assertTrue(source.contains("if (fromUser) onDragging?.invoke(progress)"))
-        assertTrue(source.contains("onTrackingStart?.invoke()"))
-        val stopBlock = source.substringAfter("override fun onStopTrackingTouch")
-            .substringBefore("\n    }")
-        assertTrue(stopBlock.indexOf("onChanged?.invoke") < stopBlock.indexOf("onTrackingStop?.invoke"))
+    fun `compose padding slider preserves final callback order`() {
+        val source = paddingDialogSource()
+        assertTrue(source.contains("onDragging(it.roundToInt().coerceIn(0, max))"))
+        val finished = source.substringAfter("onValueChangeFinished = {")
+            .substringBefore("valueRange =")
+        assertTrue(finished.indexOf("onChanged(progress)") < finished.indexOf("onTrackingStop()"))
     }
 
     @Test
-    fun `detail seek bar owns its saved progress state`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/widget/DetailSeekBar.kt"
-        ).readText().normalizeLines()
-
-        assertTrue(source.contains("dispatchFreezeSelfOnly(container)"))
-        assertTrue(source.contains("dispatchThawSelfOnly(container)"))
-        assertTrue(source.contains("putInt(STATE_PROGRESS, progress)"))
-        assertTrue(source.contains("progress = state.getInt(STATE_PROGRESS)"))
+    fun `compose padding slider derives state from dialog progress`() {
+        val source = paddingDialogSource()
+        assertTrue(source.contains("var isDragging by remember { mutableStateOf(false) }"))
+        assertTrue(source.contains("value = progress.toFloat()"))
+        assertTrue(source.contains("onChanged(progress - 1)"))
+        assertFalse(projectPath("src/main/java/io/legado/app/ui/widget/DetailSeekBar.kt").exists())
     }
 
     @Test
@@ -80,4 +73,7 @@ class ReadPaddingBehaviorSourceTest {
             .firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
+
+    private fun projectPath(pathInApp: String): File =
+        if (File("app").isDirectory) File("app/$pathInApp") else File(pathInApp)
 }

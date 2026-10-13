@@ -1,6 +1,7 @@
 package io.legado.app.ui.about
 
 import androidx.fragment.app.Fragment
+import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.help.update.AppUpdate
 import io.legado.app.ui.widget.dialog.WaitDialog
@@ -16,6 +17,20 @@ fun Fragment.checkAppUpdate(beta: Boolean = false) {
         else AppUpdate.gitHubUpdate.check(lifecycleScope)
     request.onSuccess {
         if (isAdded && !childFragmentManager.isStateSaved) showDialogFragment(UpdateDialog(it))
+    }.onError {
+        appCtx.toastOnUi(it.localizedMessage)
+    }.onFinally {
+        waitDialog.dismiss()
+    }
+}
+
+fun AppCompatActivity.checkAppUpdate(beta: Boolean = false) {
+    val waitDialog = WaitDialog(this)
+    waitDialog.show()
+    val request = if (beta) AppUpdate.checkBeta(lifecycleScope)
+        else AppUpdate.gitHubUpdate.check(lifecycleScope)
+    request.onSuccess {
+        if (!isFinishing && !supportFragmentManager.isStateSaved) showDialogFragment(UpdateDialog(it))
     }.onError {
         appCtx.toastOnUi(it.localizedMessage)
     }.onFinally {

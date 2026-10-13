@@ -61,7 +61,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.book.getExportFileName
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isLocal
@@ -781,21 +780,16 @@ class CacheActivity : VMBaseComposeActivity<CacheViewModel>() {
         }
     }
 
-    @SuppressLint("SetTextI18n")
     private fun alertExportFileName() {
-        alert(R.string.export_file_name) {
-            val message = "Variable: name, author."
-            setMessage(message)
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "file name js"
-                editView.setText(AppConfig.bookExportFileName)
-            }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.bookExportFileName = alertBinding.editView.text?.toString()
-            }
-            cancelButton()
-        }
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.export_file_name),
+                initialValue = AppConfig.bookExportFileName.orEmpty(),
+                message = "Variable: name, author.",
+                hint = "file name js",
+                onConfirm = { AppConfig.bookExportFileName = it },
+            )
+        )
     }
 
     private fun getTypeName(): String {
@@ -812,19 +806,18 @@ class CacheActivity : VMBaseComposeActivity<CacheViewModel>() {
     }
 
     private fun showCharsetConfig(onUpdated: () -> Unit = {}) {
-        alert(R.string.set_charset) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "charset name"
-                editView.setFilterValues(charsets)
-                editView.setText(AppConfig.exportCharset)
-            }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.exportCharset = alertBinding.editView.text?.toString() ?: "UTF-8"
-                onUpdated()
-            }
-            cancelButton()
-        }
+        showDialogFragment(
+            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
+                title = getString(R.string.set_charset),
+                initialValue = AppConfig.exportCharset,
+                hint = "charset name",
+                suggestions = charsets,
+                onConfirm = {
+                    AppConfig.exportCharset = it.ifBlank { "UTF-8" }
+                    onUpdated()
+                },
+            )
+        )
     }
 
     private fun sureCacheBook(action: () -> Unit) {

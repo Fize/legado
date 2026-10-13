@@ -123,9 +123,8 @@ class SpeakEngineDialog : BaseDialogFragment() {
             val url = uri.toString()
             alert(R.string.export_success) {
                 if (url.isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + url)
                     sourceSharePassphraseButton(
-                        layoutInflater,
                         url,
                         SourceSharePassphrase.Type.TTS_RULE,
                     )

@@ -42,7 +42,6 @@ import io.legado.app.base.VMBaseComposeActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.DictRule
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.lib.dialogs.alert
@@ -53,6 +52,7 @@ import io.legado.app.ui.compose.component.LegadoSelectActionBar
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.widget.dialog.ComposeTextInputDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import io.legado.app.utils.isAbsUrl
@@ -91,18 +91,13 @@ class DictRuleActivity : VMBaseComposeActivity<DictRuleViewModel>() {
             val url = uri.toString()
             alert(R.string.export_success) {
                 if (url.isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+                    setMessage(DirectLinkUpload.getSummary() + "\n\n" + url)
                     sourceSharePassphraseButton(
-                        layoutInflater,
                         url,
                         SourceSharePassphrase.Type.DICT_RULE,
                     )
                 }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(url)
-                }
-                customView { alertBinding.root }
+                if (!url.isAbsUrl()) setMessage(url)
                 okButton {
                     sendToClip(url)
                 }
@@ -329,36 +324,29 @@ class DictRuleActivity : VMBaseComposeActivity<DictRuleViewModel>() {
         showDialogFragment(DictRuleEditDialog(rule.name))
     }
 
-    @SuppressLint("InflateParams")
     private fun showImportDialog() {
         val aCache = ACache.get(cacheDir = false)
         val cacheUrls: MutableList<String> = aCache
             .getAsString(importRecordKey)
             ?.splitNotBlank(",")
             ?.toMutableList() ?: mutableListOf()
-        alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
+        showDialogFragment(
+            ComposeTextInputDialog(
+                title = getString(R.string.import_on_line),
+                hint = "url",
+                suggestions = cacheUrls,
+                onDeleteSuggestion = {
                     cacheUrls.remove(it)
                     aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                }
-            }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
+                },
+                onConfirm = { text ->
+                    if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                        cacheUrls.add(0, text)
                         aCache.put(importRecordKey, cacheUrls.joinToString(","))
                     }
-                    showDialogFragment(
-                        ImportDictRuleDialog(it)
-                    )
+                    showDialogFragment(ImportDictRuleDialog(text))
                 }
-            }
-            cancelButton()
-        }
+            )
+        )
     }
 }

@@ -20,11 +20,13 @@ class UpdateDialogLifecycleTest {
 
         assertGuardBeforeDialog(main, "supportFragmentManager.isStateSaved")
         assertGuardBeforeDialog(shared, "isAdded && !childFragmentManager.isStateSaved")
-        for (path in listOf("ui/about/AboutFragment.kt", "ui/main/my/MyFragment.kt")) {
-            val caller = projectFile("src/main/java/io/legado/app/$path").readText()
-            assertTrue(caller.contains("\"check_update\" -> checkAppUpdate()"))
-            assertTrue(caller.contains("\"check_beta_update\" -> checkAppUpdate(beta = true)"))
-        }
+        assertTrue(shared.contains("!isFinishing && !supportFragmentManager.isStateSaved"))
+        val about = projectFile("src/main/java/io/legado/app/ui/about/AboutActivity.kt").readText()
+        assertTrue(about.contains("onClick = { checkAppUpdate() }"))
+        assertTrue(about.contains("onClick = { checkAppUpdate(true) }"))
+        val my = projectFile("src/main/java/io/legado/app/ui/main/my/MyFragment.kt").readText()
+        assertTrue(my.contains("\"check_update\" -> checkAppUpdate()"))
+        assertTrue(my.contains("\"check_beta_update\" -> checkAppUpdate(beta = true)"))
     }
 
     @Test

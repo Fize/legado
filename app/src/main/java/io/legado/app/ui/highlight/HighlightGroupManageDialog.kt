@@ -1,6 +1,5 @@
 package io.legado.app.ui.highlight
 
-import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -31,12 +30,11 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.appDb
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.compose.component.LegadoTextInputDialog
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.utils.requestInputMethod
 import io.legado.app.utils.setLayout
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.first
@@ -46,6 +44,7 @@ class HighlightGroupManageDialog : BaseDialogFragment() {
 
     private val viewModel: HighlightRuleViewModel by activityViewModels()
     private var groupsState by mutableStateOf<List<String>>(emptyList())
+    private var editingGroup by mutableStateOf<String?>(null)
 
     override fun onStart() {
         super.onStart()
@@ -116,23 +115,23 @@ class HighlightGroupManageDialog : BaseDialogFragment() {
                 }
             }
         }
+        editingGroup?.let { group ->
+            LegadoTextInputDialog(
+                title = stringResource(R.string.group_edit),
+                initialValue = group,
+                hint = stringResource(R.string.group_name),
+                onDismiss = { editingGroup = null },
+                onConfirm = { value ->
+                    value.trim().takeIf { it.isNotEmpty() }?.let {
+                        viewModel.renameGroup(group, it)
+                    }
+                },
+            )
+        }
     }
 
-    @SuppressLint("InflateParams")
     private fun editGroup(group: String) {
-        alert(title = getString(R.string.group_edit)) {
-            val edit = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setText(group)
-            }
-            customView { edit.root }
-            okButton {
-                edit.editView.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                    viewModel.renameGroup(group, it)
-                }
-            }
-            cancelButton()
-        }.requestInputMethod()
+        editingGroup = group
     }
 
     private fun deleteGroup(group: String) {

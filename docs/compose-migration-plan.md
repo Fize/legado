@@ -95,3 +95,79 @@ flowchart TD
 - 迁移阅读器上下菜单、朗读悬浮条、长按选词气泡、正文搜索及全部阅读设置底部面板为 Compose。
 - 保留 `ChapterProvider` / `TextChapterLayout` 核心排版算法（产出 `TextPage` 数据模型），使用 Compose `Canvas` 替代 `view_book_page.xml` 与 `activity_book_read.xml`。
 - 删除 `res/layout*`、`res/menu`、`res/xml/pref_*.xml` 全部残留文件，在 `app/build.gradle.kts` 中移除 `viewBinding = true` 与旧版 View 依赖库。
+
+---
+
+## 4. 漫画阅读器迁移方案（独立后续阶段）
+
+漫画阅读器的菜单、设置和外围容器可以继续使用 Compose；图片阅读区域单列为后续迁移阶段。在此阶段完成前，允许其保留原生 View 实现，但不得重新引入任何 `res/layout*` XML 文件。
+
+### 4.1 目标架构
+
+```mermaid
+flowchart LR
+    Data["ReadManga / ViewModel\n章节、页面、进度、加载"] --> State["MangaReaderUiState\n模式、方向、缩放、菜单"]
+    State --> Webtoon["条漫\nLazyColumn"]
+    State --> Single["横向单页\nHorizontalPager"]
+    State --> Spread["横向双页\nHorizontalPager + MangaSpread"]
+    Webtoon --> Page["MangaPage\n加载、重试、滤镜、长按保存"]
+    Single --> Page
+    Spread --> Page
+```
+
+### 4.2 实施顺序
+
+1. 抽取 `MangaReaderUiState` 和事件接口，统一当前章节、页码、加载状态、阅读方向、缩放、预下载与菜单状态；`ReadManga` 继续负责内容加载、章节切换和进度持久化。
+2. 使用 `LazyColumn` 迁移条漫模式。保留当前图片缓存、加载进度、失败重试、长按保存、颜色滤镜和接近尾部时的下一章预取行为。
+3. 使用 `HorizontalPager` 迁移横向单页模式，以稳定页面 ID 恢复旋转和重建后的阅读位置。
+4. 引入 `MangaSpread` 数据模型迁移横向双页与 RTL；单页、首尾页和跨页情况必须显式建模，不能再依赖 `RecyclerView` 的 adapter position 修正。
+5. 实现单页 `ZoomState`：未缩放时由列表或 pager 滑动，放大后由图片优先处理平移；支持双击缩放、边界交接、长按保存与自动翻页暂停。
+6. 最后将仿真卷页迁移为 Compose `Canvas`。在动画完成前，横向模式以 `HorizontalPager` 的普通翻页保证阅读可用。
+
+### 4.3 验收条件
+
+- 条漫、横向单页、横向双页和 RTL 均能正确恢复阅读进度。
+- 图片加载、失败重试、预下载、灰阶、墨水屏、颜色滤镜、页脚、长按保存和自动翻页功能保持可用。
+- 缩放状态下的拖动不误触翻页；未缩放时翻页和滚动响应正常。
+- 删除 `MangaAdapter`、`MangaLayoutManager`、`WebtoonRecyclerView` 及只为漫画阅读保留的 RecyclerView 代码后，构建和关键阅读流程验证通过。
+
+---
+
+## 5. 非漫画动态 View 清理计划
+
+`res/layout*`、`res/menu` 和偏好设置 XML 已删除，但最后一次 XML 清理把一部分界面改为 Kotlin 动态创建的 `ViewBinding`。本阶段的目标是将这些非漫画界面改为 Compose，而不是继续保留等价的动态 View；仅 `WebView`、视频解码画面、相机预览和代码编辑器等第三方原生控件可以通过 `AndroidView` 桥接。
+
+### 5.1 范围与边界
+
+| 范围 | 当前实现 | 目标实现 |
+| --- | --- | --- |
+| 通用编辑框 | `DialogEditTextBinding`、`DialogEditCodeBinding` | 统一 Compose 文本编辑弹窗；代码编辑器仅内部使用 `AndroidView(CodeView)` |
+| Toast、批量操作条、详情滑条 | `ViewToastBinding`、`ViewSelectActionBarBinding`、`ViewDetailSeekBarBinding` | Compose `Snackbar`/自定义浮层、批量操作栏和滑条组件 |
+| 文本阅读器菜单与页面容器 | `BaseReadBookActivity`、`TextActionMenu`、`PopupAction` | Compose 菜单、选择操作栏和阅读器容器；保留正文排版数据模型与 Canvas 渲染 |
+| 设置与首页双栏 | `MyFragment`、`ExploreFragment`、`ConfigActivity` 的 `FragmentContainerView` | Compose 导航状态和 `ListDetailPaneScaffold`；删除嵌套 Fragment 容器 |
+| 键盘工具条与遗留 Adapter 基类 | `KeyboardToolPop`、`RecyclerAdapter`、`DiffRecyclerAdapter` | Compose `Lazy*`、`DropdownMenu`、`ModalBottomSheet`；只在漫画迁移前保留漫画专用实现 |
+
+### 5.2 分批实施
+
+1. **建立 Compose 替代组件**：提供 `LegadoTextEditDialog`、`LegadoCodeEditDialog`、`LegadoToast`、`LegadoSelectActionBar` 和 `LegadoDetailSlider`。组件以状态和回调传递结果，不暴露 `View`、`LayoutInflater` 或资源 ID。
+2. **替换通用绑定调用点**：先迁移所有使用 `DialogEditTextBinding` 的规则、书源、导入、搜索和阅读器编辑入口；再迁移 `DialogEditCodeBinding`。删除 `ProgrammaticBindings.kt` 中已无调用方的绑定，直到整个文件可删除。
+3. **迁移阅读器周边**：将 `SelectActionBar`、`DetailSeekBar`、`PopupAction`、`TextActionMenu` 和 `KeyboardToolPop` 改为 Compose。该批次不修改漫画阅读器；文字阅读器页面继续沿用既有排版与手势业务逻辑。
+4. **移除 Fragment 容器**：将“我的”、发现和设置的双栏页面改为 Compose 状态驱动的详情页，消除 `FragmentContainerView`、子 Fragment 事务和 `AndroidView` 容器。
+5. **清理基础设施与依赖**：在非漫画调用方归零后，删除 `androidx.viewbinding.ViewBinding` 兼容接口、`BaseActivity<VB>`/`VMBaseActivity<VB>` 的绑定泛型、viewbinding delegate，以及不再被漫画以外功能引用的 RecyclerView Adapter 基类；最后从 Gradle 中删除无调用的旧 UI 依赖。
+
+### 5.3 验收条件
+
+- 非漫画代码不再引用 `io.legado.app.databinding.ProgrammaticBindings` 或 `androidx.viewbinding.ViewBinding`。
+- 非漫画页面不再创建 `FragmentContainerView`，也不通过 `AndroidView` 承载项目自有 Fragment 或普通 View 控件。
+- 所有文本编辑、批量操作、滑条、菜单、Toast、规则和书源编辑流程与现有行为一致。
+- `res/layout*`、`res/menu` 和偏好设置 XML 仍保持为空；仅 Android 系统元数据 XML 保留。
+- 构建和单元测试通过，并对书源编辑、规则编辑、阅读器文本选择、平板双栏和设置导航做真机回归。
+
+### 5.4 2026-10-13 实施记录
+
+- 已完成批次 1、2：统一 Compose 文本/代码输入弹窗已经覆盖规则、书源、导入、搜索、缓存与阅读器入口；`ProgrammaticBindings.kt` 已删除。
+- 已完成批次 3 的通用组件：`PopupAction`、`TextActionMenu`、`KeyboardToolPop` 已改为 Compose；`SelectActionBar`、`DetailSeekBar` 已由现有 Compose 操作栏和滑条取代。
+- 已完成基础设施收缩：`BaseActivity`/`VMBaseActivity` 不再使用 ViewBinding 泛型；ViewBinding delegate、`RecyclerAdapter`、`DiffRecyclerAdapter` 与相关 ViewHolder 已删除。漫画列表暂时保留自己的 RecyclerView Adapter。
+- 已移除所有 `FragmentContainerView` 引用。发现页详情改为进入 Compose 详情页；“关于”和书源网页登录已直接由 Activity 承载 Compose。二维码仍按第三方相机预览例外使用 `AndroidView`。
+- 设置中心与“我的”的内容本身已经是 Compose，但仍通过普通 `FrameLayout` 承载现有 Fragment 生命周期，以保留 Activity Result、对话框和偏好监听行为；后续应把这些控制器提升到 Activity/ViewModel 后再删除最后两处自有 Fragment 桥接。
+- 验证：`compileAppDebugKotlin`、`assembleAppDebug`、1699 项 `testAppDebugUnitTest` 均通过；Pixel Tablet 模拟器已覆盖首页、“我的”、“关于”、“其它设置”和 Compose 文本输入弹窗，未发现应用崩溃。
