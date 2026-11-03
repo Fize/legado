@@ -18,7 +18,7 @@ import io.legado.app.help.book.isOnLineTxt
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.model.isForBook
-import io.legado.app.ui.association.OpenUrlConfirmActivity
+import io.legado.app.ui.AppActivity
 import io.legado.app.ui.book.read.page.delegate.PageDelegate
 import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
@@ -32,16 +32,16 @@ import io.legado.app.ui.book.read.page.entities.column.TextBaseColumn
 import io.legado.app.ui.book.read.page.entities.column.TextColumn
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.TextPageFactory
-import io.legado.app.ui.widget.dialog.PhotoDialog
+import io.legado.app.ui.navigation.OpenUrlConfirmRoute
 import io.legado.app.utils.activity
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
-import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
+import io.legado.app.ui.photo.openPhoto
 
 /**
  * 阅读内容视图
@@ -398,7 +398,7 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
 
                 is ImageColumn -> when (AppConfig.clickImgWay) {
                     "1" -> { //预览图片
-                        activity?.showDialogFragment(PhotoDialog(column.src, isBook = true))
+                        activity?.openPhoto(column.src, ReadBook.book?.origin, ReadBook.book)
                         handled = true
                     }
                     "2" -> { //兼容处理
@@ -442,8 +442,13 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
                 is TextHtmlColumn -> {
                     val linkUrl = column.linkUrl
                     if (linkUrl != null) {
-                        activity?.startActivity<OpenUrlConfirmActivity> {
-                            putExtra("uri", linkUrl)
+                        activity?.let { activity ->
+                            activity.startActivity(
+                                AppActivity.startIntent(
+                                    activity,
+                                    OpenUrlConfirmRoute(uri = linkUrl),
+                                ),
+                            )
                         }
                         handled = true
                     } else if (highlightActionTrigger != "longPress" && column.highlightStyle != null) {

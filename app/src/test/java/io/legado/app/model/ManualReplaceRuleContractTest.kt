@@ -47,8 +47,10 @@ class ManualReplaceRuleContractTest {
         assertTrue(dialog.contains("selectedIds.retainAll"))
         assertTrue(dialog.contains("Mode.ToggleAndReverse"))
 
-        val replaceActivity = source("app/src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt")
-        assertTrue(replaceActivity.contains("setResult(RESULT_OK)"))
+        val appActivity = source("app/src/main/java/io/legado/app/ui/AppActivity.kt")
+        val appShell = source("app/src/main/java/io/legado/app/ui/navigation/LegadoApp.kt")
+        assertTrue(appActivity.contains("onResult = { resultCode, data -> setResult(resultCode, data) }"))
+        assertTrue(appShell.contains("onResult(Activity.RESULT_OK, null)"))
     }
 
     @Test

@@ -39,8 +39,6 @@ class BundlePayloadContractTest {
             "io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
             "io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt",
             "io/legado/app/ui/book/source/manage/BookSourceActivity.kt",
-            "io/legado/app/ui/main/bookshelf/style1/books/BooksFragment.kt",
-            "io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
         )
     }
 }

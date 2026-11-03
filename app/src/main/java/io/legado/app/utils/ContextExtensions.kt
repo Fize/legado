@@ -46,7 +46,8 @@ import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.video.VideoPlayerActivity
-import io.legado.app.ui.book.manga.ReadMangaActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.MangaReaderRoute
 import io.legado.app.ui.book.read.ReadBookActivity
 import splitties.systemservices.clipboardManager
 import splitties.systemservices.connectivityManager
@@ -62,21 +63,30 @@ inline fun <reified A : Activity> Context.startActivity(configIntent: Intent.() 
     startActivity(intent)
 }
 
-fun Context.startActivityForBook(
-    book: Book,
-    configIntent: Intent.() -> Unit = {},
-) {
+private fun mangaReaderRoute(book: Book, extras: Intent) = MangaReaderRoute(
+    bookUrl = book.bookUrl,
+    chapterIndex = if (extras.hasExtra("index")) extras.getIntExtra("index", 0) else null,
+    pageIndex = extras.getIntExtra("chapterPos", 0),
+    inBookshelf = extras.getBooleanExtra("inBookshelf", true),
+    chapterChanged = extras.getBooleanExtra("chapterChanged", false),
+)
+
+/** Bridge for the remaining external hosts; the Compose shell navigates directly in its own stack. */
+fun Context.bookReaderIntent(book: Book, configIntent: Intent.() -> Unit = {}): Intent {
+    val extras = Intent().putExtra("bookUrl", book.bookUrl).apply(configIntent)
+    if (!book.isAudio && !book.isVideo && !book.isLocal && book.isImage && AppConfig.showMangaUi) return AppActivity.startIntent(this, mangaReaderRoute(book, extras))
     val cls = when {
         book.isVideo -> VideoPlayerActivity::class.java
         book.isAudio -> AudioPlayActivity::class.java
-        !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
         else -> ReadBookActivity::class.java
     }
-    val intent = Intent(this, cls)
-    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    intent.putExtra("bookUrl", book.bookUrl)
-    intent.apply(configIntent)
-    startActivity(intent)
+    return Intent(this, cls).apply { putExtras(extras) }
+}
+
+fun Context.startActivityForBook(book: Book, configIntent: Intent.() -> Unit = {}) {
+    if (this is AppActivity && !book.isAudio && !book.isVideo && !book.isLocal && book.isImage && AppConfig.showMangaUi) {
+        navigateTo(mangaReaderRoute(book, Intent().putExtra("bookUrl", book.bookUrl).apply(configIntent)))
+    } else startActivity(bookReaderIntent(book, configIntent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
 

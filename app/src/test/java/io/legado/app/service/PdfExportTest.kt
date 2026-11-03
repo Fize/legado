@@ -134,19 +134,19 @@ class PdfExportTest {
     @Test
     fun `pdf export stays wired to the cache screen and closes documents`() {
         val service = projectFile(
-            "src/main/java/io/legado/app/service/ExportBookService.kt"
+            "src/main/java/io/legado/app/service/BookExportEngine.kt"
         ).readText().replace("\r\n", "\n")
         val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/cache/CacheActivity.kt"
+            "src/main/java/io/legado/app/ui/book/cache/CacheScreen.kt"
         ).readText().replace("\r\n", "\n")
-        val webDav = projectFile("src/main/java/io/legado/app/help/AppWebDav.kt").readText()
+        val webDav = projectFile("src/main/java/io/legado/app/service/BookExportWebDavTarget.kt").readText()
         val exportPdf = service.substringAfter("private suspend fun exportPdf(fileDoc")
             .substringBefore("private fun decodePdfBitmap")
 
-        assertTrue(activity.contains("arrayListOf(\"txt\", \"epub\", \"pdf\")"))
-        assertTrue(activity.contains("2 -> \"pdf\""))
-        assertTrue(service.contains("\"pdf\" -> exportPdf(exportConfig.path, book)"))
-        assertTrue(webDav.contains("upload(uri, FileUtils.getMimeType(fileName))"))
+        assertTrue(activity.contains("listOf(\"txt\",\"epub\",\"pdf\")"))
+        assertEquals("pdf",io.legado.app.data.preferences.CacheExportOptions(format=2).type)
+        assertTrue(service.contains("\"pdf\" -> exportPdf(options.directory,book)"))
+        assertTrue(webDav.contains("upload(uri, FileUtils.getMimeType(filename))"))
         assertTrue(exportPdf.contains("if (book.isPdf)"))
         assertFalse(exportPdf.contains("book.isImage || book.isPdf"))
         assertTrue(exportPdf.contains("getChapterContentForExport(book, exportChapter)"))
@@ -176,16 +176,16 @@ class PdfExportTest {
 
         val installPdf = service.substringAfter("private fun installPdfExport(")
             .substringBefore("private fun cleanupExportFile")
-        assertTrue(installPdf.contains("renameExportFile(staging, filename)"))
-        assertTrue(installPdf.contains("renameExportFile(it, filename)"))
+        assertTrue(installPdf.contains("journal.publish(folder,staging,filename,backupName,::verifyCatalog,publication)"))
+        assertTrue(service.contains("if(!journal.isRetained(staging)) folder.find(staging.name)"))
         assertFalse(service.contains("private fun copyExportFile"))
 
-        val renameExport = service.substringAfter("private fun renameExportFile(")
-            .substringBefore("private fun installPdfExport")
-        assertTrue(renameExport.contains("runCatching"))
-        assertTrue(renameExport.contains("DocumentsContract.renameDocument("))
-        assertTrue(renameExport.contains("FileDoc.fromUri(renamedUri, false)"))
-        assertFalse(renameExport.contains("asDocumentFile()"))
+        val journal=projectFile("src/main/java/io/legado/app/data/repository/BookExportJournal.kt").readText()
+        assertTrue(journal.contains("DocumentsContract.renameDocument("))
+        assertTrue(journal.contains("FileDoc.fromUri(it,false)"))
+        assertTrue(journal.contains("check(folder.find(name)==null)"))
+        assertTrue(journal.contains("deleteBackup={}"))
+        assertTrue(journal.indexOf("published=true")<journal.indexOf("folder.find(backupName)?.let"))
     }
 
     private fun projectFile(pathInApp: String): File {

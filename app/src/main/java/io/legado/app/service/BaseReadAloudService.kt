@@ -175,7 +175,10 @@ abstract class BaseReadAloudService : BaseService(),
         }
     }
 
-    private val useWakeLock = appCtx.getPrefBoolean(PreferKey.readAloudWakeLock, false)
+    override val guardsRestoreRecovery = true
+    protected var wasReadAloudContentCreated = false
+        private set
+    private var useWakeLock = false
     private val wakeLock by lazy {
         powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "legado:ReadAloudService")
             .apply {
@@ -242,6 +245,9 @@ abstract class BaseReadAloudService : BaseService(),
     @SuppressLint("WakelockTimeout")
     override fun onCreate() {
         super.onCreate()
+        if (isRestoreRecoveryBlocked) return
+        wasReadAloudContentCreated = true
+        useWakeLock = appCtx.getPrefBoolean(PreferKey.readAloudWakeLock, false)
         isRun = true
         pause = false
         chapterStopTimer.clear()
@@ -267,6 +273,7 @@ abstract class BaseReadAloudService : BaseService(),
                 .submit()
                 .get()
         }.onSuccess {
+            if (isRestoreRecoveryBlocked) return@onSuccess
             if (it.width > 16 && it.height > 16) {
                 cover = it
                 upReadAloudNotification()
@@ -292,10 +299,22 @@ abstract class BaseReadAloudService : BaseService(),
         }
     }
 
+    override fun onRestoreRecoveryRequired() {
+        readAloudGeneration.incrementAndGet()
+        readAloudJob?.cancel()
+        dsJob?.cancel()
+        upNotificationJob?.cancel()
+        if (wasReadAloudContentCreated) playStop()
+        acknowledgeRecoveryForegroundStart(NotificationId.ReadAloudService)
+        super.onRestoreRecoveryRequired()
+    }
+
     override fun onDestroy() {
         readAloudGeneration.incrementAndGet()
         readAloudJob?.cancel()
         super.onDestroy()
+        if (isRestoreRecoveryBlocked) stopForeground(STOP_FOREGROUND_REMOVE)
+        if (!wasReadAloudContentCreated) return
         restoreReadAloudFollow()
         updateReadAloudChapterIndex(-1)
         readAloudChapterStart = -1
@@ -316,7 +335,7 @@ abstract class BaseReadAloudService : BaseService(),
         notificationManager.cancel(NotificationId.ReadAloudService)
         upMediaSessionPlaybackState(PlaybackStateCompat.STATE_STOPPED)
         mediaSessionCompat.release()
-        ReadBook.uploadProgress()
+        if (!isRestoreRecoveryBlocked) ReadBook.uploadProgress()
         unregisterPhoneStateListener(phoneStateListener)
         upNotificationJob?.invokeOnCompletion {
             notificationManager.cancel(NotificationId.ReadAloudService)
@@ -324,6 +343,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (stopIfRestoreRecoveryRequired()) return START_NOT_STICKY
         if (intent == null) {
             stopSelfResult(startId)
             return START_NOT_STICKY
@@ -358,6 +378,7 @@ abstract class BaseReadAloudService : BaseService(),
         startPos: Int,
         rewindToSentenceStart: Boolean
     ) {
+        if (stopIfRestoreRecoveryRequired()) return
         val generation = readAloudGeneration.incrementAndGet()
         val toLast = this@BaseReadAloudService.toLast
         readAloudJob?.cancel()
@@ -395,7 +416,7 @@ abstract class BaseReadAloudService : BaseService(),
             )
             ensureActive()
             withContext(Main.immediate) {
-                if (generation != readAloudGeneration.get()) return@withContext
+                if (isRestoreRecoveryBlocked || generation != readAloudGeneration.get()) return@withContext
                 this@BaseReadAloudService.pageIndex = prepared.pageIndex
                 this@BaseReadAloudService.textChapter = prepared.textChapter
                 this@BaseReadAloudService.readAloudNumber = prepared.readAloudNumber
@@ -409,7 +430,7 @@ abstract class BaseReadAloudService : BaseService(),
                 if (play) play() else pageChanged = true
             }
         }.onError(Main) {
-            if (it !is CancellationException && generation == readAloudGeneration.get()) {
+            if (!isRestoreRecoveryBlocked && it !is CancellationException && generation == readAloudGeneration.get()) {
                 AppLog.put("启动朗读出错\n${it.localizedMessage}", it, true)
             }
         }
@@ -417,6 +438,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     @SuppressLint("WakelockTimeout")
     open fun play() {
+        if (stopIfRestoreRecoveryRequired()) return
         if (useWakeLock) {
             wakeLock.acquire()
             wifiLock?.acquire()
@@ -434,6 +456,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     @CallSuper
     open fun pauseReadAloud(abandonFocus: Boolean = true) {
+        if (stopIfRestoreRecoveryRequired()) return
         if (useWakeLock) {
             wakeLock.release()
             wifiLock?.release()
@@ -452,10 +475,12 @@ abstract class BaseReadAloudService : BaseService(),
     @SuppressLint("WakelockTimeout")
     @CallSuper
     open fun resumeReadAloud() {
+        if (stopIfRestoreRecoveryRequired()) return
         resumeReadAloudInternal()
     }
 
     private fun resumeReadAloudInternal() {
+        if (stopIfRestoreRecoveryRequired()) return
         pause = false
         needResumeOnAudioFocusGain = false
         needResumeOnCallStateIdle = false
@@ -467,11 +492,13 @@ abstract class BaseReadAloudService : BaseService(),
     abstract fun upSpeechRate(reset: Boolean = false)
 
     fun upTtsProgress(progress: Int) {
+        if (stopIfRestoreRecoveryRequired()) return
         readAloudChapterStart = progress
         postEvent(EventBus.TTS_PROGRESS, progress)
     }
 
     private fun prevP() {
+        if (stopIfRestoreRecoveryRequired()) return
         if (nowSpeak > 0) {
             playStop()
             do {
@@ -498,6 +525,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun nextP() {
+        if (stopIfRestoreRecoveryRequired()) return
         if (nowSpeak < contentList.size - 1) {
             playStop()
             readAloudNumber += contentList[nowSpeak].length.plus(1) - paragraphStartPos
@@ -523,6 +551,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun setTimer(minute: Int) {
+        if (stopIfRestoreRecoveryRequired()) return
         timeMinute = minute.coerceIn(0, 180)
         chapterStopTimer.clear()
         chapterToStop = 0
@@ -531,6 +560,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun addTimer() {
+        if (stopIfRestoreRecoveryRequired()) return
         val next = nextSleepTimerIncrement(
             timeMinute, chapterToStop, AppConfig.sleepTimerPreferChapter
         )
@@ -538,6 +568,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun setChapterStop(count: Int) {
+        if (stopIfRestoreRecoveryRequired()) return
         chapterToStop = chapterStopTimer.set(count)
         timeMinute = 0
         dsJob?.cancel()
@@ -551,6 +582,7 @@ abstract class BaseReadAloudService : BaseService(),
      */
     @Synchronized
     private fun doDs() {
+        if (stopIfRestoreRecoveryRequired()) return
         postEvent(EventBus.READ_ALOUD_DS, timeMinute)
         upReadAloudNotification()
         dsJob?.cancel()
@@ -579,6 +611,7 @@ abstract class BaseReadAloudService : BaseService(),
      * @return 音频焦点
      */
     fun requestFocus(): Boolean {
+        if (stopIfRestoreRecoveryRequired()) return false
         if (AppConfig.ignoreAudioFocus) {
             return true
         }
@@ -670,6 +703,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun upMediaMetadata() {
+        if (stopIfRestoreRecoveryRequired()) return
         var nTitle: String = when {
             pause -> getString(R.string.read_aloud_pause)
             chapterToStop > 0 -> getString(R.string.read_aloud_timer_chapter, chapterToStop)
@@ -703,6 +737,7 @@ abstract class BaseReadAloudService : BaseService(),
      * 音频焦点变化
      */
     override fun onAudioFocusChange(focusChange: Int) {
+        if (stopIfRestoreRecoveryRequired()) return
         if (AppConfig.ignoreAudioFocus) {
             AppLog.put("忽略音频焦点处理(TTS)")
             return
@@ -738,11 +773,13 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun upReadAloudNotification() {
+        if (stopIfRestoreRecoveryRequired()) return
         upNotificationJob = execute {
+            if (isRestoreRecoveryBlocked) return@execute
             try {
                 upMediaMetadata()
                 val notification = createNotification()
-                notificationManager.notify(NotificationId.ReadAloudService, notification.build())
+                if (!isRestoreRecoveryBlocked) notificationManager.notify(NotificationId.ReadAloudService, notification.build())
             } catch (e: Exception) {
                 AppLog.put("创建朗读通知出错,${e.localizedMessage}", e, true)
             }
@@ -827,11 +864,13 @@ abstract class BaseReadAloudService : BaseService(),
      * 更新通知
      */
     override fun startForegroundNotification() {
+        if (stopIfRestoreRecoveryRequired()) return
         execute {
+            if (isRestoreRecoveryBlocked) return@execute
             try {
                 upMediaMetadata()
                 val notification = createNotification()
-                startForeground(NotificationId.ReadAloudService, notification.build())
+                if (!isRestoreRecoveryBlocked) startForeground(NotificationId.ReadAloudService, notification.build())
             } catch (e: Exception) {
                 AppLog.put("创建朗读通知出错,${e.localizedMessage}", e, true)
                 //创建通知出错不结束服务就会崩溃,服务必须绑定通知
@@ -843,6 +882,7 @@ abstract class BaseReadAloudService : BaseService(),
     abstract fun aloudServicePendingIntent(actionStr: String): PendingIntent?
 
     open fun prevChapter() {
+        if (stopIfRestoreRecoveryRequired()) return
         toLast = false
         resumeReadAloudInternal()
         if (shouldSyncSpeechNavigation()) {
@@ -853,6 +893,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     open fun nextChapter(auto: Boolean = false) {
+        if (stopIfRestoreRecoveryRequired()) return
         ReadBook.upReadTime()
         if (auto) {
             chapterStopTimer.onChapterCompleted()?.let { stopResult ->
@@ -886,8 +927,12 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun loadSpeechChapterOnly(chapterIndex: Int) {
+        if (stopIfRestoreRecoveryRequired()) return
         if (chapterIndex !in 0..<ReadBook.simulatedChapterSize) return
-        execute(executeContext = IO) {
+        val generation = readAloudGeneration.incrementAndGet()
+        readAloudJob?.cancel()
+        readAloudJob = execute(executeContext = IO) {
+            if (isRestoreRecoveryBlocked) return@execute false
             val book = ReadBook.book ?: return@execute false
             val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex)
                 ?: return@execute false
@@ -913,18 +958,23 @@ abstract class BaseReadAloudService : BaseService(),
             for (page in nextTextChapter.layoutChannel) {
                 if (page.index > 0) continue
             }
-            textChapter = nextTextChapter
-            updateReadAloudChapterIndex(chapter.index)
-            readAloudChapterStart = 0
-            pageIndex = 0
-            readAloudNumber = 0
-            nowSpeak = 0
-            paragraphStartPos = 0
-            contentList = nextTextChapter.getNeedReadAloud(0, readAloudByPage, 0)
-                .split("\n")
-                .filter { it.isNotEmpty() }
-            contentList.isNotEmpty()
+            ensureActive()
+            withContext(Main.immediate) {
+                if (isRestoreRecoveryBlocked || generation != readAloudGeneration.get()) return@withContext false
+                textChapter = nextTextChapter
+                updateReadAloudChapterIndex(chapter.index)
+                readAloudChapterStart = 0
+                pageIndex = 0
+                readAloudNumber = 0
+                nowSpeak = 0
+                paragraphStartPos = 0
+                contentList = nextTextChapter.getNeedReadAloud(0, readAloudByPage, 0)
+                    .split("\n")
+                    .filter { it.isNotEmpty() }
+                contentList.isNotEmpty()
+            }
         }.onSuccess(Main) { canContinue ->
+            if (isRestoreRecoveryBlocked || generation != readAloudGeneration.get()) return@onSuccess
             if (canContinue) {
                 upTtsProgress(0)
                 play()
@@ -938,6 +988,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun initPhoneStateListener() {
+        if (stopIfRestoreRecoveryRequired()) return
         val needRegister = AppConfig.ignoreAudioFocus && AppConfig.pauseReadAloudWhilePhoneCalls
         if (needRegister && registeredPhoneStateListener) {
             return
@@ -973,6 +1024,7 @@ abstract class BaseReadAloudService : BaseService(),
                 .addPermissions(Permissions.READ_PHONE_STATE)
                 .rationale(R.string.read_aloud_read_phone_state_permission_rationale)
                 .onGranted {
+                    if (stopIfRestoreRecoveryRequired()) return@onGranted
                     try {
                         block.invoke()
                     } catch (_: SecurityException) {
@@ -987,6 +1039,7 @@ abstract class BaseReadAloudService : BaseService(),
     inner class ReadAloudPhoneStateListener : PhoneStateListener() {
         override fun onCallStateChanged(state: Int, phoneNumber: String?) {
             super.onCallStateChanged(state, phoneNumber)
+            if (stopIfRestoreRecoveryRequired()) return
             when (state) {
                 TelephonyManager.CALL_STATE_IDLE -> {
                     if (needResumeOnCallStateIdle) {

@@ -7,15 +7,23 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.CacheManager
 import io.legado.app.help.IntentData
+import io.legado.app.help.storage.backupRestoreMutex
+import io.legado.app.help.storage.restoreWriteGeneration
+import io.legado.app.help.storage.RestoreWriteGeneration
 import io.legado.app.service.CheckSourceService
 import io.legado.app.utils.startService
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
 object CheckSource {
     internal const val EXTRA_SESSION_ID = "checkSourceSessionId"
     internal const val EXTRA_SELECTED_SOURCES_KEY = "checkSourceSelectedSourcesKey"
+    internal const val EXTRA_RESTORE_SEQUENCE = "checkSourceRestoreSequence"
+    internal const val EXTRA_RESTORE_PROCESS = "checkSourceRestoreProcess"
 
     var keyword = "我的"
 
@@ -34,16 +42,43 @@ object CheckSource {
         context: Context,
         sources: List<BookSourcePart>,
         sessionId: Long,
+    ): String = startPrepared(context, sources.map { it.bookSourceUrl }, sessionId,
+        restoreWriteGeneration.capture()) { sources }
+
+    internal suspend fun startSelected(
+        context: Context,
+        sourceUrls: Collection<String>,
+        sessionId: Long,
+        generation: RestoreWriteGeneration.Token,
+    ): String = startPrepared(context, sourceUrls, sessionId, generation) {
+        sourceUrls.mapNotNull { appDb.bookSourceDao.getBookSourcePart(it) }
+    }
+
+    private suspend fun startPrepared(
+        context: Context,
+        sourceUrls: Collection<String>,
+        sessionId: Long,
+        generation: RestoreWriteGeneration.Token,
+        sources: () -> List<BookSourcePart>,
     ): String {
-        Debug.prepareCheckSession(sessionId, sources.map { it.bookSourceUrl })
+        Debug.prepareCheckSession(sessionId, sourceUrls.toList())
         var selectedSourcesKey: String? = null
         try {
-            val queued = withContext(IO) { appDb.bookSourceDao.beginCheck(sources) }
+            val queued = withContext(IO) {
+                backupRestoreMutex.withLock {
+                    currentCoroutineContext().ensureActive()
+                    generation.requireCurrent()
+                    if (!Debug.isChecking(sessionId)) throw CancellationException("Source check request was cancelled")
+                    appDb.bookSourceDao.beginCheck(sources())
+                }
+            }
             selectedSourcesKey = IntentData.put(queued)
             context.startService<CheckSourceService> {
                 action = IntentAction.start
                 putExtra(EXTRA_SESSION_ID, sessionId)
                 putExtra(EXTRA_SELECTED_SOURCES_KEY, selectedSourcesKey)
+                putExtra(EXTRA_RESTORE_SEQUENCE, generation.sequence)
+                putExtra(EXTRA_RESTORE_PROCESS, generation.processId)
             }
         } catch (error: Exception) {
             selectedSourcesKey?.let { IntentData.get<Any>(it) }

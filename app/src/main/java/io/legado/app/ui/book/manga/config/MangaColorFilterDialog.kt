@@ -1,11 +1,5 @@
 package io.legado.app.ui.book.manga.config
 
-import android.content.DialogInterface
-import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.view.WindowManager
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,132 +10,59 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.help.config.AppConfig
-import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.setLayout
 import kotlin.math.roundToInt
 
-class MangaColorFilterDialog : BaseDialogFragment() {
-    private val mConfig =
-        GSON.fromJsonObject<MangaColorFilterConfig>(AppConfig.mangaColorFilter).getOrNull()
-            ?: MangaColorFilterConfig()
-    private val callback get() = activity as? Callback
-
-    override fun onStart() {
-        super.onStart()
-        dialog?.window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+@Composable
+internal fun MangaColorFilterDialog(
+    initialConfig: MangaColorFilterConfig,
+    onConfigChange: (MangaColorFilterConfig) -> Unit,
+    onDismiss: (MangaColorFilterConfig) -> Unit,
+) {
+    var config by rememberSaveable(initialConfig, stateSaver = Saver(
+        save = { GSON.toJson(it) },
+        restore = { GSON.fromJsonObject<MangaColorFilterConfig>(it).getOrNull() ?: initialConfig.copy() },
+    )) { mutableStateOf(initialConfig.copy()) }
+    fun update(transform: MangaColorFilterConfig.() -> Unit) {
+        config = config.copy().apply(transform)
+        onConfigChange(config)
     }
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        return ComposeView(requireContext()).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                LegadoTheme {
-                    var l by remember { mutableIntStateOf(mConfig.l) }
-                    var r by remember { mutableIntStateOf(mConfig.r) }
-                    var g by remember { mutableIntStateOf(mConfig.g) }
-                    var b by remember { mutableIntStateOf(mConfig.b) }
-                    var a by remember { mutableIntStateOf(mConfig.a) }
-
-                    Surface(color = MaterialTheme.colorScheme.surface) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(rememberScrollState())
-                                .padding(16.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.manga_color_filter),
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 18.sp,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            MangaSliderRow(
-                                title = stringResource(R.string.brightness),
-                                value = l,
-                                onValueChange = {
-                                    l = it
-                                    mConfig.l = it
-                                    callback?.updateColorFilter(mConfig)
-                                }
-                            )
-                            MangaSliderRow(
-                                title = "R",
-                                value = r,
-                                onValueChange = {
-                                    r = it
-                                    mConfig.r = it
-                                    callback?.updateColorFilter(mConfig)
-                                }
-                            )
-                            MangaSliderRow(
-                                title = "G",
-                                value = g,
-                                onValueChange = {
-                                    g = it
-                                    mConfig.g = it
-                                    callback?.updateColorFilter(mConfig)
-                                }
-                            )
-                            MangaSliderRow(
-                                title = "B",
-                                value = b,
-                                onValueChange = {
-                                    b = it
-                                    mConfig.b = it
-                                    callback?.updateColorFilter(mConfig)
-                                }
-                            )
-                            MangaSliderRow(
-                                title = "A",
-                                value = a,
-                                onValueChange = {
-                                    a = it
-                                    mConfig.a = it
-                                    callback?.updateColorFilter(mConfig)
-                                }
-                            )
-                        }
-                    }
-                }
+    AlertDialog(
+        onDismissRequest = { onDismiss(config) },
+        title = { Text(stringResource(R.string.manga_color_filter)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                MangaSliderRow(stringResource(R.string.brightness), config.l) { update { l = it } }
+                MangaSliderRow("R", config.r) { update { r = it } }
+                MangaSliderRow("G", config.g) { update { g = it } }
+                MangaSliderRow("B", config.b) { update { b = it } }
+                MangaSliderRow("A", config.a) { update { a = it } }
             }
-        }
-    }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
-
-    override fun onDismiss(dialog: DialogInterface) {
-        super.onDismiss(dialog)
-        AppConfig.mangaColorFilter = mConfig.toJson()
-    }
-
-    interface Callback {
-        fun updateColorFilter(config: MangaColorFilterConfig)
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = { onDismiss(config) }) { Text(stringResource(android.R.string.ok)) }
+        },
+    )
 }
 
 @Composable

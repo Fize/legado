@@ -64,7 +64,7 @@ public class PackageDocumentReader extends PackageDocumentBase {
 
         URI packagePath;
         try {
-            packagePath = new URI(packageHref);
+            packagePath = new URI(URLEncodeUtil.encode(packageHref));
         } catch (URISyntaxException e) {
             throw new RuntimeException(e);
         }
@@ -110,14 +110,11 @@ public class PackageDocumentReader extends PackageDocumentBase {
             Element itemElement = (Element) originItemElements.item(i).cloneNode(false);
             String href = DOMUtil.getAttribute(itemElement, NAMESPACE_OPF, OPFAttributes.href);
             String resolvedHref = resolvePath(packagePath, href);
-            itemElement.setAttribute("href", resolvedHref);
+            // resolvePath returns a decoded container path. Store an encoded URL for the
+            // single decoding step in readManifest, including literal '%' in ZIP names.
+            itemElement.setAttribute("href", URLEncodeUtil.encode(resolvedHref));
             fixedElements.add(itemElement);
-            try {
-                href = URLDecoder.decode(resolvedHref, Constants.CHARACTER_ENCODING);
-            } catch (UnsupportedEncodingException e) {
-                Log.e(TAG, e.getMessage());
-            }
-            originItemHrefSet.add(href);
+            originItemHrefSet.add(resolvedHref);
         }
 
         //如果有图片资源未定义在 originItemElements ，则加入该图片信息得到 fixedElements 中
@@ -180,7 +177,7 @@ public class PackageDocumentReader extends PackageDocumentBase {
                     .getAttribute(itemElement, NAMESPACE_OPF, OPFAttributes.href);
 
             try {
-                href = URLDecoder.decode(href, Constants.CHARACTER_ENCODING);
+                href = URLDecoder.decode(href.replace("+", "%2B"), Constants.CHARACTER_ENCODING);
             } catch (UnsupportedEncodingException e) {
                 Log.e(TAG, e.getMessage());
             }
@@ -471,10 +468,10 @@ public class PackageDocumentReader extends PackageDocumentBase {
     }
 
     private static String resolvePath(URI parentPath, String href) {
-        href = URLEncodeUtil.encode(href);
+        href = URLEncodeUtil.encodeHref(href);
         String resolved = parentPath.resolve(href).toString();
         try {
-            return URLDecoder.decode(resolved, Constants.CHARACTER_ENCODING);
+            return URLDecoder.decode(resolved.replace("+", "%2B"), Constants.CHARACTER_ENCODING);
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         }

@@ -8,39 +8,23 @@ import java.io.File
 class BackupDefaultPathContractTest {
 
     @Test
-    fun `default backup path is selectable and used directly`() {
-        val source = source("app/src/main/java/io/legado/app/ui/config/BackupConfigFragment.kt")
-        val selector = source.substringAfter("private fun showBackupPathSelector()")
-            .substringBefore("private fun lanBackupTransfer()")
-        assertTrue(selector.contains("getString(R.string.default_path)"))
-        assertFalse(selector.contains("defaultBackupPathSummary()"))
-        val defaultSummary = source.substringAfter("private fun defaultBackupPathSummary()")
-            .substringBefore("private fun updateAutoBackupSummary()")
-        assertTrue(defaultSummary.contains("getString(R.string.default_path)"))
-        assertTrue(defaultSummary.contains("requireContext().externalFiles.absolutePath"))
-        assertTrue(selector.contains("getString(R.string.select_folder)"))
-        assertTrue(selector.contains("0 -> AppConfig.backupPath = null"))
-        assertTrue(selector.contains("1 -> selectBackupPath.launch()"))
+    fun `default path is used and stale selected folders are reselected`() {
+        val repository = source("app/src/main/java/io/legado/app/data/repository/BackupSettingsRepository.kt")
+        val screen = source("app/src/main/java/io/legado/app/ui/config/BackupSettingsScreen.kt")
+        val viewModel = source("app/src/main/java/io/legado/app/ui/config/BackupSettingsViewModel.kt")
 
-        val click = source.substringAfter("override fun onPreferenceTreeClick")
-            .substringBefore("private fun showBackupPathSelector()")
-        assertTrue(click.contains("PreferKey.backupPath -> showBackupPathSelector()"))
-
-        val summary = source.substringAfter("private fun upPreferenceSummary")
-            .substringBefore("override fun onPreferenceTreeClick")
-        assertTrue(
-            summary.contains(
-                "value?.takeIf { it.isNotBlank() } ?: defaultBackupPathSummary()"
-            )
-        )
-
-        val backup = source.substringAfter("fun backup()")
-            .substringBefore("private fun backupUsePermission")
-        assertTrue(backup.contains("if (backupPath.isNullOrEmpty())"))
-        assertTrue(backup.contains("backup(null, uploadWebDav)"))
-        assertTrue(source.contains("private fun backup(backupPath: String?, uploadWebDav: Boolean)"))
-        assertTrue(backup.contains("manualBackupUploadWebDav = index == 1"))
-        assertTrue(backup.contains("Backup.backupLocked(requireContext(), backupPath, uploadWebDav)"))
+        assertTrue(repository.contains("context.externalFiles.absolutePath"))
+        assertTrue(screen.contains("backupPathSummary(backupPath, viewModel.defaultBackupPath, stringResource(R.string.default_path))"))
+        assertTrue(repository.contains("FileDoc.fromDir(path).checkWrite()"))
+        assertTrue(screen.contains("context.defaultSharedPreferences.edit().remove(PreferKey.backupPath).apply()"))
+        assertTrue(screen.contains("HandleFileContract.DIR_SYS"))
+        assertTrue(screen.contains("viewModel.backup(null, uploadWebDav)"))
+        assertTrue(screen.contains("viewModel.backup(path, uploadWebDav)"))
+        assertTrue(screen.contains("if (canWrite)"))
+        assertTrue(repository.contains("Backup.backupLocked(context, path, uploadWebDav)"))
+        assertTrue(viewModel.contains("fun backup(path: String?, uploadWebDav: Boolean)"))
+        assertTrue(viewModel.contains("suspend fun canWriteBackupPath(path: String)"))
+        assertFalse(screen.contains("BackupConfigFragment"))
     }
 
     private fun source(relativePath: String): String {

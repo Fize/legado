@@ -12,7 +12,7 @@ internal fun Book.networkCoverForPersistence(): String? {
         ?.takeIf { it.isAbsUrl() }
 }
 
-internal fun Book.networkCoverSourceOrigin() = coverSourceOrigin(origin, customCoverUrl)
+internal fun Book.networkCoverSourceOrigin() = coverSourceOrigin(origin, customCoverUrl, customCoverSource)
 
 internal fun hasEditedNetworkCover(
     editedCoverUrl: String?,
@@ -37,6 +37,7 @@ internal fun isLegacyPersistedCoverPath(path: String?): Boolean {
 internal fun Book.normalizeLegacyPersistedCover() {
     if (persistedCoverUrl.isNullOrEmpty() && isLegacyPersistedCoverPath(customCoverUrl)) {
         persistedCoverUrl = customCoverUrl
+        customCoverSource = null
         customCoverUrl = null
     }
 }

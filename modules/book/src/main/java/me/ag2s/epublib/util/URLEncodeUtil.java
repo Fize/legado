@@ -115,4 +115,24 @@ public class URLEncodeUtil {
         return encode(s, Charsets.UTF_8);
     }
 
+    /** Encode an IRI reference without encoding an existing URL escape a second time. */
+    public static String encodeHref(String s) {
+        StringBuilder result = new StringBuilder(s.length());
+        int start = 0;
+        for (int i = 0; i + 2 < s.length(); i++) {
+            if (s.charAt(i) == '%' && isHex(s.charAt(i + 1)) && isHex(s.charAt(i + 2))) {
+                result.append(encode(s.substring(start, i)));
+                result.append(s, i, i + 3);
+                i += 2;
+                start = i + 1;
+            }
+        }
+        result.append(encode(s.substring(start)));
+        return result.toString();
+    }
+
+    private static boolean isHex(char c) {
+        return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+    }
+
 }

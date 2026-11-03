@@ -14,7 +14,7 @@ class LabelsBarLayoutTest {
     fun `book details wrap and center labels without a horizontal scroller`() {
         val bookInfoSource = File(
             repositoryRoot,
-            "app/src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
+            "app/src/main/java/io/legado/app/ui/book/info/BookInfoScreen.kt"
         ).readText()
 
         assertTrue(bookInfoSource.contains("FlowRow("))
@@ -26,11 +26,11 @@ class LabelsBarLayoutTest {
     fun `search and explore results wrap labels within the available width`() {
         val searchSource = File(
             repositoryRoot,
-            "app/src/main/java/io/legado/app/ui/book/search/SearchActivity.kt"
+            "app/src/main/java/io/legado/app/ui/book/search/SearchScreen.kt"
         ).readText()
         val exploreSource = File(
             repositoryRoot,
-            "app/src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"
+            "app/src/main/java/io/legado/app/ui/book/explore/ExploreShowScreen.kt"
         ).readText()
 
         assertTrue(searchSource.contains("FlowRow("))

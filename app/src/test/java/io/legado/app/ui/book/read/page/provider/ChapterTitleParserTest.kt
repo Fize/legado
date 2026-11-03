@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.read.page.provider
 
+import io.legado.app.model.ChapterTitleParser
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

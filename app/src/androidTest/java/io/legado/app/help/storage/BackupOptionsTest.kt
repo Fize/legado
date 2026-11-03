@@ -1,26 +1,20 @@
 package io.legado.app.help.storage
 
-import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.SystemClock
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.core.net.toUri
-import androidx.preference.Preference
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
-import androidx.test.espresso.action.ViewActions.replaceText
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dagger.hilt.android.EntryPointAccessors
+import io.legado.app.data.preferences.CacheExportOptions
+import io.legado.app.data.preferences.CacheExportPreferencesEntryPoint
+import io.legado.app.data.preferences.CACHE_EXPORT_KEYS
+import io.legado.app.data.preferences.toLegacyPreferenceMap
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
@@ -29,16 +23,16 @@ import io.legado.app.data.entities.Book
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
-import io.legado.app.ui.config.BackupConfigFragment
-import io.legado.app.ui.config.ConfigActivity
-import io.legado.app.ui.config.ConfigTag
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.SettingsRoute
+import io.legado.app.ui.navigation.SettingsSection
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import org.hamcrest.Matchers.containsString
+import org.junit.Rule
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -53,19 +47,22 @@ import java.util.zip.ZipFile
 
 @RunWith(AndroidJUnit4::class)
 class BackupOptionsTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext.applicationContext
     private val preferences = context.defaultSharedPreferences
     private val savedPreferences = HashMap(preferences.all)
     private val savedLocal = HashMap(LocalConfig.all)
     private val savedIgnore = HashMap(BackupConfig.ignoreConfig)
+    private val cachePreferences=EntryPointAccessors.fromApplication(context,CacheExportPreferencesEntryPoint::class.java).cacheExportPreferences()
+    private val savedCachePreferences=runBlocking(Dispatchers.IO) { cachePreferences.current() }
     private val directory = File(context.cacheDir, "backup-options-${UUID.randomUUID()}")
     private val book = Book(bookUrl = "backup-options:${UUID.randomUUID()}", name = "Backup options", author = "Test", durChapterIndex = 7)
     private val requests = CopyOnWriteArrayList<String>()
     @Volatile private var upload: ByteArray? = null
     @Volatile private var failUpload = false
     @Volatile private var failAuthorization = false
-    private var scenario: ActivityScenario<ConfigActivity>? = null
+    private var scenario: ActivityScenario<AppActivity>? = null
     private val defaultArchive = File(context.externalFiles, "backup.zip")
     private var savedDefaultArchive: ByteArray? = null
     private val server = object : NanoHTTPD("127.0.0.1", 0) {
@@ -106,6 +103,7 @@ class BackupOptionsTest {
 
     @After fun tearDown() {
         scenario?.close()
+        runBlocking(Dispatchers.IO) { cachePreferences.update { savedCachePreferences } }
         appDb.bookDao.delete(book)
         preferences.edit().clear().apply { savedPreferences.forEach { (key, value) -> putValue(key, value) } }.commit()
         LocalConfig.edit().clear().apply { savedLocal.forEach { (key, value) -> putValue(key, value) } }.commit()
@@ -122,8 +120,8 @@ class BackupOptionsTest {
         preferences.edit().remove(PreferKey.backupPath).commit()
         launchSettings()
         clickPreference("web_dav_backup")
-        onView(withText(R.string.backup_local_only)).check(matches(isDisplayed()))
-        onView(withText(R.string.backup_local_webdav)).check(matches(isDisplayed()))
+        node(R.string.backup_local_only).assertIsDisplayed()
+        node(R.string.backup_local_webdav).assertIsDisplayed()
         screenshot("backup-manual-destinations")
         assertFalse(defaultArchive.exists())
         assertEquals(0L, LocalConfig.lastBackup)
@@ -131,12 +129,12 @@ class BackupOptionsTest {
         pressBack()
         assertFalse(defaultArchive.exists())
         clickPreference("web_dav_backup")
-        onView(withText(R.string.backup_local_only)).perform(click())
+        node(R.string.backup_local_only).performClick()
         await { LocalConfig.lastBackup > 0 }
         assertArchive(defaultArchive)
         assertTrue("Local choice must not check, upload or sync backgrounds: $requests", requests.isEmpty())
         clickPreference("web_dav_backup")
-        onView(withText(R.string.backup_local_webdav)).perform(click())
+        node(R.string.backup_local_webdav).performClick()
         await { upload != null && !File(Backup.zipFilePath).exists() }
         assertTrue(requests.any { it.startsWith("PUT /backup") })
         val received = File(directory, "received.zip").apply { writeBytes(checkNotNull(upload)) }
@@ -144,62 +142,55 @@ class BackupOptionsTest {
         assertArrayEquals(defaultArchive.readBytes(), received.readBytes())
     }
 
-    @Test fun settingsDialogKeepsTargetsIntervalAndEnablementAndMovesPasswordAboveActualPath() {
+    @Test fun settingsDialogKeepsTargetsIntervalAndEnablementAndShowsDefaultBackupDirectory() {
         preferences.edit().remove(PreferKey.autoBackup).remove(PreferKey.autoBackupWebDav)
             .remove(PreferKey.autoBackupIntervalDays).remove(PreferKey.backupPath).commit()
         launchSettings()
-        scenario!!.onActivity { activity ->
-            val fragment = activity.supportFragmentManager.findFragmentByTag(ConfigTag.BACKUP_CONFIG) as BackupConfigFragment
-            val password = checkNotNull(fragment.findPreference<Preference>("localPassword"))
-            val path = checkNotNull(fragment.findPreference<Preference>(PreferKey.backupPath))
-            assertSame(password.parent, path.parent)
-            assertEquals(context.getString(R.string.backup_restore), password.parent!!.title)
-            assertTrue(password.order < path.order)
-            assertTrue(path.summary.toString().contains(context.externalFiles.absolutePath))
-        }
+        scrollTo(R.string.set_local_password).assertIsDisplayed()
+        scrollTo(R.string.backup_path).assertIsDisplayed()
+        compose.onNodeWithText(context.externalFiles.absolutePath, substring = true).assertIsDisplayed()
         clickPreference("localPassword")
-        onView(withId(R.id.edit_view)).perform(replaceText("backup-options-password"), closeSoftKeyboard())
-        onView(withText(R.string.ok)).perform(click())
+        compose.onNode(hasSetTextAction()).performTextReplacement("backup-options-password")
+        node(R.string.ok).performClick()
         assertEquals("backup-options-password", LocalConfig.password)
         assertFalse(preferences.contains("password"))
-        scenario!!.onActivity { activity ->
-            (activity.supportFragmentManager.findFragmentByTag(ConfigTag.BACKUP_CONFIG) as BackupConfigFragment)
-                .scrollToPreference(PreferKey.backupPath)
-        }
-        instrumentation.waitForIdleSync()
-        onView(withText(containsString(context.externalFiles.absolutePath))).check(matches(isCompletelyDisplayed()))
+        compose.onNodeWithText(context.externalFiles.absolutePath, substring = true).assertIsDisplayed()
         screenshot("backup-password-and-default-directory")
         clickPreference(PreferKey.backupPath)
-        onView(withText(R.string.default_path)).inRoot(isDialog()).check(matches(isDisplayed()))
-        onView(withText(containsString(context.externalFiles.absolutePath))).inRoot(isDialog())
-            .check(doesNotExist())
+        node(R.string.default_path).assertIsDisplayed()
+        compose.onNode(hasText(context.externalFiles.absolutePath, substring = true) and hasAnyAncestor(isDialog()))
+            .assertIsDisplayed()
         screenshot("backup-default-directory-selector")
-        onView(withText(R.string.default_path)).inRoot(isDialog()).perform(click())
-        onView(withText(containsString(context.externalFiles.absolutePath))).check(matches(isCompletelyDisplayed()))
+        node(R.string.default_path).performClick()
+        compose.onNodeWithText(context.externalFiles.absolutePath, substring = true).assertIsDisplayed()
         clickPreference(PreferKey.autoBackup)
-        assertTrue(AppConfig.autoBackup)
+        assertTrue("The existing missing-key default remains enabled", AppConfig.autoBackup)
+        assertFalse("Opening settings must not persist the pending values", preferences.contains(PreferKey.autoBackup))
         assertTrue(AppConfig.autoBackupWebDav)
         assertEquals(1, AppConfig.autoBackupIntervalDays)
         screenshot("backup-auto-defaults")
-        onView(withId(R.id.local_only)).perform(click())
-        onView(withId(R.id.interval_days)).perform(replaceText("0"), closeSoftKeyboard())
-        onView(withText(R.string.ok)).perform(click())
-        onView(withId(R.id.interval_days)).check(matches(isDisplayed()))
+        node(R.string.backup_local_only).performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("0")
+        node(R.string.ok).performClick()
+        node(R.string.auto_backup_interval_invalid).assertIsDisplayed()
+        assertTrue(AppConfig.autoBackup)
+        assertFalse(preferences.contains(PreferKey.autoBackup))
         assertEquals(1, AppConfig.autoBackupIntervalDays)
-        onView(withId(R.id.interval_days)).perform(replaceText("7"), closeSoftKeyboard())
-        onView(withText(R.string.ok)).perform(click())
+        compose.onNode(hasSetTextAction()).performTextReplacement("7")
+        node(R.string.ok).performClick()
+        assertTrue(AppConfig.autoBackup)
         assertFalse(AppConfig.autoBackupWebDav)
         assertEquals(7, AppConfig.autoBackupIntervalDays)
         scenario!!.recreate()
         clickPreference(PreferKey.autoBackup)
         screenshot("backup-auto-local-seven-days")
-        onView(withId(R.id.enabled)).perform(click())
-        onView(withText(R.string.ok)).perform(click())
+        compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.ToggleableState) and hasAnyAncestor(isDialog())).performClick()
+        node(R.string.ok).performClick()
         assertFalse(AppConfig.autoBackup)
         clickPreference(PreferKey.autoBackup)
-        onView(withId(R.id.enabled)).perform(click())
-        onView(withId(R.id.local_webdav)).perform(click())
-        onView(withText(R.string.cancel)).perform(click())
+        compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.ToggleableState) and hasAnyAncestor(isDialog())).performClick()
+        node(R.string.backup_local_webdav).performClick()
+        node(R.string.cancel).performClick()
         assertFalse(AppConfig.autoBackup)
         assertFalse(AppConfig.autoBackupWebDav)
         assertEquals(7, AppConfig.autoBackupIntervalDays)
@@ -343,6 +334,32 @@ class BackupOptionsTest {
         assertTrue(requests.isEmpty())
     }
 
+    @Test fun actualArchiveRestoresTypedExportOptionsWithoutRestoringAnotherDevicesDirectory()=runBlocking(Dispatchers.IO) {
+        val expected=CacheExportOptions(format=2,charset="GB18030",useReplace=false,webDav=true,omitNames=true,
+            pictures=true,parallel=true,customSections=true,fileName="name + '\u4e66'",episodeName="name + epubIndex",
+            directory="content://fixture/tree/original-device")
+        cachePreferences.update { expected }
+        Backup.backupLocked(context,directory.path,uploadWebDav=false)
+        val archive=File(directory,"backup.zip"); assertArchive(archive)
+        ZipFile(archive).use { zip ->
+            val config=zip.getInputStream(zip.getEntry("config.xml")).bufferedReader().use { it.readText() }
+            expected.toLegacyPreferenceMap().keys.forEach { assertTrue(config.contains("name=\"$it\"")) }
+            assertFalse(config.contains(expected.directory))
+        }
+        val localDirectory="content://fixture/tree/current-device"
+        cachePreferences.update { CacheExportOptions(directory=localDirectory) }
+        Restore.restoreOrThrow(context,archive.toUri(),lanTransfer=true)
+        assertEquals(expected.copy(directory=localDirectory),cachePreferences.current())
+        assertTrue(CACHE_EXPORT_KEYS.none(preferences::contains))
+
+        val legacy=File(directory,"legacy-export").apply { mkdirs() }
+        File(legacy,"config.xml").writeText("""<?xml version="1.0" encoding="utf-8"?><map><int name="exportType" value="1"/><boolean name="exportUseReplace" value="false"/><string name="exportCharset">UTF-8</string></map>""")
+        Restore.restoreLocked(legacy.path)
+        val restored=cachePreferences.current()
+        assertEquals(1,restored.format); assertEquals("UTF-8",restored.charset); assertFalse(restored.useReplace)
+        assertEquals(localDirectory,restored.directory); assertTrue(CACHE_EXPORT_KEYS.none(preferences::contains))
+    }
+
     @Test fun actualArchivePreservesAllReadAloudControlsIncludingExplicitFalse() = runBlocking(Dispatchers.IO) {
         val values = linkedMapOf<String, Any>(
             PreferKey.readAloudControlsRealtime to false,
@@ -373,20 +390,35 @@ class BackupOptionsTest {
     }
 
     private fun launchSettings() {
-        scenario = ActivityScenario.launch(Intent(context, ConfigActivity::class.java)
-            .putExtra("configTag", ConfigTag.BACKUP_CONFIG))
+        scenario = ActivityScenario.launch(
+            AppActivity.startIntent(context, SettingsRoute(SettingsSection.Backup))
+        )
+    }
+
+    private fun label(id: Int): String {
+        lateinit var value: String
+        scenario!!.onActivity { value = it.getString(id) }
+        return value
+    }
+
+    private fun node(id: Int) = compose.onNodeWithText(label(id))
+
+    private fun scrollTo(id: Int): SemanticsNodeInteraction {
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(label(id)))
+        return node(id).performScrollTo()
     }
 
     private fun clickPreference(key: String) {
-        var title = ""
-        scenario!!.onActivity { activity ->
-            val fragment = activity.supportFragmentManager.findFragmentByTag(ConfigTag.BACKUP_CONFIG) as BackupConfigFragment
-            title = checkNotNull(fragment.findPreference<Preference>(key)).title.toString()
-            fragment.scrollToPreference(key)
+        val titleRes = when (key) {
+            "web_dav_backup" -> R.string.backup
+            "localPassword" -> R.string.set_local_password
+            PreferKey.backupPath -> R.string.backup_path
+            PreferKey.autoBackup -> R.string.auto_backup_t
+            else -> error("Unsupported preference key: $key")
         }
         instrumentation.waitForIdleSync()
         screenshot("backup-before-click-$key")
-        onView(withText(title)).perform(click())
+        scrollTo(titleRes).performClick()
     }
 
     private fun assertArchive(file: File) {

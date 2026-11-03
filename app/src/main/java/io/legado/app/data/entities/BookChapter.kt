@@ -130,11 +130,21 @@ data class BookChapter(
         replaceRules: List<ReplaceRule>? = null,
         useReplace: Boolean = true,
         chineseConvert: Boolean = true,
-        replaceBook: ReplaceBook? = null
+        replaceBook: ReplaceBook? = null,
+    ): String = getDisplayTitleWithConversion(replaceRules, useReplace, chineseConvert, replaceBook,
+        if (chineseConvert) AppConfig.chineseConverterType else 0)
+
+    /** Explicit conversion input for owned loads; retain the original four-argument script API. */
+    fun getDisplayTitleWithConversion(
+        replaceRules: List<ReplaceRule>? = null,
+        useReplace: Boolean = true,
+        chineseConvert: Boolean = true,
+        replaceBook: ReplaceBook? = null,
+        chineseConverterType: Int,
     ): String {
         var displayTitle = title.replace(AppPattern.rnRegex, "")
         if (chineseConvert) {
-            when (AppConfig.chineseConverterType) {
+            when (chineseConverterType) {
                 1 -> displayTitle = ChineseUtils.t2s(displayTitle)
                 2 -> displayTitle = ChineseUtils.s2t(displayTitle)
             }

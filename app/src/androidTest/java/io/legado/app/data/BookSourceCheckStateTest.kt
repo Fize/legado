@@ -2,7 +2,6 @@ package io.legado.app.data
 
 import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.entities.BookSource
@@ -21,12 +20,12 @@ class BookSourceCheckStateTest {
     private val name = "source-check-${UUID.randomUUID()}"
     private var database: AppDatabase? = null
     @get:Rule val helper = MigrationTestHelper(
-        InstrumentationRegistry.getInstrumentation(), AppDatabase::class.java.canonicalName,
-        FrameworkSQLiteOpenHelperFactory(),
+        InstrumentationRegistry.getInstrumentation(), AppDatabase::class.java,
+        DatabaseMigrations.autoMigrationSpecs.toList(),
     )
 
     private fun open(): AppDatabase = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(*DatabaseMigrations.migrations).allowMainThreadQueries().build()
+        .addLegadoMigrations().allowMainThreadQueries().build()
         .also { database = it }
 
     @After fun cleanUp() {

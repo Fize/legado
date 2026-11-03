@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -159,6 +160,7 @@ class ManualReplaceRulesDialog() : BaseDialogFragment() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .testTag("manualSourceRule:${item.id}")
                                 .heightIn(min = 48.dp)
                                 .clickable {
                                     if (isChecked) selectedIds.remove(item.id)
@@ -200,6 +202,7 @@ class ManualReplaceRulesDialog() : BaseDialogFragment() {
                 ) {
                     Box(
                         modifier = Modifier
+                            .testTag("manualSourceRules:selectAll")
                             .heightIn(min = 48.dp)
                             .clickable {
                                 if (selectedIds.size == candidates.size) {
@@ -221,6 +224,7 @@ class ManualReplaceRulesDialog() : BaseDialogFragment() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
+                                .testTag("manualSourceRules:cancel")
                                 .heightIn(min = 48.dp)
                                 .widthIn(min = 48.dp)
                                 .clickable { dismissAllowingStateLoss() }
@@ -234,12 +238,13 @@ class ManualReplaceRulesDialog() : BaseDialogFragment() {
                         }
                         Box(
                             modifier = Modifier
+                                .testTag("manualSourceRules:ok")
                                 .heightIn(min = 48.dp)
                                 .widthIn(min = 48.dp)
                                 .clickable {
                                     val ids = candidates.filter { it.id in selectedIds }.map { it.id }
                                     if (sourceReplacement) {
-                                        (parentFragment as? Callback)?.onManualSourceRulesSelected(
+                                        ((parentFragment as? Callback) ?: (activity as? Callback))?.onManualSourceRulesSelected(
                                             ids,
                                             arguments?.getString("requestId")
                                         )

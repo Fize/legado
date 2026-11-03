@@ -43,7 +43,7 @@ class AudioEpisodeUnitTest {
         assertTrue(activity.contains("chapterIndexTextState = \"\""))
         assertEquals(
             1,
-            Regex("AudioPlay\\.upData\\(book, preserveProgress = true\\)")
+            Regex("AudioPlay\\.upData\\(book, preserveProgress = !positionApplied\\)")
                 .findAll(viewModel).count(),
         )
         assertEquals(

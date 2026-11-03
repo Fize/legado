@@ -53,13 +53,15 @@ class ExploreCategoriesTest {
         assertTrue(model.contains("if (initialized) return"))
         assertTrue(model.contains("savedState?.getString(\"exploreUrl\")"))
         assertTrue(model.contains("outState.putString(\"exploreUrl\", it.url)"))
-        assertTrue(model.contains("outState.putInt(\"explorePage\", pageLiveData.value ?: firstLoadedPage)"))
+        assertTrue(model.contains("outState.putInt(\"explorePage\", uiState.value.page)"))
+        assertTrue(model.contains("val uiState = _uiState.asStateFlow()"))
+        assertFalse(model.contains("MutableLiveData"))
         assertFalse(model.contains("addBooksData"))
     }
 
     @Test
     fun `category rows stay compact and top scroll restores first page indicator`() {
-        val activity = source("ui/book/explore/ExploreShowActivity.kt")
+        val activity = source("ui/book/explore/ExploreShowScreen.kt")
         assertTrue(activity.contains("heightIn(min = 40.dp)"))
         assertTrue(activity.contains("padding(horizontal = 12.dp)"))
         assertTrue(activity.contains("viewModel.showPage(1)"))

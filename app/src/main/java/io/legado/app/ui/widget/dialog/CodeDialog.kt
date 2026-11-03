@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -119,6 +120,7 @@ class CodeDialog() : BaseDialogFragment() {
     private var originalCode = ""
     private var alternateCode by mutableStateOf<String?>(null)
     private var showingAlternate by mutableStateOf(false)
+    private var restoreAlternateAfterRefresh = false
     private var saveEnabled by mutableStateOf(false)
     @set:JvmName("updateSearchOpenState")
     private var searchOpen by mutableStateOf(false)
@@ -151,9 +153,11 @@ class CodeDialog() : BaseDialogFragment() {
                     ?: error(getString(R.string.code_editor_result_error))
             }
             if (code != null) {
+                val wasShowingAlternate = sourcePreview && showingAlternate
                 originalCode = code
                 if (!showingAlternate) codeViewRef?.setText(code)
                 if (sourcePreview) {
+                    restoreAlternateAfterRefresh = restoreAlternateAfterRefresh || wasShowingAlternate
                     clearAlternateCode()
                     callback()?.onCodeSave(code, requestId)
                 }
@@ -196,6 +200,7 @@ class CodeDialog() : BaseDialogFragment() {
         val showReplaceRulesArg = arguments?.getBoolean("showReplaceRules") == true
 
         val codeView = CodeView(context).apply {
+            contentDescription = "codeDialogEditor"
             val pad = 12.dpToPx()
             setPadding(pad, pad, pad, pad)
             if (disableEdit) {
@@ -355,7 +360,8 @@ class CodeDialog() : BaseDialogFragment() {
                                         onClick = {
                                             if (!editorPending) openEditor()
                                         },
-                                        enabled = !pending
+                                        enabled = !pending,
+                                        modifier = Modifier.testTag("codeDialogOpenEditor"),
                                     ) {
                                         Icon(
                                             painter = painterResource(R.drawable.ic_edit),
@@ -373,7 +379,8 @@ class CodeDialog() : BaseDialogFragment() {
                                                 dismiss()
                                             }
                                         },
-                                        enabled = !pending
+                                        enabled = !pending,
+                                        modifier = Modifier.testTag("codeDialogSave"),
                                     ) {
                                         Icon(
                                             painter = painterResource(R.drawable.ic_save),
@@ -385,7 +392,10 @@ class CodeDialog() : BaseDialogFragment() {
 
                                 if (showReplaceRulesArg || sourcePreview) {
                                     Box {
-                                        IconButton(onClick = { overflowExpanded = true }) {
+                                        IconButton(
+                                            onClick = { overflowExpanded = true },
+                                            modifier = Modifier.testTag("codeDialogOverflow"),
+                                        ) {
                                             Icon(
                                                 imageVector = Icons.Default.MoreVert,
                                                 contentDescription = stringResource(R.string.more_menu),
@@ -399,6 +409,7 @@ class CodeDialog() : BaseDialogFragment() {
                                             if (showReplaceRulesArg) {
                                                 DropdownMenuItem(
                                                     text = { Text(stringResource(R.string.menu_replace_rule)) },
+                                                    modifier = Modifier.testTag("codeDialogManageReplaceRules"),
                                                     enabled = !pending,
                                                     onClick = {
                                                         overflowExpanded = false
@@ -470,7 +481,8 @@ class CodeDialog() : BaseDialogFragment() {
                                     Checkbox(
                                         checked = showingAlternate,
                                         onCheckedChange = { checked -> showAlternate(checked) },
-                                        enabled = !pending
+                                        enabled = !pending,
+                                        modifier = Modifier.testTag("codeDialogAlternate"),
                                     )
                                     Text(
                                         text = stringResource(R.string.show_source_replacement),
@@ -529,6 +541,7 @@ class CodeDialog() : BaseDialogFragment() {
         val canPreviewReplacement = !disableEdit && alternateCode != null
         val initialShowingAlternate = savedInstanceState?.getBoolean("showingAlternate")
             ?: (arguments?.getBoolean("showAlternate") == true)
+        restoreAlternateAfterRefresh = savedInstanceState?.getBoolean("restoreAlternateAfterRefresh") == true
         showingAlternate = initialShowingAlternate
         if (canPreviewReplacement) {
             showAlternate(showingAlternate)
@@ -675,7 +688,10 @@ class CodeDialog() : BaseDialogFragment() {
         if (alternateCode == null) {
             if (showingAlternate) showAlternate(false)
         } else {
-            if (showingAlternate) showAlternate(true)
+            if (showingAlternate || restoreAlternateAfterRefresh) {
+                restoreAlternateAfterRefresh = false
+                showAlternate(true)
+            }
         }
         updateEditorAction()
     }
@@ -695,6 +711,10 @@ class CodeDialog() : BaseDialogFragment() {
             codeViewRef?.text?.toString().orEmpty(),
         )
     }
+
+    internal fun codeViewForTest(): CodeView? = codeViewRef
+
+    internal fun isShowingAlternateForTest(): Boolean = showingAlternate
 
     private fun callback(): Callback? =
         (parentFragment as? Callback) ?: (activity as? Callback)
@@ -723,6 +743,7 @@ class CodeDialog() : BaseDialogFragment() {
         outState.putBoolean("searchOpen", searchOpen)
         outState.putString("searchQuery", searchQuery)
         outState.putInt("searchIndex", searchIndex)
+        outState.putBoolean("restoreAlternateAfterRefresh", restoreAlternateAfterRefresh)
         originalCodeStateKey = saveStateData(originalCodeStateKey, currentOriginalCode())
             .also { outState.putString("originalCode", it) }
         alternateCode?.let { code ->

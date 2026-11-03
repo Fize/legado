@@ -3,6 +3,8 @@ package io.legado.app.help.storage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ImportOldDataTest {
@@ -54,5 +56,24 @@ class ImportOldDataTest {
         val script = "@js:return 'https://example.com'"
 
         assertEquals(script, ImportOldData.toNewUrls(script))
+    }
+
+    @Test
+    fun `malformed legacy replacement JSON is a failure instead of a successful zero count`() {
+        assertThrows(Throwable::class.java) {
+            ImportOldData.parseOldReplaceRules("{")
+        }
+    }
+
+    @Test
+    fun `invalid legacy replacement item is a failure`() {
+        assertThrows(Throwable::class.java) {
+            ImportOldData.parseOldReplaceRules("[{}]")
+        }
+    }
+
+    @Test
+    fun `empty legacy replacement list remains a valid zero-item import`() {
+        assertTrue(ImportOldData.parseOldReplaceRules("[]").isEmpty())
     }
 }

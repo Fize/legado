@@ -9,13 +9,15 @@ import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.util.ContentLengthInputStream
 import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.BaseSource
+import io.legado.app.data.entities.Book
+import io.legado.app.data.appDb
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.addHeaders
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.okHttpClientManga
 import io.legado.app.help.source.SourceHelp
-import io.legado.app.model.ReadManga
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.ImageUtils
 import io.legado.app.utils.isWifiConnect
@@ -41,6 +43,7 @@ class OkHttpStreamFetcher(
     private var responseBody: ResponseBody? = null
     private var callback: DataFetcher.DataCallback<in InputStream>? = null
     private var source: BaseSource? = null
+    private var book: Book? = null
     private val manga = options.get(OkHttpModelLoader.mangaOption) == true
     private val coroutineContext = SupervisorJob()
     private val coroutineScope = CoroutineScope(coroutineContext)
@@ -49,12 +52,16 @@ class OkHttpStreamFetcher(
     @Volatile
     private var call: Call? = null
 
+    private val failureIdentity = imageSourceCacheIdentity(url.cacheKey, url.headers,
+        options.get(OkHttpModelLoader.sourceOriginOption), options.get(OkHttpModelLoader.bookUrlOption), manga)
+
     companion object {
-        private val failUrl = hashSetOf<String>()
+        private val failUrl = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     }
 
     override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
-        if (failUrl.contains(url.toStringUrl())) {
+        if (options.get(OkHttpModelLoader.retryFailedImagesOption) == true) failUrl.remove(failureIdentity)
+        if (failUrl.contains(failureIdentity)) {
             callback.onLoadFailed(NoStackTraceException("跳过加载失败的图片"))
             return
         }
@@ -66,6 +73,9 @@ class OkHttpStreamFetcher(
 
         options.get(OkHttpModelLoader.sourceOriginOption)?.let { sourceUrl ->
             source = SourceHelp.getSource(sourceUrl)
+        }
+        options.get(OkHttpModelLoader.bookUrlOption)?.let { bookUrl ->
+            book = appDb.bookDao.getBook(bookUrl)
         }
 
         analyzedUrl = AnalyzeUrl(
@@ -79,7 +89,14 @@ class OkHttpStreamFetcher(
         val request: Request = requestBuilder.build()
         this.callback = callback
         call = if (manga) {
-            okHttpClientManga.newCall(request)
+            try {
+                ConcurrentRateLimiter(source).withLimitBlocking {
+                    okHttpClientManga.newCall(request)
+                }
+            } catch (error: Exception) {
+                callback.onLoadFailed(error)
+                return
+            }
         } else {
             okHttpClient.newCall(request)
         }
@@ -116,7 +133,7 @@ class OkHttpStreamFetcher(
         responseBody = response.body
         if (!response.isSuccessful) {
             if (!manga) {
-                failUrl.add(url.toStringUrl())
+                failUrl.add(failureIdentity)
             }
             callback?.onLoadFailed(HttpException(response.message, response.code))
             return
@@ -133,7 +150,7 @@ class OkHttpStreamFetcher(
                         responseBody!!.bytes(),
                         isCover = false,
                         source,
-                        ReadManga.book
+                        book
                     )?.inputStream()
                 } else {
                     ImageUtils.decode(
@@ -149,7 +166,7 @@ class OkHttpStreamFetcher(
     private fun onStreamReady(inputStream: InputStream?) {
         if (inputStream == null) {
             if (!manga) {
-                failUrl.add(url.toStringUrl())
+                failUrl.add(failureIdentity)
             }
             callback?.onLoadFailed(NoStackTraceException("封面二次解密失败"))
         } else {

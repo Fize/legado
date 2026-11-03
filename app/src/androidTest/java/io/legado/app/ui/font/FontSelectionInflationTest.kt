@@ -1,13 +1,17 @@
 package io.legado.app.ui.font
 
-import android.content.Context
-import android.view.ContextThemeWrapper
-import android.view.LayoutInflater
-import android.widget.FrameLayout
-import androidx.test.core.app.ApplicationProvider
+import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
-import io.legado.app.databinding.ItemFontBinding
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.SettingsRoute
+import io.legado.app.ui.navigation.SettingsSection
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -15,15 +19,15 @@ import org.junit.runner.RunWith
 class FontSelectionInflationTest {
 
     @Test
-    fun itemFontInflatesWithAppCompatThemes() {
-        val appContext = ApplicationProvider.getApplicationContext<Context>()
-        listOf(R.style.AppTheme_Light, R.style.AppTheme_Dark).forEach { theme ->
-            val context = ContextThemeWrapper(appContext, theme)
-            ItemFontBinding.inflate(
-                LayoutInflater.from(context),
-                FrameLayout(context),
-                false,
-            )
+    fun coverFontPickerRendersInTheComposeSettingsRoute() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        ActivityScenario.launch<AppActivity>(
+            AppActivity.startIntent(context, SettingsRoute(SettingsSection.CoverFont))
+        ).use {
+            onView(withText(R.string.cover_font_select)).perform(click())
+            onView(withText(R.string.select_font)).check(matches(isDisplayed()))
+            onView(withText(R.string.default_font)).check(matches(isDisplayed()))
+            onView(withText(R.string.import_str)).check(matches(isDisplayed()))
         }
     }
 }

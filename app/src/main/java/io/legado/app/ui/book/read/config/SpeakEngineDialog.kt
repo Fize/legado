@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read.config
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -68,9 +69,12 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.association.ImportHttpTtsDialog
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.SourceLoginRoute
+import io.legado.app.ui.navigation.SourceLoginTarget
+import io.legado.app.ui.navigation.ImportKind
+import io.legado.app.ui.navigation.ImportRoute
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.text.AutoCompleteTextView
 import io.legado.app.utils.ACache
@@ -114,7 +118,10 @@ class SpeakEngineDialog : BaseDialogFragment() {
 
     private val importDocResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            showDialogFragment(ImportHttpTtsDialog(uri.toString()))
+            startActivity(
+                AppActivity.startIntent(requireContext(), ImportRoute(uri.toString(), ImportKind.HttpTts))
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
         }
     }
 
@@ -333,19 +340,13 @@ class SpeakEngineDialog : BaseDialogFragment() {
                                         val id = httpTTS.id.toString()
                                         upTts(id)
                                         if (httpTTS.shouldOpenLoginOnSelection()) {
-                                            startActivity<SourceLoginActivity> {
-                                                putExtra("type", "httpTts")
-                                                putExtra("key", id)
-                                            }
+                                            openHttpTtsLogin(id)
                                         }
                                     },
                                     onLongClick = {
                                         if (httpTTS.hasLoginCapability()) {
                                             val id = httpTTS.id.toString()
-                                            startActivity<SourceLoginActivity> {
-                                                putExtra("type", "httpTts")
-                                                putExtra("key", id)
-                                            }
+                                            openHttpTtsLogin(id)
                                         }
                                     }
                                 )
@@ -358,10 +359,7 @@ class SpeakEngineDialog : BaseDialogFragment() {
                                     val id = httpTTS.id.toString()
                                     upTts(id)
                                     if (httpTTS.shouldOpenLoginOnSelection()) {
-                                        startActivity<SourceLoginActivity> {
-                                            putExtra("type", "httpTts")
-                                            putExtra("key", id)
-                                        }
+                                        openHttpTtsLogin(id)
                                     }
                                 }
                             )
@@ -538,7 +536,9 @@ class SpeakEngineDialog : BaseDialogFragment() {
                         cacheUrls.add(0, url)
                         aCache.put(ttsUrlKey, cacheUrls.joinToString(","))
                     }
-                    showDialogFragment(ImportHttpTtsDialog(url))
+                    startActivity(
+                        AppActivity.startIntent(requireContext(), ImportRoute(url, ImportKind.HttpTts))
+                    )
                 }
             }
         }
@@ -546,6 +546,15 @@ class SpeakEngineDialog : BaseDialogFragment() {
 
     private fun upTts(tts: String) {
         ttsEngine = tts
+    }
+
+    private fun openHttpTtsLogin(id: String) {
+        startActivity(
+            AppActivity.startIntent(
+                requireContext(),
+                SourceLoginRoute(SourceLoginTarget.HttpTts, key = id),
+            ),
+        )
     }
 
     interface CallBack {

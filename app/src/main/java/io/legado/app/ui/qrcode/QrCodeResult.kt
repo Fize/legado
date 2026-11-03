@@ -4,11 +4,13 @@ import android.app.Activity.RESULT_OK
 import android.content.Context
 import android.content.Intent
 import androidx.activity.result.contract.ActivityResultContract
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.QrCodeRoute
 
 class QrCodeResult : ActivityResultContract<Unit?, String?>() {
 
     override fun createIntent(context: Context, input: Unit?): Intent {
-        return Intent(context, QrCodeActivity::class.java)
+        return AppActivity.startIntent(context, QrCodeRoute)
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): String? {

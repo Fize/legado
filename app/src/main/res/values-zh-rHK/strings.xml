@@ -988,6 +988,10 @@
     <string name="use_browser_open">是否使用外部瀏覽器打開?</string>
     <string name="see">查看</string>
     <string name="search_content_size">搜索結果</string>
+    <string name="search_menu_results">結果</string>
+    <string name="search_menu_chapter_summary">搜索結果：%1$d / 目前章節：%2$s</string>
+    <string name="previous_search_result">上一個搜索結果</string>
+    <string name="next_search_result">下一個搜索結果</string>
     <string name="search_content_empty">搜索内容为空，检查净化/简繁设置</string>
     <string name="open">打開</string>
     <string name="del_login_header">刪除登錄頭</string>

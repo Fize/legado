@@ -26,9 +26,16 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.AudioPlayService
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
+import io.legado.app.ui.book.read.PlatformMediaReturnSession
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 
 class AudioPlayViewModel(application: Application) : BaseViewModel(application) {
+    private val platformReturn = PlatformMediaReturnSession()
+    val platformRequestId get() = platformReturn.requestId
+    fun finishPlatformReturn() = platformReturn.close()
+
     val titleData = MutableLiveData<String>()
     val coverData = MutableLiveData<String>()
     val customBtnListData = MutableLiveData<Boolean>()
@@ -41,11 +48,14 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
         val cachedInBookshelf = AudioPlay.inBookshelf
         initTask?.cancel()
         initTask = execute(semaphore = initSemaphore) {
-            var databaseBook = requestedBookUrl
+            val prepared = platformReturn.prepare(intent, BookType.audio)
+            currentCoroutineContext().ensureActive()
+            val actualBookUrl = prepared?.book?.bookUrl ?: requestedBookUrl
+            var databaseBook = prepared?.book ?: actualBookUrl
                 ?.takeIf { it.isNotBlank() }
                 ?.let(appDb.bookDao::getBook)
             val resolvedBook = resolveAudioPlayBook(
-                requestedBookUrl = requestedBookUrl,
+                requestedBookUrl = actualBookUrl,
                 cachedBook = cachedBook,
                 bookUrlOf = Book::bookUrl,
                 findBook = { databaseBook },
@@ -73,7 +83,7 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
                 requestedBookUrl.isNullOrBlank() -> cachedInBookshelf
                 else -> !(databaseBook ?: targetBook).isNotShelf
             }
-            initBook(targetBook)
+            initBook(targetBook, prepared?.positionApplied == true)
         }.onSuccess { initialized ->
             when (initialized) {
                 true -> {
@@ -98,13 +108,14 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
         }
     }
 
-    private suspend fun initBook(book: Book): Boolean {
+    private suspend fun initBook(book: Book, positionApplied: Boolean): Boolean {
         val isSameBook = AudioPlay.book?.bookUrl == book.bookUrl
         if (isSameBook) {
-            AudioPlay.upData(book, preserveProgress = true)
+            AudioPlay.upData(book, preserveProgress = !positionApplied)
         } else {
             AudioPlay.resetData(book)
         }
+        platformReturn.playbackPositionApplied()
         customBtnListData.postValue(AudioPlay.bookSource?.customButton == true)
         titleData.postValue(book.name)
         coverData.postValue(book.getDisplayCover())
@@ -173,7 +184,9 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
             oldBook?.migrateTo(book, toc)
             book.removeType(BookType.updateError)
             if (wasNotShelf) book.addType(BookType.notShelf)
-            replaceBookAfterSourceChange(oldBook, book, toc)
+            platformReturn.replaceSource(oldBook?.bookUrl, book.bookUrl) {
+                replaceBookAfterSourceChange(oldBook, book, toc)
+            }
             AudioPlay.replaceBook(book)
             AudioPlay.inBookshelf = !wasNotShelf
             AudioPlay.setBookSource(source)
@@ -183,6 +196,13 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
             onSuccess()
         }.onFinally {
             postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)
+        }
+    }
+
+    fun replaceForOtherReader(book: Book, toc: List<BookChapter>) {
+        val oldBook = AudioPlay.book
+        platformReturn.replaceSource(oldBook?.bookUrl, book.bookUrl) {
+            replaceBookAfterSourceChange(oldBook, book, toc)
         }
     }
 

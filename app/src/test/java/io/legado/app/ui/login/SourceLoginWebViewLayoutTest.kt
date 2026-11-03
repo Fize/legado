@@ -9,18 +9,18 @@ class SourceLoginWebViewLayoutTest {
     @Test
     fun `web login root paints the runtime theme background`() {
         val activity = readProjectFile(
-            "src/main/java/io/legado/app/ui/login/SourceLoginActivity.kt"
+            "src/main/java/io/legado/app/ui/login/SourceLoginScreen.kt"
         )
 
         assertTrue(
             "Web login must paint an opaque runtime theme background",
-            activity.contains("setBackgroundColor(backgroundColor)")
+            activity.contains("setBackgroundColor(activity.backgroundColor)")
         )
     }
 
     @Test
     fun `web view roots stay above system bars and keyboard`() {
-        val login = readProjectFile("src/main/java/io/legado/app/ui/login/SourceLoginActivity.kt")
+        val login = readProjectFile("src/main/java/io/legado/app/ui/login/SourceLoginScreen.kt")
         assertTrue(login.contains(".imePadding()"))
         assertTrue(login.contains("Scaffold("))
         val browser = readProjectFile("src/main/java/io/legado/app/ui/browser/WebViewActivity.kt")

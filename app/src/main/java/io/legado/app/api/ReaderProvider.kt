@@ -3,6 +3,9 @@
  */
 package io.legado.app.api
 
+import io.legado.app.help.storage.RestoreFileRecovery
+import io.legado.app.help.storage.RestoreRecoveryGate
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.UriMatcher
@@ -29,11 +32,20 @@ class ReaderProvider : ContentProvider() {
         }
     }
 
+    private fun requireConsistentState() {
+        val context = checkNotNull(context)
+        if (RestoreRecoveryGate.isQuarantined ||
+            (RestoreFileRecovery.hasPending(context) && !runCatching { RestoreFileRecovery.pendingIsResolved(context) }.getOrDefault(false))) {
+            throw RestoreRecoveryRequiredException()
+        }
+    }
+
     private fun requestCode(uri: Uri): ReaderProviderRequestCode? =
         ReaderProviderRoutes.requestForMatcherCode(sMatcher.match(uri))
 
     override fun onCreate(): Boolean {
         context?.let { context ->
+            if (RestoreFileRecovery.hasPending(context)) return false
             ShortCuts.buildShortCuts(context)
         }
         return false
@@ -44,6 +56,7 @@ class ReaderProvider : ContentProvider() {
         selection: String?,
         selectionArgs: Array<String>?
     ): Int {
+        requireConsistentState()
         val requestCode = requestCode(uri) ?: return -1
         dispatchReaderProviderDelete(
             requestCode,
@@ -56,6 +69,7 @@ class ReaderProvider : ContentProvider() {
     override fun getType(uri: Uri) = throw UnsupportedOperationException("Not yet implemented")
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? {
+        requireConsistentState()
         val requestCode = requestCode(uri) ?: return null
         runBlocking {
             dispatchReaderProviderInsert(
@@ -75,6 +89,7 @@ class ReaderProvider : ContentProvider() {
         uri: Uri, projection: Array<String>?, selection: String?,
         selectionArgs: Array<String>?, sortOrder: String?
     ): Cursor? {
+        requireConsistentState()
         val map: MutableMap<String, ArrayList<String>> = HashMap()
         uri.getQueryParameter("url")?.let {
             map["url"] = arrayListOf(it)

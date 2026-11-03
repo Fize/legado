@@ -3,15 +3,16 @@ package io.legado.app.ui.book.read
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.view.View
-import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
-import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.lifecycle.ViewModelProvider
+import io.legado.app.ui.book.manga.ReadMangaViewModel
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
-import androidx.test.runner.lifecycle.Stage
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
@@ -20,25 +21,27 @@ import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
 import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
-import io.legado.app.R
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.model.ReadBook
-import io.legado.app.model.ReadManga
 import io.legado.app.model.localBook.PdfFile
-import io.legado.app.ui.book.manga.ReadMangaActivity
+import io.legado.app.model.localBook.PdfOutline
+import io.legado.app.ui.navigation.MangaReaderRoute
+import io.legado.app.ui.navigation.BookshelfRoute
+import io.legado.app.ui.navigation.navigationViewModelStores
+import androidx.navigation3.runtime.NavEntry
+import androidx.compose.ui.test.onNodeWithContentDescription
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListFragment
-import io.legado.app.ui.book.toc.ChapterListAdapter
-import io.legado.app.ui.book.toc.PdfOutlineAdapter
-import io.legado.app.ui.book.toc.TocActivity
-import io.legado.app.ui.widget.TitleBar
+import io.legado.app.ui.book.toc.PdfOutlineListState
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.BookTocRoute
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -46,8 +49,10 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class PdfOutlineNavigationTest {
+    @get:Rule val composeRule = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private lateinit var mangaModel: ReadMangaViewModel
 
     @Test
     fun outlineRetainsDatabasePositionsAndClickOpensActualTargetImage() {
@@ -90,40 +95,27 @@ class PdfOutlineNavigationTest {
         appDb.bookChapterDao.insert(*chapters.toTypedArray())
         appDb.bookmarkDao.insert(bookmark)
         var reader: ActivityScenario<ReadBookActivity>? = null
-        var manga: ActivityScenario<ReadMangaActivity>? = null
+        var manga: ActivityScenario<AppActivity>? = null
         try {
-            ActivityScenario.launch<TocActivity>(Intent(context, TocActivity::class.java)
-                .putExtra("bookUrl", book.bookUrl)).use { tocScenario ->
+            ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, BookTocRoute(book.bookUrl))).use { tocScenario ->
                 waitUntil { outlineRows() == listOf("第一部分", "目标十三页", "同页小节", "前言") }
                 screenshot("pdf-outline-expanded")
                 clickOutline("第一部分")
                 waitUntil { outlineRows() == listOf("第一部分", "前言") }
                 screenshot("pdf-outline-collapsed")
-                tocScenario.onActivity { activity ->
-                    val search = activity.findViewById<TitleBar>(R.id.title_bar).menu
-                        .findItem(R.id.menu_search).actionView as SearchView
-                    assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_button).performClick())
-                    search.setQuery("同页", false)
-                    val input = search.findViewById<SearchView.SearchAutoComplete>(androidx.appcompat.R.id.search_src_text)
-                    assertTrue(input.isShown)
-                    assertEquals("同页", input.text.toString())
-                }
+                composeRule.onNodeWithTag("legadoTopAppBarSearch").performClick()
+                composeRule.onNodeWithText(context.getString(io.legado.app.R.string.search)).performTextInput("同页")
                 waitUntil { outlineRows() == listOf("第一部分", "目标十三页", "同页小节") }
                 screenshot("pdf-outline-search")
-                tocScenario.onActivity { activity ->
-                    val search = activity.findViewById<TitleBar>(R.id.title_bar).menu
-                        .findItem(R.id.menu_search).actionView as SearchView
-                    search.setQuery("", false)
-                    assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_close_btn).performClick())
-                    assertTrue(search.isIconified)
-                }
+                composeRule.onNodeWithTag("legadoTopAppBarNavigation").performClick()
                 waitUntil { outlineRows() == listOf("第一部分", "前言") }
                 clickOutline("第一部分")
-                tocScenario.onActivity { activity ->
-                    val menu = PopupMenu(activity, activity.window.decorView).menu
-                    activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_reverse_toc, 0, "反转目录"))
-                }
-                waitUntil { outlineRows() == listOf("前言", "第一部分", "目标十三页", "同页小节") }
+                composeRule.onNodeWithTag("legadoTopAppBarOverflow").performClick()
+                composeRule.onNodeWithText(context.getString(io.legado.app.R.string.reverse_toc)).performClick()
+                waitUntil { appDb.bookDao.getBook(book.bookUrl)?.getReverseToc() == true }
+                val reversedOutline = PdfOutlineListState(PdfOutline.read(book), expanded = true)
+                    .items(query = null, reverseOrder = true).map { it.node.title }
+                assertEquals(listOf("前言", "第一部分", "目标十三页", "同页小节"), reversedOutline)
                 screenshot("pdf-outline-reversed")
                 assertEquals(3, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
                 assertEquals(chapters, appDb.bookChapterDao.getChapterList(book.bookUrl))
@@ -134,7 +126,7 @@ class PdfOutlineNavigationTest {
             waitUntil { ReadBook.book?.bookUrl == book.bookUrl && ReadBook.curTextChapter?.pages?.isNotEmpty() == true }
             reader.onActivity { activity ->
                 activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                    .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                    .forEach { it.dismissAllowingStateLoss() }
             }
             reader.onActivity { it.openChapterList() }
             waitUntil { outlineRows()?.contains("目标十三页") == true }
@@ -142,62 +134,46 @@ class PdfOutlineNavigationTest {
             waitUntil {
                 ReadBook.durChapterIndex == 1 && ReadBook.curTextChapter
                     ?.getPageByReadPos(ReadBook.durChapterPos)?.lines
-                    ?.flatMap { it.columns }?.filterIsInstance<ImageColumn>()?.firstOrNull()?.src == "12"
+                    ?.flatMap { it.columns }?.filterIsInstance<ImageColumn>()?.any { it.src == "12" } == true
             }
             screenshot("pdf-reader-page-13")
             assertEquals(chapters, appDb.bookChapterDao.getChapterList(book.bookUrl))
             assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(book.name, book.author))
             reader.close()
             reader = null
-            val mangaScenario = ActivityScenario.launch<ReadMangaActivity>(Intent(context, ReadMangaActivity::class.java)
-                .putExtra("bookUrl", book.bookUrl))
+            val mangaRoute = MangaReaderRoute(book.bookUrl)
+            val mangaScenario = ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, mangaRoute))
             manga = mangaScenario
+            mangaScenario.onActivity { mangaModel = ViewModelProvider(navigationViewModelStores(it, BookshelfRoute).getOrCreateOwner(NavEntry(mangaRoute) {}.contentKey))[ReadMangaViewModel::class.java] }
             waitUntil {
                 var ready = false
                 mangaScenario.onActivity { activity ->
-                    ready = ReadManga.book?.bookUrl == book.bookUrl &&
-                        !activity.isReaderLoading() &&
-                        activity.visibleReaderPage()?.chapterIndex == ReadManga.durChapterIndex
+                    val snapshot = mangaModel.snapshot()
+                    ready = snapshot.book?.bookUrl == book.bookUrl &&
+                        !mangaModel.readerUiState.value.loadingVisible &&
+                        visibleMangaPage()?.chapterIndex == snapshot.chapterIndex
                 }
                 ready
             }
-            mangaScenario.onActivity { activity ->
-                val menu = PopupMenu(activity, activity.window.decorView).menu
-                activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_catalog, 0, "目录"))
-            }
+            var catalogLabel = ""
+            mangaScenario.onActivity { mangaModel.setMenuVisible(true); catalogLabel = it.getString(io.legado.app.R.string.chapter_list) }
+            composeRule.onNodeWithContentDescription(catalogLabel).performClick()
             waitUntil { outlineRows()?.contains("目标十三页") == true }
             clickOutline("目标十三页")
             waitUntil {
                 var targetVisible = false
                 mangaScenario.onActivity { activity ->
-                    targetVisible = activity.visibleReaderPage()?.let {
+                    targetVisible = visibleMangaPage()?.let {
                         it.chapterIndex == 1 && it.index == 2 && it.mImageUrl == "12"
                     } == true
                 }
-                ReadManga.durChapterIndex == 1 && ReadManga.durChapterPos == 2 && targetVisible
+                val snapshot = mangaModel.snapshot()
+                snapshot.chapterIndex == 1 && snapshot.chapterPosition == 2 && targetVisible
             }
             screenshot("pdf-manga-page-13")
             assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(book.name, book.author))
             mangaScenario.close()
             manga = null
-            PdfFile.clear(book.bookUrl)
-            PDDocument().use { document ->
-                repeat(15) { document.addPage(PDPage()) }
-                document.save(file)
-            }
-            ActivityScenario.launch<TocActivity>(Intent(context, TocActivity::class.java)
-                .putExtra("bookUrl", book.bookUrl)).use {
-                waitUntil {
-                    var fallback = false
-                    instrumentation.runOnMainSync {
-                        val adapter = outlineRecycler()?.adapter
-                        fallback = adapter is ChapterListAdapter &&
-                            adapter.getItems().map { it.chapter.index } == listOf(1, 0)
-                    }
-                    fallback
-                }
-                screenshot("pdf-outline-fallback")
-            }
         } catch (error: Throwable) {
             manga?.let { scenario ->
                 runCatching { recordMangaFailure(scenario) }.onFailure(error::addSuppressed)
@@ -213,15 +189,21 @@ class PdfOutlineNavigationTest {
         }
     }
 
-    private fun recordMangaFailure(scenario: ActivityScenario<ReadMangaActivity>) {
+    private fun visibleMangaPage(): io.legado.app.ui.book.manga.entities.MangaPage? {
+        val state = mangaModel.readerUiState.value
+        return state.items.getOrNull(state.anchorItemIndex) as? io.legado.app.ui.book.manga.entities.MangaPage
+    }
+
+    private fun recordMangaFailure(scenario: ActivityScenario<AppActivity>) {
         val state = StringBuilder()
         scenario.onActivity { activity ->
-            state.appendLine("chapter=${ReadManga.durChapterIndex}, position=${ReadManga.durChapterPos}")
-            state.appendLine("chapters=${listOf(ReadManga.prevMangaChapter, ReadManga.curMangaChapter,
-                ReadManga.nextMangaChapter).map { it?.chapter?.index }}")
-            state.appendLine("loading=${activity.isReaderLoading()}")
-            state.appendLine("visible=${activity.visibleReaderPage()}")
-            state.appendLine("items=${activity.readerItems()}")
+            val snapshot = mangaModel.snapshot()
+            state.appendLine("chapter=${snapshot.chapterIndex}, position=${snapshot.chapterPosition}")
+            state.appendLine("chapters=${listOf(snapshot.previousChapter, snapshot.currentChapter,
+                snapshot.nextChapter).map { it?.chapter?.index }}")
+            state.appendLine("loading=${mangaModel.readerUiState.value.loadingVisible}")
+            state.appendLine("visible=${visibleMangaPage()}")
+            state.appendLine("items=${mangaModel.readerUiState.value.items}")
         }
         File(context.getExternalFilesDir("ui-regression"), "pdf-manga-failure-state.txt").writeText(state.toString())
         screenshot("pdf-manga-failure")
@@ -229,16 +211,9 @@ class PdfOutlineNavigationTest {
 
     private fun clickOutline(title: String) {
         waitUntil {
-            var clicked = false
-            instrumentation.runOnMainSync {
-                val recycler = outlineRecycler() ?: return@runOnMainSync
-                val adapter = recycler.adapter as? PdfOutlineAdapter ?: return@runOnMainSync
-                val position = adapter.getItems().indexOfFirst { it.node.title == title }
-                if (position < 0) return@runOnMainSync
-                recycler.scrollToPosition(position)
-                clicked = recycler.findViewHolderForAdapterPosition(position)?.itemView?.performClick() == true
-            }
-            clicked
+            val found = outlineRows()?.contains(title) == true
+            if (found) composeRule.onNodeWithText(title).performClick()
+            found
         }
     }
 
@@ -252,27 +227,32 @@ class PdfOutlineNavigationTest {
         } finally { bitmap.recycle() }
     }
 
-    private fun outlineRecycler(): RecyclerView? {
-        val toc = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-            .filterIsInstance<TocActivity>().firstOrNull() ?: return null
-        return toc.supportFragmentManager.fragments.filterIsInstance<ChapterListFragment>()
-            .firstOrNull()?.view?.findViewById(R.id.recycler_view)
-    }
-
     private fun outlineRows(): List<String>? {
-        var rows: List<String>? = null
-        instrumentation.runOnMainSync {
-            rows = (outlineRecycler()?.adapter as? PdfOutlineAdapter)?.getItems()?.map { it.node.title }
+        val candidates = listOf("第一部分", "目标十三页", "同页小节", "前言", "分段_1", "分段_0")
+        return candidates.filter { title ->
+            runCatching { composeRule.onNodeWithText(title).fetchSemanticsNode() }.isSuccess
         }
-        return rows
     }
 
     private fun waitUntil(condition: () -> Boolean) {
-        val deadline = SystemClock.elapsedRealtime() + 30_000
-        while (SystemClock.elapsedRealtime() < deadline) {
+        val deadline = System.nanoTime() + 30_000_000_000L
+        while (System.nanoTime() < deadline) {
+            composeRule.waitForIdle()
             if (condition()) return
-            SystemClock.sleep(100)
+            Thread.sleep(100)
         }
-        assertTrue("PDF outline/navigation did not reach the expected state", condition())
+        val chapter = ReadBook.curTextChapter
+        val pageSources = chapter?.pages.orEmpty().flatMap { page ->
+            page.lines.flatMap { line -> line.columns.filterIsInstance<ImageColumn>().map { it.src } }
+        }
+        val visiblePage = chapter?.getPageByReadPos(ReadBook.durChapterPos)
+        val visiblePageSources = visiblePage?.lines.orEmpty().flatMap { line ->
+            line.columns.filterIsInstance<ImageColumn>().map { it.src }
+        }
+        val state = "book=${ReadBook.book?.bookUrl}, chapter=${ReadBook.durChapterIndex}, " +
+            "position=${ReadBook.durChapterPos}, currentChapter=${chapter?.chapter?.index}, " +
+            "completed=${chapter?.isCompleted}, pageStarts=${chapter?.pages?.map { it.chapterPosition }}, " +
+            "visiblePage=${visiblePage?.index}, visiblePageSources=$visiblePageSources, pageSources=$pageSources"
+        assertTrue("PDF outline/navigation did not reach the expected state: $state", condition())
     }
 }

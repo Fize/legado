@@ -69,6 +69,8 @@ class HandleFileActivity :
     ),
     FilePickerDialog.CallBack {
 
+    override val guardsRestoreRecovery = true
+
     override val viewModel by viewModels<HandleFileViewModel>()
     private var mode = 0
     private var showInputDirectory by mutableStateOf(false)
@@ -76,6 +78,7 @@ class HandleFileActivity :
 
     private val selectDocTree =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
             uri?.let {
                 takePersistableUriPermission(
                     it,
@@ -87,6 +90,7 @@ class HandleFileActivity :
         }
 
     private val selectDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it?.let {
             takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             onResult(Intent().setData(it))
@@ -94,6 +98,7 @@ class HandleFileActivity :
     }
 
     private val selectImage = registerForActivityResult(SelectImageContract()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it.uri?.let { uri ->
             onResult(Intent().setData(uri))
         } ?: finish()
@@ -302,6 +307,7 @@ class HandleFileActivity :
 
                     111 -> getFileData()?.let {
                         viewModel.upload(it.first, it.second, it.third) { url ->
+                            if (redirectIfRestoreRecoveryRequired()) return@upload
                             val uri = url.toUri()
                             setResult(RESULT_OK, Intent().setData(uri))
                             finish()
@@ -452,6 +458,7 @@ class HandleFileActivity :
     }
 
     override fun onResult(data: Intent) {
+        if (redirectIfRestoreRecoveryRequired()) return
         val uri = data.data
         uri ?: let {
             finish()
@@ -460,6 +467,7 @@ class HandleFileActivity :
         if (mode == HandleFileContract.EXPORT) {
             getFileData()?.let { fileData ->
                 viewModel.saveToLocal(uri, fileData.first, fileData.second) { savedUri ->
+                    if (redirectIfRestoreRecoveryRequired()) return@saveToLocal
                     setResult(RESULT_OK, Intent().setData(savedUri))
                     finish()
                 }

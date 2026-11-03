@@ -12,7 +12,6 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.HtmlFormatter
-import io.legado.app.utils.encodeURI
 import io.legado.app.utils.isXml
 import io.legado.app.utils.printOnDebug
 import me.ag2s.epublib.domain.EpubBook
@@ -28,8 +27,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.net.URI
-import java.net.URLDecoder
 import java.nio.charset.Charset
 
 class EpubFile(var book: Book) : AutoCloseable {
@@ -57,6 +54,23 @@ class EpubFile(var book: Book) : AutoCloseable {
         @Synchronized
         override fun getContent(book: Book, chapter: BookChapter): String? {
             return getEFile(book).getContent(chapter)
+        }
+
+        @Synchronized
+        fun getReaderChapter(book: Book, chapter: BookChapter): EpubReadingChapter? =
+            getEFile(book).getReaderChapter(chapter)
+
+        @Synchronized
+        fun getReaderResource(book: Book, address: EpubResourceAddress): EpubReadingResource? =
+            getEFile(book).getReaderResource(address)
+
+        @Synchronized
+        fun getReaderResourceByKey(book: Book, key: String): EpubReadingResource? {
+            if (!key.matches(Regex("[0-9a-f]{64}"))) return null
+            val file = getEFile(book)
+            val address = file.epubBook?.resources?.all?.mapNotNull { EpubResourceAddress.fromPath(it.href) }
+                ?.singleOrNull { it.key == key } ?: return null
+            return file.getReaderResource(address)
         }
 
         @Synchronized
@@ -160,7 +174,8 @@ class EpubFile(var book: Book) : AutoCloseable {
         return getContent(chapter) ?: content
     }
 
-    private fun getContent(chapter: BookChapter, legacyBoundary: Boolean = false): String? {
+    private fun chapterElements(chapter: BookChapter, legacyBoundary: Boolean = false,
+        reader: Boolean = false): List<Pair<String, Element>>? {
         /*获取当前章节文本*/
         val contents = epubBookContents ?: return null
         val boundary = if (legacyBoundary) chapter else readingBoundary(chapter)
@@ -169,7 +184,7 @@ class EpubFile(var book: Book) : AutoCloseable {
         val isLastChapter = nextChapterFirstResourceHref.isBlank()
         val startFragmentId = boundary.startFragmentId
         val endFragmentId = boundary.endFragmentId
-        val elements = Elements()
+        val elements = mutableListOf<Pair<String, Element>>()
         var findChapterFirstSource = false
         val includeNextChapterResource = !endFragmentId.isNullOrBlank()
         /*一些书籍依靠href索引的resource会包含多个章节，需要依靠fragmentId来截取到当前章节的内容*/
@@ -179,9 +194,9 @@ class EpubFile(var book: Book) : AutoCloseable {
                 if (currentChapterFirstResourceHref != res.href) continue
                 findChapterFirstSource = true
                 // 第一个xhtml文件
-                elements.add(
+                elements.add(res.href to
                     getBody(res, startFragmentId,
-                        endFragmentId.takeIf { legacyBoundary || currentChapterFirstResourceHref == nextChapterFirstResourceHref })
+                        endFragmentId.takeIf { legacyBoundary || currentChapterFirstResourceHref == nextChapterFirstResourceHref }, reader)
                 )
                 // 不是最后章节 且 已经遍历到下一章节的内容时停止
                 if (!isLastChapter && res.href == nextChapterFirstResourceHref) break
@@ -189,16 +204,21 @@ class EpubFile(var book: Book) : AutoCloseable {
             }
             if (nextChapterFirstResourceHref != res.href) {
                 // 其余部分
-                elements.add(getBody(res, null, null))
+                elements.add(res.href to getBody(res, null, null, reader))
             } else {
                 // 下一章节的第一个xhtml
                 if (includeNextChapterResource) {
                     //有Fragment 则添加到上一章节
-                    elements.add(getBody(res, null, endFragmentId))
+                    elements.add(res.href to getBody(res, null, endFragmentId, reader))
                 }
                 break
             }
         }
+        return elements
+    }
+
+    private fun getContent(chapter: BookChapter, legacyBoundary: Boolean = false): String? {
+        val elements = Elements(chapterElements(chapter, legacyBoundary)?.map { it.second } ?: return null)
         //title标签中的内容不需要显示在正文中，去除
         elements.select("title").remove()
         elements.select("[style*=display:none]").remove()
@@ -221,20 +241,73 @@ class EpubFile(var book: Book) : AutoCloseable {
         return HtmlFormatter.formatKeepImg(html)
     }
 
-    private fun getBody(res: Resource, startFragmentId: String?, endFragmentId: String?): Element {
+    private fun getReaderChapter(chapter: BookChapter): EpubReadingChapter? {
+        val parts = chapterElements(chapter, reader = true) ?: return null
+        if (parts.isEmpty()) return null
+        return EpubReadingChapter(parts.mapIndexed { index, (href, body) ->
+            val address = checkNotNull(EpubResourceAddress.fromPath(href)) { "Invalid EPUB resource path" }
+            readerResource(address, body).copy(startsAtRoot = index > 0 || readingBoundary(chapter).startFragmentId.isNullOrBlank())
+        }, getContent(chapter)?.let(::epubCacheText))
+    }
+
+    private fun getReaderResource(address: EpubResourceAddress): EpubReadingResource? {
+        // Use manifest resources, including non-spine notes. Never interpret the path as a file/URL.
+        val resource = epubBook?.resources?.all?.singleOrNull {
+            EpubResourceAddress.fromPath(it.href)?.path == address.path &&
+                it.mediaType.name in setOf("application/xhtml+xml", "text/html")
+        } ?: return null
+        val body = Jsoup.parse(resource.reader.use { it.readText() }).body()
+        return readerResource(address.copyWithoutFragment(), body)
+    }
+
+    private fun readerResource(address: EpubResourceAddress, body: Element): EpubReadingResource {
+        body.select("script, style, title, base").remove()
+        body.getAllElements().forEach { element ->
+            element.attributes().asList().filter { it.key.startsWith("on", true) }.forEach { element.removeAttr(it.key) }
+        }
+        body.select("a[href], area[href]").forEach { element ->
+            val href = element.attr("href").trim()
+            val target = EpubResourceAddress.resolve(address.path, href)
+            when {
+                target != null -> element.attr("href", target.href)
+                href.startsWith("https://", true) || href.startsWith("http://", true) -> element.attr("href", href)
+                else -> element.removeAttr("href")
+            }
+        }
+        body.select("image").forEach { element ->
+            element.tagName("img", Parser.NamespaceHtml); element.attr("src", element.attr("xlink:href"))
+        }
+        body.select("img[src]").forEach { element ->
+            val source = element.attr("src").trim()
+            val target = EpubResourceAddress.resolve(address.path, source)
+            when {
+                target != null -> element.attr("src", target.path)
+                source.startsWith("https://", true) || source.startsWith("http://", true) -> element.attr("src", source)
+                else -> element.removeAttr("src")
+            }
+        }
+        return EpubReadingResource(address, body.outerHtml())
+    }
+
+    private fun EpubResourceAddress.copyWithoutFragment() = checkNotNull(EpubResourceAddress.fromPath(path))
+
+    private fun getBody(res: Resource, startFragmentId: String?, endFragmentId: String?, reader: Boolean = false): Element {
+        if (reader && res.mediaType.name.startsWith("image/")) {
+            val body = Jsoup.parseBodyFragment("<img>").body()
+            body.selectFirst("img")!!.attr("src", checkNotNull(EpubResourceAddress.fromPath(res.href)).href)
+            return body
+        }
         /**
          * <image width="1038" height="670" xlink:href="..."/>
          * ...titlepage.xhtml
          * 大多数epub文件的封面页都会带有cover，可以一定程度上解决封面读取问题
          */
-        if (res.href.contains("titlepage.xhtml") ||
-            res.href.contains("cover")
-        ) {
+        if (!reader && (res.href.contains("titlepage.xhtml") || res.href.contains("cover"))) {
             return Jsoup.parseBodyFragment("<img src=\"cover.jpeg\" />")
         }
 
         // Jsoup可能会修复不规范的xhtml文件 解析处理后再获取
-        var bodyElement = Jsoup.parse(String(res.data, mCharset)).body()
+        var bodyElement = Jsoup.parse(if (reader) res.reader.use { it.readText() } else String(res.data, mCharset)).body()
         bodyElement.children().run {
             select("script").remove()
             select("style").remove()
@@ -278,23 +351,26 @@ class EpubFile(var book: Book) : AutoCloseable {
                 //getElementsMatchingOwnText(chapter.title)?.remove()
             }
         }
+        if (reader) return bodyElement
         bodyElement.select("image").forEach {
             it.tagName("img", Parser.NamespaceHtml)
             it.attr("src", it.attr("xlink:href"))
         }
         bodyElement.select("img").forEach {
-            val src = it.attr("src").trim().encodeURI()
-            val href = res.href.encodeURI()
-            val resolvedHref = URLDecoder.decode(URI(href).resolve(src).toString(), "UTF-8")
-            it.attr("src", resolvedHref)
+            val src = it.attr("src").trim()
+            it.attr("src", EpubResourceAddress.resolve(res.href, src)?.path ?: src)
         }
         return bodyElement
     }
 
     private fun getImage(href: String): InputStream? {
         if (href == "cover.jpeg") return epubBook?.coverImage?.inputStream
-        val abHref = URLDecoder.decode(href, "UTF-8")
-        return epubBook?.resources?.getByHref(abHref)?.inputStream
+        val resources = epubBook?.resources ?: return null
+        if (href.startsWith("data:", true)) return resources.getByHref(href)?.inputStream
+        // New extraction supplies decoded paths. Resolve an encoded legacy URL only after exact lookup.
+        val exact = resources.all.firstOrNull { it.href == href }
+        val path = if (exact == null) EpubResourceAddress.resolve("resource", href)?.path else null
+        return (exact ?: resources.all.firstOrNull { it.href == path })?.inputStream
     }
 
     private fun upBookCover(fastCheck: Boolean = false) {

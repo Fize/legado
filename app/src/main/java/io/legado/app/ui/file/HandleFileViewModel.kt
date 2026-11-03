@@ -1,6 +1,8 @@
 package io.legado.app.ui.file
 
 import android.app.Application
+import io.legado.app.help.storage.RestoreRecoveryGate
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.MutableLiveData
@@ -21,10 +23,12 @@ class HandleFileViewModel(application: Application) : BaseViewModel(application)
         contentType: String,
         success: (url: String) -> Unit
     ) {
+        if (RestoreRecoveryGate.isQuarantined) return
         execute {
+            if (RestoreRecoveryGate.isQuarantined) throw RestoreRecoveryRequiredException()
             DirectLinkUpload.upLoad(fileName, file, contentType)
         }.onSuccess {
-            success.invoke(it)
+            if (!RestoreRecoveryGate.isQuarantined) success.invoke(it)
         }.onError {
             AppLog.put("上传文件失败\n${it.localizedMessage}", it)
             it.printOnDebug()
@@ -33,7 +37,9 @@ class HandleFileViewModel(application: Application) : BaseViewModel(application)
     }
 
     fun saveToLocal(uri: Uri, fileName: String, data: Any, success: (uri: Uri) -> Unit) {
+        if (RestoreRecoveryGate.isQuarantined) return
         execute {
+            if (RestoreRecoveryGate.isQuarantined) throw RestoreRecoveryRequiredException()
             val bytes = when (data) {
                 is File -> data.readBytes()
                 is ByteArray -> data
@@ -56,7 +62,7 @@ class HandleFileViewModel(application: Application) : BaseViewModel(application)
             it.printOnDebug()
             errorLiveData.postValue(it.localizedMessage)
         }.onSuccess {
-            success.invoke(it)
+            if (!RestoreRecoveryGate.isQuarantined) success.invoke(it)
         }
     }
 

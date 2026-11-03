@@ -17,8 +17,9 @@ class PermissionActivityContractTest {
             .substringAfter(marker)
             .substringBefore("return")
 
-        val callback = "RequestPlugins.sRequestCallback?.onRequestPermissionsResult("
+        val callback = "currentRequest()?.onRequestPermissionsResult("
         val notice = "toastOnUi(rationale)"
+        assertTrue(source.contains("ownedRequest?.takeIf { RequestPlugins.sRequestCallback === it }"))
         assertTrue(suppressedRequest.contains(notice))
         assertTrue(suppressedRequest.contains(callback))
         assertTrue(suppressedRequest.contains("IntArray(0)"))

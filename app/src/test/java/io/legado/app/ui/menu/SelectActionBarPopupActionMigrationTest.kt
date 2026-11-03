@@ -102,10 +102,10 @@ class SelectActionBarPopupActionMigrationTest {
                 "R.string.check_select_source",
                 "R.string.check_selected_interval"
             ),
-            "src/main/java/io/legado/app/ui/book/import/local/ImportBookActivity.kt" to listOf(
+            "src/main/java/io/legado/app/ui/book/localimport/LocalBookImportScreen.kt" to listOf(
                 "R.string.delete"
             ),
-            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt" to listOf(
+            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageScreen.kt" to listOf(
                 "R.string.delete",
                 "R.string.allow_update",
                 "R.string.disable_update",
@@ -119,19 +119,19 @@ class SelectActionBarPopupActionMigrationTest {
                 "R.string.check_selected_interval",
                 "R.string.update_book_info_toc"
             ),
-            "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleActivity.kt" to listOf(
+            "src/main/java/io/legado/app/ui/book/toc/rule/TextTocRuleScreen.kt" to listOf(
                 "R.string.enable_selection",
                 "R.string.disable_selection",
                 "R.string.export_selection",
                 "R.string.share_selected_source"
             ),
-            "src/main/java/io/legado/app/ui/dict/rule/DictRuleActivity.kt" to listOf(
+            "src/main/java/io/legado/app/ui/dict/rule/DictionaryRuleScreen.kt" to listOf(
                 "R.string.enable_selection",
                 "R.string.disable_selection",
                 "R.string.export_selection",
                 "R.string.share_selected_source"
             ),
-            "src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt" to listOf(
+            "src/main/java/io/legado/app/ui/replace/ReplaceRuleScreen.kt" to listOf(
                 "R.string.enable_selection",
                 "R.string.disable_selection",
                 "R.string.add_group",

@@ -9,6 +9,12 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.model.AudioCacheKey
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.help.storage.RestoreRecoveryGate
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
+import io.legado.app.help.storage.RestoreWriteGeneration
+import io.legado.app.help.storage.RestoreWorkInvalidatedException
+import io.legado.app.help.storage.restoreWriteGeneration
+import io.legado.app.help.storage.backupRestoreMutex
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.checkWrite
@@ -21,6 +27,7 @@ import io.legado.app.utils.openInputStream
 import io.legado.app.utils.openOutputStream
 import io.legado.app.utils.runCatchingCancellable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
@@ -45,6 +52,7 @@ object AudioCacheManager {
 
     @WorkerThread
     fun isCacheDirAvailable(treeUri: String?): Boolean {
+        if (RestoreRecoveryGate.isQuarantined) return false
         return getCacheRoot(treeUri, requireWritable = true) != null
     }
 
@@ -94,13 +102,20 @@ object AudioCacheManager {
         bookUrl: String,
         key: AudioCacheKey,
     ): Boolean {
+        val generation = restoreWriteGeneration.capture()
         return withContext(Dispatchers.IO) {
-            chapterLock(bookUrl, key).withLock {
-                val folder = getBookFolder(treeUri, bookUrl) ?: return@withLock false
-                if (!hasCacheFiles(folder, key)) return@withLock false
-                removeCacheFiles(folder, key)
-                !hasCacheFiles(folder, key)
-            }
+            if (RestoreRecoveryGate.isQuarantined) return@withContext false
+            try {
+                chapterLock(bookUrl, key).withLock {
+                    cacheMutation(generation) {
+                        val folder = getBookFolder(treeUri, bookUrl) ?: return@cacheMutation false
+                        if (!hasCacheFiles(folder, key)) return@cacheMutation false
+                        removeCacheFiles(folder, key)
+                        !hasCacheFiles(folder, key)
+                    }
+                }
+            } catch (_: RestoreRecoveryRequiredException) { false }
+            catch (_: RestoreWorkInvalidatedException) { false }
         }
     }
 
@@ -109,20 +124,28 @@ object AudioCacheManager {
         bookSource: BookSource,
         book: Book,
         chapter: BookChapter,
+    ): Result<String> = cacheChapter(treeUri, bookSource, book, chapter, restoreWriteGeneration.capture())
+
+    internal suspend fun cacheChapter(
+        treeUri: String?,
+        bookSource: BookSource,
+        book: Book,
+        chapter: BookChapter,
+        generation: RestoreWriteGeneration.Token,
     ): Result<String> {
         return runCatchingCancellable {
-            withContext(Dispatchers.IO) {
-                if (chapter.isVolume) throw IllegalStateException("分卷章节不支持缓存")
-                val key = AudioCacheKey.from(chapter)
-                chapterLock(book.bookUrl, key).withLock {
-                    cacheChapterLocked(
-                        treeUri = treeUri,
-                        bookSource = bookSource,
-                        book = book,
-                        chapter = chapter,
-                        key = key,
-                    )
+            try {
+                withContext(Dispatchers.IO) {
+                    if (RestoreRecoveryGate.isQuarantined) throw RestoreRecoveryRequiredException()
+                    if (chapter.isVolume) throw IllegalStateException("分卷章节不支持缓存")
+                    val key = AudioCacheKey.from(chapter)
+                    chapterLock(book.bookUrl, key).withLock {
+                        cacheMutation(generation) { Unit }
+                        cacheChapterLocked(treeUri, bookSource, book, chapter, key, generation)
+                    }
                 }
+            } catch (required: RestoreRecoveryRequiredException) {
+                throw CancellationException("Audio caching stopped for data recovery").apply { initCause(required) }
             }
         }.onFailure {
             AppLog.put("缓存音频失败 ${book.name}-${chapter.title}\n${it.localizedMessage}", it)
@@ -135,6 +158,7 @@ object AudioCacheManager {
         book: Book,
         chapter: BookChapter,
         key: AudioCacheKey,
+        generation: RestoreWriteGeneration.Token,
     ): String {
         val playUrl = WebBook.getContentAwait(
             bookSource,
@@ -143,8 +167,9 @@ object AudioCacheManager {
             needSave = false
         )
         AudioCachePolicy.requireCacheablePlayUrl(playUrl)
-        val folder = requireBookFolder(treeUri, book.bookUrl)
-        cleanupUncommittedFiles(folder, key)
+        val folder = cacheMutation(generation) {
+            requireBookFolder(treeUri, book.bookUrl).also { cleanupUncommittedFiles(it, key) }
+        }
         val response = AnalyzeUrl(
             playUrl,
             source = bookSource,
@@ -168,25 +193,27 @@ object AudioCacheManager {
                 revision = revision,
                 extension = extension
             )
-            val staged = folder.createFileIfNotExist(
-                "tmp_${key.value}_${revision}_${UUID.randomUUID()}.part"
-            )
+            val staged = cacheMutation(generation) {
+                folder.createFileIfNotExist("tmp_${key.value}_${revision}_${UUID.randomUUID()}.part")
+            }
             val expectedSize = it.body.contentLength().takeIf { size -> size > 0L }
             var installed: FileDoc? = null
             try {
                 it.body.byteStream().use { input ->
-                    staged.openOutputStream().getOrThrow().use { output ->
-                        copyCancellable(input, output)
+                    cacheMutation(generation) { staged.openOutputStream().getOrThrow() }.use { output ->
+                        copyCancellable(input, output, writeGeneration = generation)
                     }
                 }
-                requireComplete(staged, expectedSize)
-                val installedFile = installStagedFile(folder, staged, finalName, expectedSize)
-                installed = installedFile
-                currentCoroutineContext().ensureActive()
-                createCompleteMarker(folder, installedFile, playUrl)
-                currentCoroutineContext().ensureActive()
-                runCatching { removeCacheFiles(folder, key, installedFile.name) }
-                return installedFile.uri.toString()
+                return cacheMutation(generation) {
+                    requireComplete(staged, expectedSize)
+                    val installedFile = installStagedFile(folder, staged, finalName, expectedSize)
+                    installed = installedFile
+                    currentCoroutineContext().ensureActive()
+                    createCompleteMarker(folder, installedFile, playUrl)
+                    currentCoroutineContext().ensureActive()
+                    runCatching { removeCacheFiles(folder, key, installedFile.name) }
+                    installedFile.uri.toString()
+                }
             } catch (e: Throwable) {
                 installed?.let { file ->
                     runCatching { file.delete() }
@@ -250,6 +277,7 @@ object AudioCacheManager {
         try {
             staged.openInputStream().getOrThrow().use { input ->
                 installed.openOutputStream().getOrThrow().use { output ->
+                    // The installation already owns the restore lock; do not acquire it per chunk.
                     copyCancellable(input, output)
                 }
             }
@@ -394,7 +422,14 @@ object AudioCacheManager {
         return key == null || parsed.key == key
     }
 
-    internal suspend fun copyCancellable(input: InputStream, output: OutputStream): Long {
+    private suspend inline fun <T> cacheMutation(generation: RestoreWriteGeneration.Token, action: () -> T): T = backupRestoreMutex.withLock {
+        // Readiness is checked after acquiring the lock, so an active restore is allowed to finish.
+        currentCoroutineContext().ensureActive()
+        generation.requireCurrent()
+        action()
+    }
+
+    internal suspend fun copyCancellable(input: InputStream, output: OutputStream, writeGeneration: RestoreWriteGeneration.Token? = null): Long {
         val context = currentCoroutineContext()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var total = 0L
@@ -402,11 +437,13 @@ object AudioCacheManager {
             context.ensureActive()
             val count = input.read(buffer)
             if (count < 0) break
-            output.write(buffer, 0, count)
+            // Network reads remain outside the restore lock; every staging write rechecks it.
+            if (writeGeneration != null) cacheMutation(writeGeneration) { output.write(buffer, 0, count) }
+            else output.write(buffer, 0, count)
             total += count
         }
         context.ensureActive()
-        output.flush()
+        if (writeGeneration != null) cacheMutation(writeGeneration) { output.flush() } else output.flush()
         context.ensureActive()
         return total
     }

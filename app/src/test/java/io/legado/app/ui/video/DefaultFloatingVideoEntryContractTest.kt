@@ -42,7 +42,9 @@ class DefaultFloatingVideoEntryContractTest {
 
         val notificationUpdate = service.substringAfter("private fun upVideoPlayNotification()")
             .substringBefore("override fun startForegroundNotification()")
-        assertTrue(notificationUpdate.contains("if (!mediaNotificationReady) return"))
+        assertTrue(notificationUpdate.lineSequence().any { line ->
+            line.trim().startsWith("if (") && line.contains("!mediaNotificationReady") && line.trim().endsWith("return")
+        })
         assertTrue(notificationUpdate.contains("upNotificationJob?.cancel()"))
         assertTrue(notificationUpdate.contains("withContext(Main)"))
         val onPrepared = service.substringAfter("override fun onPrepared")
@@ -102,7 +104,7 @@ class DefaultFloatingVideoEntryContractTest {
         )
 
         val destroy = activity.substringAfter("override fun onDestroy()")
-        val cleanup = destroy.substringAfter("if (!forwardedToFloatingWindow) {")
+        val cleanup = destroy.substringAfter("if (playerInitialized && !forwardedToFloatingWindow) {")
             .substringBefore("}")
         assertTrue(cleanup.contains("VideoPlay.saveRead()"))
         assertTrue(cleanup.contains("VideoPlay.stopLoading()"))

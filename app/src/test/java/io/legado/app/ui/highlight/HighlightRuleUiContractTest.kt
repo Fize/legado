@@ -17,9 +17,14 @@ class HighlightRuleUiContractTest {
             "src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
         ).readText()
 
-        assertTrue(manifest.contains(".ui.highlight.HighlightRuleActivity"))
+        val app = projectFile("src/main/java/io/legado/app/ui/navigation/LegadoApp.kt").readText()
+
+        assertFalse(manifest.contains(".ui.highlight.HighlightRuleActivity"))
         assertTrue(activity.contains("menu.add(Menu.NONE, R.id.menu_highlight_rule, Menu.NONE, R.string.highlight_rule)"))
-        assertTrue(activity.contains("R.id.menu_highlight_rule -> startActivity<HighlightRuleActivity>()"))
+        assertTrue(activity.contains("AppActivity.startIntent(this, HighlightRuleRoute)"))
+        assertTrue(app.contains("if (route == HighlightRuleRoute)"))
+        assertTrue(app.contains("HighlightRuleScreen("))
+        assertTrue(app.contains("ImportRoute(source, ImportKind.HighlightRule, requestId, parent)"))
     }
 
     @Test
@@ -35,30 +40,30 @@ class HighlightRuleUiContractTest {
     }
 
     @Test
-    fun `rule editor reuses the current style host`() {
-        val editor = projectFile(
-            "src/main/java/io/legado/app/ui/highlight/edit/HighlightRuleEditDialog.kt"
-        ).readText()
-
-        assertTrue(editor.contains("HighlightStyleDialog.StyleHost"))
-        assertTrue(editor.contains("setColorPickerDialogListener(this)"))
-        assertTrue(editor.contains("applyToBodyState"))
-        assertTrue(editor.contains("applyToTitleState"))
+    fun `rule editor uses durable Compose destination and shared native preview`() {
+        val editor = projectFile("src/main/java/io/legado/app/ui/highlight/edit/HighlightRuleEditorDestination.kt").readText()
+        val app = projectFile("src/main/java/io/legado/app/ui/navigation/LegadoApp.kt").readText()
+        assertTrue(editor.contains("TextReaderHighlightStyleEditor"))
+        assertTrue(editor.contains("HighlightRuleEditorViewModel"))
+        assertTrue(editor.contains("highlightRuleEditBody"))
+        assertTrue(editor.contains("highlightRuleEditTitle"))
+        assertFalse(editor.contains("AndroidView"))
+        assertTrue(app.contains("route is HighlightRuleEditRoute"))
     }
 
     @Test
     fun `rule list has empty state and row actions`() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/highlight/HighlightRuleActivity.kt"
+        val screen = projectFile(
+            "src/main/java/io/legado/app/ui/highlight/HighlightRuleScreen.kt"
         ).readText()
 
-        assertTrue(activity.contains("R.string.highlight_rule_empty"))
-        assertTrue(activity.contains("LegadoSelectActionBar"))
-        assertTrue(activity.contains("displayNameWithGroup()"))
-        assertTrue(activity.contains("rule.isEnabled"))
-        assertTrue(activity.contains("edit(rule)"))
-        assertTrue(activity.contains("R.string.import_local"))
-        assertTrue(activity.contains("R.string.export_all"))
+        assertTrue(screen.contains("R.string.highlight_rule_empty"))
+        assertTrue(screen.contains("LegadoSelectActionBar"))
+        assertTrue(screen.contains("rule.displayName"))
+        assertTrue(screen.contains("rule.enabled"))
+        assertTrue(screen.contains("onEdit(rule.ref.id)"))
+        assertTrue(screen.contains("R.string.import_local"))
+        assertTrue(screen.contains("R.string.export_all"))
     }
 
     private fun parseXml(pathInApp: String): Element =

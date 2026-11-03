@@ -234,7 +234,7 @@ public class NCXDocumentV3 {
         String result = DOMUtil
                 .getAttribute(contentElement, "", XHTMLAttributes.href);
         try {
-            result = URLDecoder.decode(result, Constants.CHARACTER_ENCODING);
+            result = URLDecoder.decode(result.replace("+", "%2B"), Constants.CHARACTER_ENCODING);
         } catch (UnsupportedEncodingException e) {
             Log.e(TAG, e.getMessage());
         }

@@ -20,6 +20,8 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -78,7 +80,8 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.Download
-import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.OnlineImportRoute
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ACache
@@ -105,6 +108,8 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
 
+    override val guardsRestoreRecovery = true
+
     override val viewModel by viewModels<WebViewModel>()
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var customWebViewContainer: FrameLayout? = null
@@ -120,8 +125,10 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
     private var progressState by mutableIntStateOf(100)
     private var showWebLogState by mutableStateOf(sessionShowWebLog)
     private var hasSourceOriginState by mutableStateOf(false)
+    private var webViewUnavailable by mutableStateOf(false)
 
     private val saveImage = registerForActivityResult(HandleFileContract()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
             viewModel.saveImage(webPic, uri.toString())
@@ -133,9 +140,6 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        pooledWebView = WebViewPool.acquire(this)
-        currentWebView = pooledWebView.realWebView
-        (currentWebView.parent as? ViewGroup)?.removeView(currentWebView)
         if (!SourceVerificationHelp.attachVerificationUi(
                 intent.getStringExtra("verificationResultKey"),
                 ::finishVerificationUi,
@@ -144,12 +148,26 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
             finish()
             return
         }
+        titleState = intent.getStringExtra("title") ?: getString(R.string.loading)
+        subtitleState = intent.getStringExtra("sourceName")
+        if (WebView.getCurrentWebViewPackage() == null) {
+            webViewUnavailable = true
+            return
+        }
+        try {
+            pooledWebView = WebViewPool.acquire(this)
+        } catch (error: RuntimeException) {
+            if (WebView.getCurrentWebViewPackage() != null) throw error
+            webViewUnavailable = true
+            return
+        }
+        currentWebView = pooledWebView.realWebView
+        (currentWebView.parent as? ViewGroup)?.removeView(currentWebView)
         currentWebView.post {
             currentWebView.clearHistory()
         }
-        titleState = intent.getStringExtra("title") ?: getString(R.string.loading)
-        subtitleState = intent.getStringExtra("sourceName")
         viewModel.initData(intent) {
+            if (isRestoreRecoveryBlocked || isDestroyed) return@initData
             hasSourceOriginState = viewModel.sourceOrigin.isNotEmpty()
             val url = viewModel.baseUrl
             val headerMap = viewModel.headerMap
@@ -219,6 +237,17 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
 
     @Composable
     override fun Content() {
+        if (webViewUnavailable) {
+            Scaffold(topBar = {
+                LegadoTopAppBar(title = titleState, subtitle = subtitleState, onNavigationClick = { finish() })
+            }) { innerPadding ->
+                Text(
+                    text = stringResource(R.string.web_view_unavailable),
+                    modifier = Modifier.padding(innerPadding).verticalScroll(rememberScrollState()).padding(24.dp),
+                )
+            }
+            return
+        }
         var showMenu by remember { mutableStateOf(false) }
 
         Scaffold(
@@ -473,6 +502,7 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
     }
 
     override fun finish() {
+        if (isRestoreRecoveryBlocked) return super.finish()
         SourceVerificationHelp.checkResult(intent.getStringExtra("verificationResultKey"))
         super.finish()
     }
@@ -490,6 +520,7 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
     }
 
     private fun close() {
+        if (redirectIfRestoreRecoveryRequired()) return
         if (!isCloudflareChallenge) {
             if (viewModel.sourceVerificationEnable) {
                 viewModel.saveVerificationResult(currentWebView) {
@@ -503,6 +534,7 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
 
     override fun onPause() {
         super.onPause()
+        if (!wasActivityContentCreated) return
         if (powerManager.isInteractive) {
             wasScreenOff = false
             if (::currentWebView.isInitialized) {
@@ -515,6 +547,7 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
 
     override fun onResume() {
         super.onResume()
+        if (redirectIfRestoreRecoveryRequired()) return
         if (!wasScreenOff && ::currentWebView.isInitialized) {
             currentWebView.onResume()
         }
@@ -628,6 +661,7 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
         }
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            if (isRestoreRecoveryBlocked) { view?.stopLoading(); return }
             if (needClearHistory) {
                 needClearHistory = false
                 currentWebView.clearHistory() //清除历史
@@ -637,6 +671,7 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
+            if (isRestoreRecoveryBlocked) { view?.stopLoading(); return }
             super.onPageFinished(view, url)
             val cookieManager = CookieManager.getInstance()
             url?.let {
@@ -649,6 +684,7 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
                     titleState = intent.getStringExtra("title") ?: ""
                 }
                 view.evaluateJavascript("!!window._cf_chl_opt") {
+                    if (isRestoreRecoveryBlocked) return@evaluateJavascript
                     if (it == "true") {
                         isCloudflareChallenge = true
                     } else if (isCloudflareChallenge && viewModel.sourceVerificationEnable) {
@@ -661,12 +697,11 @@ class WebViewActivity : VMBaseComposeActivity<WebViewModel>() {
         }
 
         private fun shouldOverrideUrlLoading(url: Uri): Boolean {
+            if (isRestoreRecoveryBlocked) return true
             return when (url.scheme) {
                 "http", "https" -> false
                 "legado", "yuedu" -> {
-                    startActivity<OnLineImportActivity> {
-                        data = url
-                    }
+                    startActivity(AppActivity.startIntent(this@WebViewActivity, OnlineImportRoute(url.toString())))
                     true
                 }
 

@@ -35,30 +35,26 @@ class ExploreGroupMenuStateTest {
     }
 
     @Test
-    fun `fragment wires all checked and missing group fallback states`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
-        )
+    fun `compose root and viewmodel wire group selection and missing group fallback`() {
+        val source = readProjectFile("src/main/java/io/legado/app/ui/main/explore/ExploreRootScreen.kt")
+        val viewModel = readProjectFile("src/main/java/io/legado/app/ui/main/explore/ExploreViewModel.kt")
 
         listOf(
             "R.string.all_source",
-            "isExploreAllQuery(searchQueryState)",
-            "selectedExploreGroup(searchQueryState, groupsState)",
-            "if (requestedGroup != null && requestedGroup !in groups)",
-            "searchQueryState = \"\"",
-            "upExploreData(\"\")"
+            "isExploreAllQuery(uiState.searchQuery)",
+            "selectedExploreGroup(uiState.searchQuery, uiState.groups)",
         ).forEach { expected ->
-            assertTrue("ExploreFragment should contain $expected", source.contains(expected))
+            assertTrue("ExploreRootScreen should contain $expected", source.contains(expected))
         }
+        assertTrue(viewModel.contains("requestedGroup !in currentGroups"))
+        assertTrue(viewModel.contains("searchQuery.value = \"\""))
     }
 
     @Test
     fun `discover toolbar opens book source management`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt"
-        )
+        val source = readProjectFile("src/main/java/io/legado/app/ui/main/explore/ExploreRootScreen.kt")
 
-        assertTrue(source.contains("startActivity<BookSourceActivity>()"))
+        assertTrue(source.contains("onManageSources"))
         assertTrue(source.contains("R.drawable.ic_settings"))
         assertTrue(source.contains("R.string.book_source_manage"))
     }

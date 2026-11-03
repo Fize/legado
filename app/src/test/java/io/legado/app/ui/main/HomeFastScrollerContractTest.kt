@@ -9,7 +9,7 @@ class HomeFastScrollerContractTest {
     @Test
     fun `folder bookshelf and discovery use independent fast scrollers`() {
         val bookshelf = projectFile(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
+            "src/main/java/io/legado/app/ui/main/bookshelf/BookshelfRootViewModel.kt",
         ).readText()
         assertTrue(bookshelf.contains("EventBus.BOOKSHELF_REFRESH"))
 
@@ -23,7 +23,7 @@ class HomeFastScrollerContractTest {
         )
 
         val otherConfig = projectFile(
-            "src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt",
+            "src/main/java/io/legado/app/ui/config/OtherSettingsScreen.kt",
         ).readText()
         val discoverySwitch = otherConfig
             .substringAfterLast("key = PreferKey.showDiscoveryFastScroller")

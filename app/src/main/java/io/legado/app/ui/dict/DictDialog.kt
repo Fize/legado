@@ -50,14 +50,12 @@ import io.legado.app.help.TextViewTagHandler
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.text.ScrollTextView
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.setHtml
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.setMarkdown
-import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
@@ -66,6 +64,7 @@ import io.noties.markwon.image.glide.GlideImagesPlugin
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.legado.app.ui.photo.openPhoto
 
 /**
  * 词典 (Compose)
@@ -275,7 +274,7 @@ class DictDialog() : BaseDialogFragment() {
                     markwon,
                     markdown,
                     imgOnLongClickListener = { source ->
-                        showDialogFragment(PhotoDialog(source))
+                        requireActivity().openPhoto(source)
                     }
                 )
             }
@@ -298,7 +297,7 @@ class DictDialog() : BaseDialogFragment() {
             getter,
             textViewTagHandler,
             imgOnLongClickListener = { source ->
-                showDialogFragment(PhotoDialog(source))
+                requireActivity().openPhoto(source)
             },
             imgOnClickListener = { click ->
                 viewModel.onButtonClick(dictRule, "image", click)

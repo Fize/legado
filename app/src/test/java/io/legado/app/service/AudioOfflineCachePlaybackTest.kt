@@ -48,31 +48,8 @@ class AudioOfflineCachePlaybackTest {
         assertTrue(source.contains("private const val COMPLETE_SUFFIX = \".complete\""))
         assertTrue(source.contains("createCompleteMarker(folder, installedFile, playUrl)"))
         assertTrue(source.contains("committedCacheFiles(folder"))
-        assertTrue(source.contains("cleanupUncommittedFiles(folder, key)"))
         assertTrue(source.contains("tmp_${'$'}{key.value}_"))
         assertTrue(source.contains("AudioCacheMetadata.encode(playUrl)"))
-    }
-
-    @Test
-    fun `cache events from an old folder do not update the current toc`() {
-        val activitySource = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt"
-        ).readText()
-        val selectionBody = activitySource.substringAfter("if (available) {")
-            .substringBefore("pendingAudioCacheAction = null")
-        assertTrue(
-            selectionBody.indexOf("AudioCacheService.stop") <
-                    selectionBody.indexOf("AppConfig.audioCacheTreeUri = treeUri")
-        )
-
-        val tocSource = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt"
-        ).readText()
-        assertTrue(
-            tocSource.contains("if (event.treeUri != AppConfig.audioCacheTreeUri)")
-        )
-        assertTrue(tocSource.contains("if (treeUri == currentTreeUri) break"))
-        assertTrue(tocSource.contains("pendingAudioCacheChanges.clear()"))
     }
 
     @Test

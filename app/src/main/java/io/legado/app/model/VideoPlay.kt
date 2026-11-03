@@ -2,6 +2,7 @@ package io.legado.app.model
 
 import android.annotation.SuppressLint
 import android.content.Context
+import io.legado.app.help.storage.RestoreRecoveryGate
 import android.content.Context.MODE_PRIVATE
 import android.content.SharedPreferences
 import android.net.Uri
@@ -22,6 +23,8 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.ContentEmptyException
+import io.legado.app.help.globalExecutor
+import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.help.CacheManager
 import io.legado.app.help.book.getDanmaku
 import io.legado.app.help.book.update
@@ -47,6 +50,7 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 object VideoPlay : CoroutineScope by MainScope(){
     private const val VIDEO_POS_NAME = "video_pos_" //单链接播放进度
@@ -56,36 +60,42 @@ object VideoPlay : CoroutineScope by MainScope(){
     private val videoTempFile by lazy { File(FileUtils.getCachePath(), VIDEO_TEMP_PATH) }
 
     const val VIDEO_PREF_NAME = "video_config"
+    const val PROGRESS_CHECKPOINT_INTERVAL_MS = 5_000L
 
     private val videoPrefs: SharedPreferences by lazy { appCtx.getSharedPreferences(VIDEO_PREF_NAME, MODE_PRIVATE) }
     /**  是否自动播放  **/
     var autoPlay
         get() = videoPrefs.getBoolean("autoPlay", true)
         set(value) {
+            if (RestoreRecoveryGate.isQuarantined) return
             videoPrefs.edit { putBoolean("autoPlay", value) }
         }
     /**  直接全屏，需先启用自动播放  **/
     var startFull
         get() = videoPrefs.getBoolean("startFull", false)
         set(value) {
+            if (RestoreRecoveryGate.isQuarantined) return
             videoPrefs.edit { putBoolean("startFull", value) }
         }
     /**  默认使用悬浮窗播放  **/
     var defaultFloatWindow
         get() = videoPrefs.getBoolean("defaultFloatWindow", false)
         set(value) {
+            if (RestoreRecoveryGate.isQuarantined) return
             videoPrefs.edit { putBoolean("defaultFloatWindow", value) }
         }
     /**  长按倍速  **/
     var longPressSpeed
         get() = videoPrefs.getInt("longPressSpeed", 30)
         set(value) {
+            if (RestoreRecoveryGate.isQuarantined) return
             videoPrefs.edit { putInt("longPressSpeed", value) }
         }
     /**  全屏底部进度条  **/
     var fullBottomProgressBar
         get() = videoPrefs.getBoolean("fullBottomProgressBar", true)
         set(value) {
+            if (RestoreRecoveryGate.isQuarantined) return
             videoPrefs.edit { putBoolean("fullBottomProgressBar", value) }
         }
     /**  弹幕滚动速度  **/
@@ -97,6 +107,10 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     val videoManager by lazy { ExoVideoManager() }
     private var isLoading = false
+    private val playbackGeneration = AtomicLong()
+
+    private fun isPlaybackCurrent(generation: Long) =
+        !RestoreRecoveryGate.isQuarantined && generation == playbackGeneration.get()
     private val loadScope = CoroutineScope(SupervisorJob() + IO)
     var videoUrl: String? = null //播放链接
     var singleUrl = false
@@ -125,17 +139,17 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 开始播放
      */
     fun startPlay(player: StandardGSYVideoPlayer) {
-        if (source == null) return
+        if (RestoreRecoveryGate.isQuarantined || source == null) return
+        val generation = playbackGeneration.incrementAndGet()
+        loadScope.coroutineContext.cancelChildren()
         danmakuStr = null
         danmakuFile = null
-        val player = player.getCurrentPlayer()
+        val initialPlayer = player.getCurrentPlayer()
         if (singleUrl) {
             val mUrl = videoUrl ?: return
             Coroutine.async(loadScope, IO) {
-                CacheManager.getLong(VIDEO_POS_NAME + mUrl)?.let {
-                    player.seekOnStart = it
-                }
-                inBookshelf = true
+                if (!isPlaybackCurrent(generation)) return@async
+                val savedPosition = CacheManager.getLong(VIDEO_POS_NAME + mUrl)
                 val analyzeUrl = AnalyzeUrl(
                     mUrl,
                     source = source,
@@ -143,19 +157,24 @@ object VideoPlay : CoroutineScope by MainScope(){
                     chapter = null
                 )
                 withContext(Main) {
-                    player.mapHeadData = analyzeUrl.headerMap
+                    if (!isPlaybackCurrent(generation)) return@withContext
+                    val currentPlayer = player.getCurrentPlayer()
+                    savedPosition?.let { currentPlayer.seekOnStart = it }
+                    inBookshelf = true
+                    currentPlayer.mapHeadData = analyzeUrl.headerMap
                     val url = analyzeUrl.url
-                    player.setUp(url, false, File(appCtx.externalCache, "exoplayer"), videoTitle)
+                    currentPlayer.setUp(url, false, File(appCtx.externalCache, "exoplayer"), videoTitle)
                     if (autoPlay) {
-                        player.startPlayLogic()
+                        currentPlayer.startPlayLogic()
                     }
                 }
             }.onError {
+                if (!isPlaybackCurrent(generation)) return@onError
                 AppLog.put("加载视频链接失败", it, true)
             }
             return
         }
-        durChapterPos.takeIf { it > 0 }?.toLong()?.let { player.seekOnStart = it }
+        durChapterPos.takeIf { it > 0 }?.toLong()?.let { initialPlayer.seekOnStart = it }
         val book = book
         if (book == null) {
             appCtx.toastOnUi("未找到书籍")
@@ -184,6 +203,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         videoTitle = chapter.title
         WebBook.getContent(loadScope, source as BookSource, book, chapter)
             .onSuccess(IO) { content ->
+                if (!isPlaybackCurrent(generation)) return@onSuccess
                 val content = content.trim()
                 val mUrl = if (content.isEmpty()) {
                     throw ContentEmptyException("正文为空")
@@ -195,26 +215,31 @@ object VideoPlay : CoroutineScope by MainScope(){
                 } else {
                     content
                 }
-                videoUrl = mUrl
+                if (!isPlaybackCurrent(generation)) return@onSuccess
                 val analyzeUrl = AnalyzeUrl(
                     mUrl,
                     source = source,
                     ruleData = book,
                     chapter = chapter
                 )
-                when (val danmaku = chapter.getDanmaku()) {
-                    is String -> danmakuStr = danmaku
-                    is File -> danmakuFile = danmaku
-                }
+                val danmaku = chapter.getDanmaku()
                 val playUrl = analyzeUrl.url
                 withContext(Main) {
-                    player.mapHeadData = analyzeUrl.headerMap
-                    player.setUp(playUrl, false, File(appCtx.externalCache, "exoplayer"), chapter.title)
+                    if (!isPlaybackCurrent(generation)) return@withContext
+                    val currentPlayer = player.getCurrentPlayer()
+                    currentPlayer.mapHeadData = analyzeUrl.headerMap
+                    videoUrl = mUrl
+                    when (danmaku) {
+                        is String -> danmakuStr = danmaku
+                        is File -> danmakuFile = danmaku
+                    }
+                    currentPlayer.setUp(playUrl, false, File(appCtx.externalCache, "exoplayer"), chapter.title)
                     if (autoPlay) {
-                        player.startPlayLogic()
+                        currentPlayer.startPlayLogic()
                     }
                 }
             }.onError {
+                if (!isPlaybackCurrent(generation)) return@onError
                 AppLog.put("获取资源链接出错\n$it", it, true)
             }
         isLoading = false
@@ -287,6 +312,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 恢复播放
      */
     fun onResume() {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (videoManager.listener() != null) {
             videoManager.listener().onVideoResume()
         }
@@ -298,6 +324,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      * @param seek 是否产生seek动作,直播设置为false
      */
     fun onResume(seek: Boolean) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (videoManager.listener() != null) {
             videoManager.listener().onVideoResume(seek)
         }
@@ -308,6 +335,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     private var sSwitchVideo: StandardGSYVideoPlayer? = null
     private var sMediaPlayerListener: GSYMediaPlayerListener? = null
     fun savePlayState(switchVideo: StandardGSYVideoPlayer) {
+        if (RestoreRecoveryGate.isQuarantined) return
         when (switchVideo) {
             is VideoPlayer -> sSwitchVideo = switchVideo.saveState()
             is FloatingPlayer -> sSwitchVideo = switchVideo.saveState()
@@ -315,6 +343,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         sMediaPlayerListener = switchVideo
     }
     fun clonePlayState(switchVideo: StandardGSYVideoPlayer) {
+        if (RestoreRecoveryGate.isQuarantined) return
         when (switchVideo) {
             is VideoPlayer -> sSwitchVideo?.let { switchVideo.cloneState(it) }
             is FloatingPlayer -> sSwitchVideo?.let { switchVideo.cloneState(it) }
@@ -328,11 +357,13 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     fun stopLoading() {
+        playbackGeneration.incrementAndGet()
         loadScope.coroutineContext.cancelChildren()
         isLoading = false
     }
 
     fun initSource(sourceKey: String?, sourceType: Int?, bookUrl: String?, record:String?): Boolean {
+        if (RestoreRecoveryGate.isQuarantined) return false
         isLoading = true
         source = sourceKey?.let {
             when (sourceType) {
@@ -365,6 +396,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     fun upEpisodes() {
+        if (RestoreRecoveryGate.isQuarantined) return
         val volumes = volumes
         if (volumes.isEmpty()) {
             durVolume = null
@@ -383,6 +415,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     fun upDurIndex(offset: Int, player: StandardGSYVideoPlayer): Boolean {
+        if (RestoreRecoveryGate.isQuarantined) return false
         val episodes = episodes ?: return false
         val index = chapterInVolumeIndex + offset
         if (index < 0) {
@@ -401,8 +434,13 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     fun saveRead(durPos: Int? = null) {
+        if (RestoreRecoveryGate.isQuarantined) return
         val book = book
-        val durPos = durPos ?: videoManager.currentPosition.toInt()
+        val state = (videoManager.listener() as? StandardGSYVideoPlayer)?.currentState
+        val hasPosition = state in setOf(GSYVideoView.CURRENT_STATE_PLAYING,
+            GSYVideoView.CURRENT_STATE_PAUSE, GSYVideoView.CURRENT_STATE_PLAYING_BUFFERING_START,
+            GSYVideoView.CURRENT_STATE_AUTO_COMPLETE)
+        val durPos = durPos ?: if (hasPosition) videoManager.currentPosition.toInt() else durChapterPos
         durChapterPos = durPos
         if (book == null) {
             videoUrl?.let { videoUrl ->
@@ -413,26 +451,25 @@ object VideoPlay : CoroutineScope by MainScope(){
         val durVolumeIndex = durVolumeIndex
         val chapterInVolumeIndex = chapterInVolumeIndex
         val source = source
-        val volumes = volumes.toList()
-        val durVolume = durVolume
-        val toc = toc
-        Coroutine.async {
-            book?.let { book ->
-                book.lastCheckCount = 0
-                val durTime = System.currentTimeMillis()
-                book.durChapterTime = durTime
-                book.durVolumeIndex = durVolumeIndex
-                book.chapterInVolumeIndex = chapterInVolumeIndex
-                val durChapterIndex = if (volumes.isEmpty()) chapterInVolumeIndex else
-                    (durVolume?.index ?: 0) + chapterInVolumeIndex + 1
-                book.durChapterIndex = durChapterIndex
-                book.durChapterPos = durPos
-                val chapter = toc?.getOrNull(durChapterIndex)
-                book.durChapterTitle = chapter?.title
-                SourceCallBack.callBackBook(SourceCallBack.SAVE_READ, source as BookSource?, book, chapter, durTime.toString())
-                book.update()
-            }
-            postEvent(EventBus.VIDEO_SUB_TITLE, videoTitle ?: appCtx.getString(R.string.data_loading))
+        val chapter = chapter
+        val currentTitle = videoTitle
+        globalExecutor.execute {
+            if (RestoreRecoveryGate.isQuarantined) return@execute
+            runCatching {
+                book.let { book ->
+                    book.lastCheckCount = 0
+                    val durTime = System.currentTimeMillis()
+                    book.durChapterTime = durTime
+                    book.durVolumeIndex = durVolumeIndex
+                    book.chapterInVolumeIndex = chapterInVolumeIndex
+                    book.durChapterIndex = chapter?.index ?: book.durChapterIndex
+                    book.durChapterPos = durPos
+                    book.durChapterTitle = chapter?.title
+                    SourceCallBack.callBackBook(SourceCallBack.SAVE_READ, source as BookSource?, book, chapter, durTime.toString())
+                    book.update()
+                }
+                postEvent(EventBus.VIDEO_SUB_TITLE, currentTitle ?: appCtx.getString(R.string.data_loading))
+            }.onFailure { AppLog.put("保存视频进度失败", it) }
         }
     }
 

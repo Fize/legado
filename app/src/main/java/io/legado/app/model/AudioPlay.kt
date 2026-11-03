@@ -2,6 +2,7 @@ package io.legado.app.model
 
 import android.annotation.SuppressLint
 import android.content.Context
+import io.legado.app.help.storage.RestoreRecoveryGate
 import android.content.Intent
 import android.os.SystemClock
 import io.legado.app.R
@@ -206,12 +207,14 @@ object AudioPlay : CoroutineScope by MainScope() {
     val executor = globalExecutor
 
     fun changePlayMode() {
+        if (RestoreRecoveryGate.isQuarantined) return
         playMode = playMode.next()
         book?.let { currentBook ->
             val mode = playMode.ordinal
             val bookUrl = currentBook.bookUrl
             currentBook.setPlayMode(mode)
             executor.execute {
+                if (RestoreRecoveryGate.isQuarantined) return@execute
                 appDb.bookDao.updateAudioPlayMode(bookUrl, mode)
             }
         }
@@ -219,13 +222,15 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun upData(book: Book, preserveProgress: Boolean) {
+        if (RestoreRecoveryGate.isQuarantined) return
         val playbackChanged = synchronized(this) {
             if (preserveProgress && AudioPlay.book?.bookUrl == book.bookUrl) {
                 book.durChapterIndex = durChapterIndex
                 book.durChapterPos = durChapterPos
             }
             val changed = AudioPlay.book?.bookUrl != book.bookUrl ||
-                    durChapterIndex != book.durChapterIndex
+                    durChapterIndex != book.durChapterIndex ||
+                    (!preserveProgress && durChapterPos != book.durChapterPos)
             if (changed) stopPlay()
             if (!readTimeTracker.isForBook(book)) {
                 resetReadRecord(book, resumeIfPlaying = !changed)
@@ -252,6 +257,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun resetData(book: Book) {
+        if (RestoreRecoveryGate.isQuarantined) return
         stop()
         playUrlPreloadStore.reset()
         AudioPlay.book = book
@@ -287,6 +293,7 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     @Synchronized
     fun replaceBook(book: Book) {
+        if (RestoreRecoveryGate.isQuarantined) return
         resetReadRecord(book, resumeIfPlaying = true)
         AudioPlay.book = book
     }
@@ -311,6 +318,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun setBookSource(source: BookSource?) {
+        if (RestoreRecoveryGate.isQuarantined) return
         bookSource = source
         playUrlPreloadStore.reset()
         synchronized(this) {
@@ -320,6 +328,7 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     @Synchronized
     fun markReadTimeStart() {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (AppConfig.enableReadRecord) {
             book?.takeUnless(readTimeTracker::isForBook)?.let { resetReadRecord(it) }
             book?.let { readTimeTracker.updateSnapshot(it, durChapterIndex, durChapterPos) }
@@ -329,13 +338,17 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     @Synchronized
     fun upReadTime() {
+        if (RestoreRecoveryGate.isQuarantined) return
         book?.let { readTimeTracker.updateSnapshot(it, durChapterIndex, durChapterPos) }
         val (record, elapsed) = readTimeTracker.stop(
             now = SystemClock.elapsedRealtime(),
             lastRead = System.currentTimeMillis(),
         ) ?: return
         val snapshotBook = book?.copy()
-        executor.execute { record.saveWithCover(snapshotBook, elapsed) }
+        executor.execute {
+            if (RestoreRecoveryGate.isQuarantined) return@execute
+            record.saveWithCover(snapshotBook, elapsed)
+        }
     }
 
     private fun addLoading(index: Int): Boolean {
@@ -365,6 +378,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun loadOrUpPlayUrl() {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (durMediaUrl.isEmpty()) {
             loadPlayUrl()
         } else {
@@ -376,6 +390,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      * 加载播放URL
      */
     private fun loadPlayUrl() {
+        if (RestoreRecoveryGate.isQuarantined) return
         val index = durChapterIndex
         if (addLoading(index)) {
             val book = book
@@ -482,7 +497,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             }.onCancel {
                 removeLoading(chapter.index)
             }.onFinally {
-                callback?.upLyric(durLyric)
+                if (!RestoreRecoveryGate.isQuarantined) callback?.upLyric(durLyric)
                 removeLoading(chapter.index)
             }
     }
@@ -492,7 +507,7 @@ object AudioPlay : CoroutineScope by MainScope() {
         chapter: BookChapter,
         cacheKey: AudioCacheKey,
     ): Boolean {
-        return book?.bookUrl == bookUrl &&
+        return !RestoreRecoveryGate.isQuarantined && book?.bookUrl == bookUrl &&
                 durChapterIndex == chapter.index &&
                 durChapter?.let(AudioCacheKey::from) == cacheKey
     }
@@ -501,6 +516,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      * 加载完成
      */
     private fun contentLoadFinish(chapter: BookChapter, content: String) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (chapter.index == book?.durChapterIndex) {
             clearPlayingCache()
             durPlayUrl = content
@@ -512,6 +528,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     private fun preloadNextPlayUrl(currentIndex: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (playMode != PlayMode.LIST_END_STOP && playMode != PlayMode.LIST_LOOP) return
         val book = book ?: return
         val source = bookSource ?: return
@@ -524,7 +541,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 nextChapter,
             )
         }.onSuccess { cachedUri ->
-            if (book.bookUrl != AudioPlay.book?.bookUrl ||
+            if (RestoreRecoveryGate.isQuarantined || book.bookUrl != AudioPlay.book?.bookUrl ||
                 source.bookSourceUrl != bookSource?.bookSourceUrl
             ) {
                 return@onSuccess
@@ -556,6 +573,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun retryAfterCachedPlaybackError(resumePosition: Int): Boolean {
+        if (RestoreRecoveryGate.isQuarantined) return false
         val book = book ?: return false
         val chapter = durChapter ?: return false
         val currentCacheKey = AudioCacheKey.from(chapter)
@@ -637,6 +655,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      * 播放当前章节
      */
     fun play() {
+        if (RestoreRecoveryGate.isQuarantined) return
         context.startService<AudioPlayService> {
             action = IntentAction.play
         }
@@ -646,6 +665,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      * 从头播放新章节
      */
     private fun playNew() {
+        if (RestoreRecoveryGate.isQuarantined) return
         context.startService<AudioPlayService> {
             action = IntentAction.playNew
         }
@@ -655,6 +675,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      * 更新当前章节
      */
     fun upDurChapter() {
+        if (RestoreRecoveryGate.isQuarantined) return
         val book = book ?: return
         durChapter = appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)
         durAudioSize = durChapter?.end?.toInt() ?: 0
@@ -665,6 +686,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun pause(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (AudioPlayService.isRun) {
             context.startService<AudioPlayService> {
                 action = IntentAction.pause
@@ -673,6 +695,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun resume(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (AudioPlayService.isRun) {
             context.startService<AudioPlayService> {
                 action = IntentAction.resume
@@ -690,12 +713,14 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun setSpeed(speed: Float) {
+        if (RestoreRecoveryGate.isQuarantined) return
         val clampedSpeed = speed.coerceIn(0.5f, 3.0f)
         AudioPlayService.playSpeed = clampedSpeed
         book?.takeIf { it.getPlaySpeed() != clampedSpeed }?.let { currentBook ->
             val bookUrl = currentBook.bookUrl
             currentBook.setPlaySpeed(clampedSpeed)
             executor.execute {
+                if (RestoreRecoveryGate.isQuarantined) return@execute
                 appDb.bookDao.updateAudioPlaySpeed(bookUrl, clampedSpeed)
             }
         }
@@ -712,6 +737,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      
 
     fun adjustProgress(position: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         durChapterPos = position
         saveRead()
         if (AudioPlayService.isRun) {
@@ -723,6 +749,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun skipTo(index: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         val generation = stopPlayAndGetGeneration()
         val changed = synchronized(this) {
             if (generation == playbackGeneration.get() && index in 0..<simulatedChapterSize) {
@@ -743,6 +770,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun prev() {
+        if (RestoreRecoveryGate.isQuarantined) return
         val generation = stopPlayAndGetGeneration()
         val changed = synchronized(this) {
             if (generation == playbackGeneration.get() && durChapterIndex > 0) {
@@ -763,6 +791,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun next() {
+        if (RestoreRecoveryGate.isQuarantined) return
         val generation = stopPlayAndGetGeneration()
         synchronized(this) {
             if (generation != playbackGeneration.get()) return
@@ -816,6 +845,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun setTimer(minute: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (AudioPlayService.isRun) {
             val intent = Intent(context, AudioPlayService::class.java)
             intent.action = IntentAction.setTimer
@@ -830,6 +860,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun setChapterStop(count: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (AudioPlayService.isRun) {
             val intent = Intent(context, AudioPlayService::class.java)
             intent.action = IntentAction.setChapterStop
@@ -844,9 +875,16 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun addTimer() {
+        if (RestoreRecoveryGate.isQuarantined) return
         val intent = Intent(context, AudioPlayService::class.java)
         intent.action = IntentAction.addTimer
         context.startService(intent)
+    }
+
+    internal fun cancelPendingForRecovery() {
+        invalidatePlayback()
+        playUrlPreloadStore.reset()
+        coroutineContext.cancelChildren()
     }
 
     private fun invalidatePlayback(): Long = synchronized(this) {
@@ -871,7 +909,7 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     internal fun runIfPlaybackCurrent(generation: Long, block: () -> Unit): Boolean {
         return synchronized(this) {
-            if (generation != playbackGeneration.get()) {
+            if (RestoreRecoveryGate.isQuarantined || generation != playbackGeneration.get()) {
                 false
             } else {
                 block()
@@ -883,7 +921,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     private fun loadPlayUrlWhenCurrent(generation: Long) {
         Coroutine.async {
             synchronized(this@AudioPlay) {
-                if (generation == playbackGeneration.get()) {
+                if (!RestoreRecoveryGate.isQuarantined && generation == playbackGeneration.get()) {
                     loadPlayUrl()
                 }
             }
@@ -892,6 +930,7 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     @Synchronized
     fun saveRead(first: Boolean = false) {
+        if (RestoreRecoveryGate.isQuarantined) return
         val book = book ?: return
         val chapterIndex = durChapterIndex
         val chapterPosition = durChapterPos
@@ -902,26 +941,29 @@ object AudioPlay : CoroutineScope by MainScope() {
         val chapterChanged = book.durChapterIndex != chapterIndex
         book.durChapterIndex = chapterIndex
         book.durChapterPos = chapterPosition
-        Coroutine.async {
-            if (first || chapterChanged) {
-                appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex)?.let { chapter ->
-                    if (book.durChapterIndex == chapterIndex) {
-                        book.durChapterTitle = chapter.getDisplayTitle(
-                            ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
-                            book.getUseReplaceRule(),
-                            replaceBook = book.toReplaceBook()
-                        )
-                        SourceCallBack.callBackBook(
-                            SourceCallBack.SAVE_READ,
-                            source,
-                            book,
-                            chapter,
-                            durTime.toString()
-                        )
+        executor.execute {
+            if (RestoreRecoveryGate.isQuarantined) return@execute
+            runCatching {
+                if (first || chapterChanged) {
+                    appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex)?.let { chapter ->
+                        if (book.durChapterIndex == chapterIndex) {
+                            book.durChapterTitle = chapter.getDisplayTitle(
+                                ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
+                                book.getUseReplaceRule(),
+                                replaceBook = book.toReplaceBook()
+                            )
+                            SourceCallBack.callBackBook(
+                                SourceCallBack.SAVE_READ,
+                                source,
+                                book,
+                                chapter,
+                                durTime.toString()
+                            )
+                        }
                     }
                 }
-            }
-            book.update()
+                book.update()
+            }.onFailure { AppLog.put("保存音频进度失败", it) }
         }
     }
 
@@ -930,9 +972,11 @@ object AudioPlay : CoroutineScope by MainScope() {
      */
     @Synchronized
     fun saveDurChapter(audioSize: Long) {
+        if (RestoreRecoveryGate.isQuarantined) return
         val chapter = durChapter ?: return
         durAudioSize = audioSize.toInt()
-        Coroutine.async {
+        executor.execute {
+            if (RestoreRecoveryGate.isQuarantined) return@execute
             chapter.end = audioSize
             chapter.update()
         }
@@ -940,11 +984,13 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     @Synchronized
     fun playPositionChanged(position: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         durChapterPos = position
         saveRead()
     }
 
     fun upLoading(loading: Boolean) {
+        if (RestoreRecoveryGate.isQuarantined) return
         callback?.upLoading(loading)
     }
 

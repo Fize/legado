@@ -8,9 +8,9 @@ class ReadRecordAuthorLayoutTest {
 
     @Test
     fun `read record row reserves an optional author line before reading time`() {
-        val file = File("app/src/main/java/io/legado/app/ui/about/ReadRecordActivity.kt")
+        val file = File("app/src/main/java/io/legado/app/ui/about/ReadRecordScreen.kt")
             .takeIf(File::isFile)
-            ?: File("src/main/java/io/legado/app/ui/about/ReadRecordActivity.kt")
+            ?: File("src/main/java/io/legado/app/ui/about/ReadRecordScreen.kt")
         val source = file.readText()
         val compactRow = source.substringAfter("private fun ReadRecordCompactRow(")
         val authorPos = compactRow.indexOf("R.string.author_show")

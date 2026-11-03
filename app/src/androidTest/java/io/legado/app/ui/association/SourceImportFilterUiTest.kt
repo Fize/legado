@@ -1,85 +1,95 @@
 package io.legado.app.ui.association
 
-import android.content.ClipData
-import android.content.Intent
-import android.net.Uri
-import android.graphics.Bitmap
 import android.os.SystemClock
-import android.view.View
-import android.view.MenuItem
-import android.widget.TextView
-import androidx.appcompat.widget.SearchView
-import androidx.appcompat.widget.Toolbar
-import androidx.core.content.FileProvider
-import androidx.fragment.app.DialogFragment
-import androidx.fragment.app.FragmentActivity
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
+import androidx.navigation3.runtime.NavEntry
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.Lifecycle
-import androidx.recyclerview.widget.RecyclerView
-import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.Espresso.onData
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.replaceText
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.isChecked
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.BookSourceImportRoute
+import io.legado.app.ui.navigation.BookshelfRoute
+import io.legado.app.ui.navigation.navigationViewModelStores
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
-import org.hamcrest.Matchers.not
-import org.hamcrest.Description
-import org.hamcrest.TypeSafeMatcher
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-import java.net.InetAddress
-import java.net.ServerSocket
+import fi.iki.elonen.NanoHTTPD
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class SourceImportFilterUiTest {
+    @get:Rule val composeRule = createAndroidComposeRule<AppActivity>()
+
+    private var importRoute: BookSourceImportRoute? = null
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
-    private val prefKeys = listOf(PreferKey.importReplaceSource, PreferKey.importRememberGroup,
-        PreferKey.importLastGroup, PreferKey.importLastGroupAdd, PreferKey.autoBackup)
+    private val prefKeys = listOf(
+        PreferKey.importReplaceSource,
+        PreferKey.importRememberGroup,
+        PreferKey.importLastGroup,
+        PreferKey.importLastGroupAdd,
+        PreferKey.autoBackup,
+    )
     private val savedPrefs = prefKeys.associateWith { prefs.all[it] }
     private val savedRules = appDb.replaceRuleDao.findEnabledBySourceScope()
     private val id = UUID.randomUUID().toString()
-    private val files = arrayListOf<File>()
     private val urls = arrayListOf<String>()
-    private val rule = ReplaceRule(name = "Import filter $id", pattern = "Edited-$id",
-        replacement = "Derived-$id", isRegex = false, scopeSource = true, scopeContent = false)
+    private val rule = ReplaceRule(
+        name = "Import filter $id",
+        pattern = "Edited-$id",
+        replacement = "Derived-$id",
+        isRegex = false,
+        scopeSource = true,
+        scopeContent = false,
+    )
 
-    @Before fun setUp() {
-        prefs.edit().remove(PreferKey.importRememberGroup).remove(PreferKey.importLastGroup)
-            .remove(PreferKey.importLastGroupAdd).putBoolean(PreferKey.importReplaceSource, false)
-            .putBoolean(PreferKey.autoBackup, false).commit()
+    @Before
+    fun setUp() {
+        prefs.edit()
+            .remove(PreferKey.importRememberGroup)
+            .remove(PreferKey.importLastGroup)
+            .remove(PreferKey.importLastGroupAdd)
+            .putBoolean(PreferKey.importReplaceSource, false)
+            .putBoolean(PreferKey.autoBackup, false)
+            .commit()
         savedRules.forEach { appDb.replaceRuleDao.insert(it.copy(isEnabled = false)) }
         appDb.replaceRuleDao.insert(rule)
     }
 
-    @After fun tearDown() {
+    @After
+    fun tearDown() {
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.supportFragmentManager.fragments.filterIsInstance<androidx.fragment.app.DialogFragment>()
+                .forEach { it.dismissAllowingStateLoss() }
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
         urls.forEach { appDb.bookSourceDao.delete(it) }
         appDb.replaceRuleDao.delete(rule)
         savedRules.forEach { appDb.replaceRuleDao.insert(it) }
-        files.forEach { it.delete() }
         prefs.edit().apply {
             savedPrefs.forEach { (key, value) ->
                 when (value) {
@@ -91,71 +101,8 @@ class SourceImportFilterUiTest {
         }.commit()
     }
 
-    @Test fun bookFilteringKeepsCandidatesThroughEditReplacementAndRecreation() = filtering()
-
-    @Test fun onlineAutoImportKeepsOnePreviewAndItsStateAfterRecreation() {
-        run {
-            val candidates = listOf(
-                source(url("auto/hidden"), "Hidden", "Other", ""),
-                source(url("auto/keep"), "Keep", "Wanted", ""),
-            )
-            val body = GSON.toJson(candidates).toByteArray(Charsets.UTF_8)
-            ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
-                server.soTimeout = 15_000
-                val worker = Thread {
-                    server.accept().use { client ->
-                        client.soTimeout = 10_000
-                        val reader = client.getInputStream().bufferedReader()
-                        while (!reader.readLine().isNullOrEmpty()) Unit
-                        client.getOutputStream().apply {
-                            write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" +
-                                "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n")
-                                .toByteArray(Charsets.US_ASCII))
-                            write(body)
-                            flush()
-                        }
-                    }
-                }.apply { isDaemon = true; start() }
-                val uri = Uri.parse("legado://import/auto").buildUpon()
-                    .appendQueryParameter("src", "http://127.0.0.1:${server.localPort}/source.json").build()
-                val intent = Intent(context, OnLineImportActivity::class.java)
-                    .setAction(Intent.ACTION_VIEW).setData(uri)
-                ActivityScenario.launch<OnLineImportActivity>(intent).use { scenario ->
-                    val host = ImportHost(scenario)
-                    host.findParent()
-                    host.awaitReady()
-                    host.query("Keep", 1)
-                    host.rowClick(0, R.id.cb_source_name)
-                    host.selection(true, false)
-                    val preview = host.open(0, 1)
-                    val edited = GSON.toJson(source(url("auto/edited"), "Kept edit", "Wanted", ""))
-                    main { preview.binding.codeView.setText(edited) }
-                    onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
-                    host.awaitReady()
-                    host.query("Kept edit", 1)
-                    host.recreate()
-                    scenario.onActivity { activity ->
-                        assertEquals(1, activity.supportFragmentManager.fragments
-                            .filterIsInstance<DialogFragment>().size)
-                    }
-                    host.assertQuery("Kept edit", 1)
-                    host.selection(true, false)
-                    val restored = host.open(0, 1)
-                    main {
-                        assertEquals(edited, restored.currentOriginalCode())
-                        restored.dismiss()
-                    }
-                    host.awaitReady()
-                    screenshot("source-filter-auto-restored")
-                    host.click(R.id.tv_cancel)
-                    host.awaitFinished()
-                }
-                worker.join(1_000)
-            }
-        }
-    }
-
-    private fun filtering() {
+    @Test
+    fun composeFilteringKeepsOriginalIndicesThroughEditReplacementAndRecreation() {
         val candidateUrls = (0..2).map { url("book/candidate-$it") }
         val editedUrl = url("book/edited")
         val candidates = listOf(
@@ -163,375 +110,287 @@ class SourceImportFilterUiTest {
             source(candidateUrls[1], "Twin", "Precise,Shared", "OnlyNeedle"),
             source(candidateUrls[2], "Twin", "PreciseSuffix,Shared", "other comment"),
         )
-        val existing = source(candidateUrls[2], "Old stored name", "Existing", "old", 1)
-        appDb.bookSourceDao.insert(existing as BookSource)
-        withImport(candidates) { host ->
-            host.selection(true, true, true)
-            host.rejectStaleRowAfterQuery("OnlyNeedle", 1)
-            host.selection(true, true, true)
-            host.query("TWIN", 1, 2)
-            host.footer(2, 2, 3, all = true)
-            host.click(R.id.tv_footer_left)
-            host.selection(true, false, false)
-            host.footer(0, 2, 1, all = false)
-            screenshot("source-filter-count")
-            run {
-                host.query("Hidden", 0)
-                host.rowClick(0, R.id.cb_source_name)
-                host.query("TWIN", 1, 2)
-                host.menu(R.id.menu_select_new_source)
-                host.selection(false, true, false)
-                host.menu(R.id.menu_select_update_source)
-                host.selection(false, true, true)
-                host.query("Hidden", 0)
-                host.rowClick(0, R.id.cb_source_name)
-                host.query("TWIN", 1, 2)
-            }
-            host.selection(true, true, true)
-            host.rowClick(0, R.id.cb_source_name)
-            host.selection(true, false, true)
-            host.query("CANDIDATE-1", 1)
-            host.query("group:Precise", 1)
-            host.query("Shared", 1, 2)
-            host.query("OnlyNeedle", 1)
-            host.recreate()
-            host.assertQuery("OnlyNeedle", 1)
-            host.selection(true, false, true)
-            host.query("does-not-exist")
-            main {
-                assertEquals(context.getString(R.string.import_no_results),
-                    host.view<TextView>(R.id.tv_msg).text.toString())
-                assertTrue(host.view<TextView>(R.id.tv_msg).isShown)
-                assertFalse(host.view<View>(R.id.tv_footer_left).isEnabled)
-            }
-            host.footer(0, 0, 2, all = true)
-            host.query("", 0, 1, 2)
-            host.query("OnlyNeedle", 1)
-            val preview = host.open(0, 1)
-            val edited = GSON.toJson(source(editedUrl, "Edited-$id", "Edited group", "edited comment"))
-            main {
-                assertTrue(preview.currentOriginalCode().contains(candidateUrls[1]))
-                assertFalse(preview.currentOriginalCode().contains(candidateUrls[0]))
-                preview.binding.codeView.setText(edited)
-            }
-            onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
-            host.awaitReady()
-            host.assertQuery("OnlyNeedle")
-            host.selection(true, false, true)
-            host.query("Edited-$id", 1)
-            host.menu(R.id.menu_replace_source)
-            host.awaitReady()
-            host.assertQuery("Edited-$id")
-            host.query("Derived-$id", 1)
-            val derivedPreview = host.open(0, 1)
-            main {
-                assertTrue(derivedPreview.currentOriginalCode().contains("Edited-$id"))
-                assertTrue(derivedPreview.binding.codeView.text.toString().contains("Derived-$id"))
-                derivedPreview.dismiss()
-            }
-            host.awaitReady()
-            host.selection(true, false, true)
-            host.menu(R.id.menu_replace_source)
-            host.awaitReady()
-            host.assertQuery("Derived-$id")
-            host.query("", 0, 1, 2)
-            // Clear every selection through the actual footer, then import only original index 1.
-            host.click(R.id.tv_footer_left)
-            host.click(R.id.tv_footer_left)
-            host.selection(false, false, false)
-            host.query("Edited-$id", 1)
-            host.rowClick(0, R.id.cb_source_name)
-            host.selection(false, true, false)
-            host.setGroup("Imported group", false)
-            host.click(R.id.tv_ok)
-            await("Edited source was not imported") { storedGroup(editedUrl) == "Imported group" }
-            host.awaitFinished()
+        appDb.bookSourceDao.insert(source(candidateUrls[2], "Old stored name", "Existing", "old", 1))
+
+        showImport(GSON.toJson(candidates), expectedCount = 3)
+        assertSelection(true, true, true)
+        search("OnlyNeedle")
+        assertRows(1)
+        composeRule.onNodeWithTag("sourceImportRow:1").performClick()
+        assertSelection(true, false, true)
+
+        composeRule.activityRule.scenario.recreate()
+        awaitReady(3)
+        assertEquals("OnlyNeedle", modelValue { searchQuery })
+        assertRows(1)
+        assertSelection(true, false, true)
+
+        val edited = source(editedUrl, "Edited-$id", "Edited group", "edited comment")
+        dialogAction { onCodeSave(GSON.toJson(edited), "1") }
+        waitForModel { allSources.getOrNull(1)?.bookSourceUrl == editedUrl }
+        assertRows()
+
+        search("Edited-$id")
+        assertRows(1)
+        modelAction { setUseSourceReplacement(true) }
+        waitForModel {
+            !uiState.value.isUpdating && allSources.getOrNull(1)?.bookSourceName == "Derived-$id"
         }
+        search("Derived-$id")
+        assertRows(1)
+
+        modelAction {
+            selectStatus.indices.forEach { setSelection(it, false) }
+            setSelection(1, true)
+            groupName = "Imported group"
+            isAddGroup = false
+        }
+        composeRule.onNodeWithTag("sourceImportFooter:ok").performClick()
+        waitUntil("Edited source was not imported") { storedGroup(editedUrl) == "Imported group" }
+
         assertNull(storedGroup(candidateUrls[0]))
         assertNull(storedGroup(candidateUrls[1]))
         assertEquals("Existing", storedGroup(candidateUrls[2]))
         assertEquals("Old stored name", appDb.bookSourceDao.getBookSource(candidateUrls[2])?.bookSourceName)
-        val savedName = appDb.bookSourceDao.getBookSource(editedUrl)?.bookSourceName
-        assertEquals("Edited-$id", savedName)
+        assertEquals("Derived-$id", appDb.bookSourceDao.getBookSource(editedUrl)?.bookSourceName)
     }
 
-    @Test fun specialFiltersMatchManagementGroupAndLoginSemantics() {
-        run {
-            val candidates = listOf("未分组", "Ungrouped", "RSS", "rss").mapIndexed { index, group ->
-                source(url("book/metadata-$index"), group = group).also {
-                    when (it) {
-                        is BookSource -> when (index) {
-                            0 -> { it.mainJs = "function login() {}"; it.loginUi = "[{\"name\":\"account\"}]" }
-                            1 -> it.loginUrl = "https://login.invalid"
-                        }
+    @Test
+    fun urlImportKeepsSearchAndPreviewAcrossActivityRecreation() {
+        val candidates = listOf(
+            source(url("auto/hidden"), "Hidden", "Other"),
+            source(url("auto/keep"), "Keep", "Wanted"),
+        )
+        val server = object : NanoHTTPD("127.0.0.1", 0) {
+            override fun serve(session: IHTTPSession): Response =
+                newFixedLengthResponse(Response.Status.OK, "application/json", GSON.toJson(candidates))
+        }
+        server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+        try {
+            showImport("http://127.0.0.1:${server.listeningPort}/source.json", expectedCount = 2)
+            search("Keep")
+            assertRows(1)
+            composeRule.onNodeWithTag("sourceImportRow:1:open").performClick()
+            waitUntil("Source preview did not open") { codeDialog() != null }
+            assertTrue(codeDialog()!!.currentOriginalCode().contains("auto/keep"))
+
+            composeRule.activityRule.scenario.recreate()
+            awaitReady(2)
+            waitUntil("Source preview was not restored") { codeDialog() != null }
+            assertEquals("Keep", modelValue { searchQuery })
+            assertRows(1)
+            assertTrue(codeDialog()!!.currentOriginalCode().contains("auto/keep"))
+            dialogAction { onBackPressedDispatcher.onBackPressed() }
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun composeSearchMatchesExactGroupsUngroupedAndLoginSources() {
+        val candidates = listOf("未分组", "Ungrouped", "RSS", "rss").mapIndexed { index, group ->
+            source(url("book/metadata-$index"), group = group).also { source ->
+                when (index) {
+                    0 -> {
+                        source.mainJs = "function login() {}"
+                        source.loginUi = "[{\"name\":\"account\"}]"
                     }
+                    1 -> source.loginUrl = "https://login.invalid"
                 }
             }
-            withImport(candidates) { host ->
-                host.query("group:RSS", 2)
-                host.query("group:rss", 3)
-                host.query(context.getString(R.string.no_group), 0)
-                host.query(context.getString(R.string.need_login), 0, 1)
-                host.click(R.id.tv_cancel)
-                host.awaitFinished()
-            }
         }
+        showImport(GSON.toJson(candidates), expectedCount = 4)
+        search("group:RSS")
+        assertRows(2)
+        search("group:rss")
+        assertRows(3)
+        search(context.getString(R.string.no_group))
+        assertRows(0)
+        search(context.getString(R.string.need_login))
+        assertRows(0, 1)
     }
 
-    @Test fun groupMemoryIsOptInAndDisablingClearsIt() {
+    @Test
+    fun composeGroupMemoryIsOptInAndControlsImportedGroup() {
         assertFalse("The unset preference must default to OFF", AppConfig.importRememberGroup)
         val first = url("group/default-off")
-        withImport(listOf(source(first))) { host ->
-            host.group(null, false)
-            host.setGroup("Once", false)
-            assertNull(AppConfig.importLastGroup)
-            host.click(R.id.tv_ok)
-            await("One-time replacement group was not imported") { storedGroup(first) == "Once" }
-        }
+        showImport(GSON.toJson(listOf(source(first))), expectedCount = 1)
+        setGroup("Once", add = false)
+        assertNull(AppConfig.importLastGroup)
+        composeRule.onNodeWithTag("sourceImportFooter:ok").performClick()
+        waitUntil("One-time group was not imported") { storedGroup(first) == "Once" }
+
         val second = url("group/remember-add")
-        withImport(listOf(source(second))) { host ->
-            host.group(null, false)
-            host.menu(R.id.menu_remember_source_group)
-            assertTrue(AppConfig.importRememberGroup)
-            host.setGroup("Remember add", true)
-            assertEquals("Remember add", AppConfig.importLastGroup)
-            assertTrue(AppConfig.importLastGroupAdd)
-            host.click(R.id.tv_ok)
-            await("Remembered add group was not applied") {
-                storedGroup(second) == "Original,Remember add"
-            }
+        showImport(GSON.toJson(listOf(source(second))), expectedCount = 1)
+        toggleRememberGroup()
+        assertTrue(AppConfig.importRememberGroup)
+        setGroup("Remember add", add = true)
+        assertEquals("Remember add", AppConfig.importLastGroup)
+        assertTrue(AppConfig.importLastGroupAdd)
+        composeRule.onNodeWithTag("sourceImportFooter:ok").performClick()
+        waitUntil("Remembered additive group was not imported") {
+            storedGroup(second) == "Original,Remember add"
         }
-        val third = url("group/remember-replace")
-        withImport(listOf(source(third))) { host ->
-            host.group("Remember add", true)
-            host.inspectGroupDialog("Remember add", true)
-            screenshot("source-remembered-group-book")
-            onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
-            host.setGroup("Remember replace", false)
-            host.click(R.id.tv_ok)
-            await("Remembered replacement group was not applied") {
-                storedGroup(third) == "Remember replace"
-            }
+
+        val third = url("group/remember-restored")
+        showImport(GSON.toJson(listOf(source(third))), expectedCount = 1)
+        assertEquals("Remember add", modelValue { groupName })
+        assertTrue(modelValue { isAddGroup })
+        toggleRememberGroup()
+        assertFalse(AppConfig.importRememberGroup)
+        assertNull(AppConfig.importLastGroup)
+        assertFalse(AppConfig.importLastGroupAdd)
+        assertNull(modelValueOrNull { groupName })
+        assertFalse(modelValue { isAddGroup })
+        composeRule.onNodeWithTag("sourceImportFooter:cancel").performClick()
+    }
+
+    @Test
+    fun reopeningTheSameImportStartsWithFreshSearchAndSelection() {
+        val json = GSON.toJson(listOf(source(url("reopen"), "Reopen fixture")))
+        showImport(json, expectedCount = 1)
+        search("does not match")
+        assertRows()
+        composeRule.onNodeWithTag("sourceImportFooter:cancel").performClick()
+
+        showImport(json, expectedCount = 1)
+        assertEquals("", modelValue { searchQuery })
+        assertEquals(listOf(true), modelValue { selectStatus })
+        assertRows(0)
+        composeRule.onNodeWithTag("sourceImportFooter:cancel").performClick()
+    }
+
+    private fun showImport(source: String, expectedCount: Int) {
+        waitUntil("Previous import dialog did not close") { dialogOrNull() == null }
+        composeRule.activityRule.scenario.onActivity { activity ->
+            val route = BookSourceImportRoute(source)
+            importRoute = route
+            activity.navigateTo(route)
         }
-        val fourth = url("group/disable")
-        withImport(listOf(source(fourth))) { host ->
-            host.group("Remember replace", false)
-            host.inspectGroupDialog("Remember replace", false)
-            screenshot("source-remembered-group-rss")
-            onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
-            host.menu(R.id.menu_remember_source_group)
-            host.group(null, false)
-            assertFalse(AppConfig.importRememberGroup)
-            assertNull(AppConfig.importLastGroup)
-            assertFalse(AppConfig.importLastGroupAdd)
-            host.click(R.id.tv_ok)
-            await("Disabling memory must preserve the source's own group") {
-                storedGroup(fourth) == "Original"
-            }
-        }
-        withImport(listOf(source(url("group/after-disable")))) { host ->
-            host.group(null, false)
-            host.menu(R.id.menu_remember_source_group)
-            host.group(null, false)
-            assertNull(AppConfig.importLastGroup)
-            host.click(R.id.tv_cancel)
+        composeRule.waitForIdle()
+        awaitReady(expectedCount)
+    }
+
+    private fun awaitReady(expectedCount: Int) {
+        waitUntil("Import dialog did not become ready") {
+            val state = modelValueOrNull {
+                allSources.size == expectedCount && !uiState.value.isUpdating &&
+                    uiState.value.successCount == expectedCount
+            } == true
+            state && runCatching {
+                composeRule.onNodeWithTag("sourceImportSearch").fetchSemanticsNode()
+            }.isSuccess
         }
     }
 
-    private fun source(url: String, name: String = "Group fixture",
-        group: String = "Original", comment: String = "", time: Long = 100): Any =
-        BookSource(bookSourceUrl = url, bookSourceName = name, bookSourceGroup = group,
-            bookSourceComment = comment, searchUrl = "/search", lastUpdateTime = time)
+    private fun search(query: String) {
+        composeRule.onNodeWithTag("sourceImportSearch").performTextReplacement(query)
+        waitForModel { searchQuery == query }
+    }
+
+    private fun assertRows(vararg originalIndices: Int) {
+        val expected = originalIndices.toSet()
+        composeRule.waitUntil(5_000) {
+            (0..3).all { index ->
+                val count = composeRule.onAllNodesWithTag("sourceImportRow:$index")
+                    .fetchSemanticsNodes().size
+                if (index in expected) count == 1 else count == 0
+            }
+        }
+        (0..3).forEach { index ->
+            if (index in originalIndices) {
+                composeRule.onNodeWithTag("sourceImportRow:$index").assertIsDisplayed()
+            } else {
+                composeRule.onAllNodesWithTag("sourceImportRow:$index").assertCountEquals(0)
+            }
+        }
+    }
+
+    private fun assertSelection(vararg expected: Boolean) {
+        assertEquals(expected.toList(), modelValue { selectStatus.toList() })
+    }
+
+    private fun setGroup(value: String, add: Boolean) {
+        composeRule.onNodeWithTag("sourceImportGroup").performClick()
+        composeRule.onNodeWithTag("sourceImportGroupName").performTextReplacement(value)
+        if (modelValue { isAddGroup } != add) {
+            composeRule.onNodeWithTag("sourceImportGroupAdd").performClick()
+        }
+        composeRule.onNodeWithTag("sourceImportGroupConfirm").performClick()
+        waitForModel { groupName == value && isAddGroup == add }
+    }
+
+    private fun toggleRememberGroup() {
+        composeRule.onNodeWithTag("sourceImportOverflow").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.import_remember_group)).performClick()
+    }
+
+    private fun dialogOrNull(): BookSourceImportRoute? {
+        val route = importRoute ?: return null
+        return route.takeIf {
+            composeRule.onAllNodesWithTag("sourceImportSearch").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun codeDialog(): CodeDialog? {
+        var result: CodeDialog? = null
+        composeRule.activityRule.scenario.onActivity { activity ->
+            result = activity.supportFragmentManager.fragments.filterIsInstance<CodeDialog>().firstOrNull()
+        }
+        return result
+    }
+
+    private fun dialogAction(action: AppActivity.() -> Unit) {
+        composeRule.activityRule.scenario.onActivity { activity -> activity.action() }
+    }
+
+    private fun modelAction(action: ImportBookSourceViewModel.() -> Unit) {
+        modelValue(action)
+    }
+
+    private fun <T> modelValue(action: ImportBookSourceViewModel.() -> T): T =
+        checkNotNull(modelValueOrNull(action))
+
+    private fun <T> modelValueOrNull(action: ImportBookSourceViewModel.() -> T): T? {
+        val route = importRoute ?: return null
+        var result: T? = null
+        composeRule.activityRule.scenario.onActivity { activity ->
+            val owner = navigationViewModelStores(activity, BookshelfRoute).getOrCreateOwner(NavEntry(route) {}.contentKey)
+            result = ViewModelProvider(owner)[ImportBookSourceViewModel::class.java].action()
+        }
+        return result
+    }
+
+    private fun waitForModel(condition: ImportBookSourceViewModel.() -> Boolean) {
+        waitUntil("Import model did not reach the expected state") { modelValueOrNull(condition) == true }
+    }
+
+    private fun source(
+        url: String,
+        name: String = "Group fixture",
+        group: String = "Original",
+        comment: String = "",
+        time: Long = 100,
+    ) = BookSource(
+        bookSourceUrl = url,
+        bookSourceName = name,
+        bookSourceGroup = group,
+        bookSourceComment = comment,
+        searchUrl = "/search",
+        lastUpdateTime = time,
+    )
 
     private fun url(path: String) = "https://filter-$id.invalid/$path".also { urls.add(it) }
 
     private fun storedGroup(url: String): String? =
         appDb.bookSourceDao.getBookSource(url)?.bookSourceGroup
 
-    private fun withImport(sources: List<Any>, action: (ImportHost) -> Unit) {
-        val file = File(context.cacheDir, "source-filter-$id-${files.size}.json")
-        files.add(file)
-        file.writeText(GSON.toJson(sources))
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
-        val intent = Intent(context, FileAssociationActivity::class.java).apply {
-            this.action = Intent.ACTION_SEND
-            type = "application/json"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newRawUri(file.name, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        ActivityScenario.launch<FileAssociationActivity>(intent).use { scenario ->
-            val host = ImportHost(scenario)
-            host.findParent()
-            host.awaitReady()
-            try { action(host) } finally { host.closeMenus() }
-        }
-    }
-
-    private inner class ImportHost(val scenario: ActivityScenario<out FragmentActivity>) {
-        lateinit var parent: DialogFragment
-        private val book get() = ViewModelProvider(parent)[ImportBookSourceViewModel::class.java]
-        fun <T : View> view(id: Int): T = parent.requireView().findViewById(id)
-        private fun toolbar() = view<Toolbar>(R.id.tool_bar)
-        private fun indices() = (view<RecyclerView>(R.id.recycler_view).adapter as RecyclerAdapter<*, *>).getItems()
-
-        fun findParent() = await("Import dialog missing") {
-            var found: DialogFragment? = null
-            scenario.onActivity { activity ->
-                found = activity.supportFragmentManager.fragments.filterIsInstance<DialogFragment>()
-                    .find { it is ImportBookSourceDialog }
-            }
-            found?.also { parent = it } != null
-        }
-
-        fun awaitReady() = await("Import dialog not ready") {
-            main { parent.view != null && view<View>(R.id.tv_ok).isEnabled &&
-                parent.dialog?.window?.decorView?.hasWindowFocus() == true }
-        }
-
-        fun query(query: String, vararg expected: Int) {
-            main { view<SearchView>(R.id.source_import_search).setQuery(query, false) }
-            assertQuery(query, *expected)
-        }
-
-        fun assertQuery(query: String, vararg expected: Int) {
-            await("Filter '$query' did not resolve ${expected.toList()}") {
-                main { indices() == expected.toList() }
-            }
-            main {
-                assertEquals(query, view<SearchView>(R.id.source_import_search).query.toString())
-                assertEquals(query, book.searchQuery)
-            }
-        }
-
-        fun selection(vararg expected: Boolean) = main {
-            assertEquals("Selection must use original indices", expected.toList(),
-                book.selectStatus.toList())
-        }
-
-        fun footer(selected: Int, visible: Int, total: Int, all: Boolean) = main {
-            assertEquals(context.getString(if (all) R.string.import_unselect_results
-                else R.string.import_select_results, selected, visible, total),
-                view<TextView>(R.id.tv_footer_left).text.toString())
-        }
-
-        fun click(id: Int) { main { assertTrue(view<View>(id).performClick()) } }
-
-        fun rowClick(position: Int, id: Int) {
-            await("Filtered row $position is not laid out") {
-                main { view<RecyclerView>(R.id.recycler_view).let {
-                    !it.hasPendingAdapterUpdates() && it.findViewHolderForAdapterPosition(position) != null
-                } }
-            }
-            main { view<RecyclerView>(R.id.recycler_view)
-                .findViewHolderForAdapterPosition(position)!!.itemView.findViewById<View>(id).performClick() }
-        }
-
-        fun rejectStaleRowAfterQuery(query: String, originalIndex: Int) {
-            await("Initial row is not laid out") {
-                main { view<RecyclerView>(R.id.recycler_view).let {
-                    !it.hasPendingAdapterUpdates() && it.findViewHolderForAdapterPosition(0) != null
-                } }
-            }
-            main {
-                val holder = view<RecyclerView>(R.id.recycler_view).findViewHolderForAdapterPosition(0)!!
-                view<SearchView>(R.id.source_import_search).setQuery(query, false)
-                assertEquals(listOf(originalIndex), indices())
-                assertEquals(RecyclerView.NO_POSITION, holder.bindingAdapterPosition)
-                holder.itemView.findViewById<View>(R.id.cb_source_name).performClick()
-                holder.itemView.performClick()
-                holder.itemView.findViewById<View>(R.id.tv_open).performClick()
-                parent.childFragmentManager.executePendingTransactions()
-                assertTrue(parent.childFragmentManager.fragments.none { it is CodeDialog })
-            }
-            assertQuery(query, originalIndex)
-        }
-
-        fun menu(id: Int) {
-            val title = main { toolbar().menu.findItem(id).title.toString() }
-            main { toolbar().showOverflowMenu() }
-            await("Import overflow missing") { main { toolbar().isOverflowMenuShowing } }
-            onData(object : TypeSafeMatcher<Any>() {
-                override fun describeTo(description: Description) { description.appendText(title) }
-                override fun matchesSafely(item: Any) = item is MenuItem && item.itemId == id
-            }).inRoot(isPlatformPopup()).perform(click())
-        }
-
-        fun closeMenus() = main {
-            if (::parent.isInitialized) parent.view?.findViewById<Toolbar>(R.id.tool_bar)?.dismissPopupMenus()
-        }
-
-        fun open(position: Int, originalIndex: Int): CodeDialog {
-            rowClick(position, R.id.tv_open)
-            var code: CodeDialog? = null
-            await("Source code preview missing") {
-                main {
-                    code = parent.childFragmentManager.fragments.filterIsInstance<CodeDialog>().firstOrNull()
-                    code?.dialog?.window?.decorView?.hasWindowFocus() == true
-                }
-            }
-            return checkNotNull(code).also { main { assertEquals(originalIndex.toString(), it.requestId) } }
-        }
-
-        fun recreate() { scenario.recreate(); findParent(); awaitReady() }
-
-        fun awaitFinished() = await("Dismissed import host must finish") {
-            scenario.state == Lifecycle.State.DESTROYED
-        }
-
-        fun group(expected: String?, add: Boolean) = main {
-            assertEquals(expected, book.groupName)
-            assertEquals(add, book.isAddGroup)
-            val title = expected?.let { context.getString(R.string.diy_edit_source_group_title, it) }
-                ?.let { if (add) "+$it" else it } ?: context.getString(R.string.diy_source_group)
-            assertEquals(title, toolbar().menu.findItem(R.id.menu_new_group).title.toString())
-            assertEquals(AppConfig.importRememberGroup, toolbar().menu.findItem(R.id.menu_remember_source_group).isChecked)
-            assertNull(toolbar().menu.findItem(R.id.menu_remember_source_group).icon)
-            val menuIds = (0 until toolbar().menu.size()).map { toolbar().menu.getItem(it).itemId }
-            assertEquals(menuIds.indexOf(R.id.menu_show_comment) + 1,
-                menuIds.indexOf(R.id.menu_remember_source_group))
-        }
-
-        fun inspectGroupDialog(expected: String?, add: Boolean) {
-            onView(withId(R.id.menu_new_group)).inRoot(isDialog()).perform(click())
-            onView(withId(R.id.edit_view)).inRoot(isDialog()).check(matches(withText(expected.orEmpty())))
-            onView(withId(R.id.sw_add_group)).inRoot(isDialog()).check(matches(if (add) isChecked() else not(isChecked())))
-        }
-
-        fun setGroup(value: String, add: Boolean) {
-            val current = main { (book.groupName) to
-                (book.isAddGroup) }
-            inspectGroupDialog(current.first, current.second)
-            onView(withId(R.id.edit_view)).inRoot(isDialog()).perform(replaceText(value))
-            if (current.second != add) onView(withId(R.id.sw_add_group)).inRoot(isDialog()).perform(click())
-            onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
-            group(value, add)
-        }
-    }
-
-    private fun <T> main(action: () -> T): T {
-        var result: T? = null
-        instrumentation.runOnMainSync { result = action() }
-        @Suppress("UNCHECKED_CAST") return result as T
-    }
-
-    private fun await(message: String, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15_000
-        while (SystemClock.uptimeMillis() < deadline) {
+    private fun waitUntil(message: String, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + 20_000_000_000L
+        while (System.nanoTime() < deadline) {
             if (condition()) return
             SystemClock.sleep(50)
         }
         assertTrue(message, condition())
-    }
-
-    private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
-        checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
-            try {
-                File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
-                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-                }
-            } finally { bitmap.recycle() }
-        }
     }
 }

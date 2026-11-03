@@ -1,0 +1,19 @@
+syntax = "proto3";
+package legado.settings;
+option java_package = "io.legado.app.data.preferences.proto";
+option java_outer_classname = "CacheExportSettingsProto";
+// Generated with protoc 3.25.9 --proto_path=app/src/main/proto --java_out=lite:app/src/main/java app/src/main/proto/cache_export_settings.proto
+message CacheExportSettings {
+  uint32 schema_version = 1;
+  int32 format = 2;
+  string charset = 3;
+  optional bool use_replace = 4;
+  bool to_web_dav = 5;
+  bool omit_chapter_names = 6;
+  bool picture_files = 7;
+  bool parallel = 8;
+  bool custom_sections = 9;
+  string file_name_script = 10;
+  string episode_name_script = 11;
+  string directory = 12;
+}

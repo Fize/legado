@@ -25,26 +25,24 @@ fun Context.getSharedPreferences(
     fileName: String
 ): SharedPreferences? {
     try {
-        // 获取 ContextWrapper对象中的mBase变量。该变量保存了 ContextImpl 对象
         val fieldMBase = ContextWrapper::class.java.getDeclaredField("mBase")
         fieldMBase.isAccessible = true
-        // 获取 mBase变量
-        val objMBase = fieldMBase.get(this)
-        // 获取 ContextImpl。mPreferencesDir变量，该变量保存了数据文件的保存路径
-        val fieldMPreferencesDir = objMBase.javaClass.getDeclaredField("mPreferencesDir")
+        var preferencesContext = this
+        while (preferencesContext is ContextWrapper) {
+            val base = fieldMBase.get(preferencesContext) as? Context ?: break
+            if (base === preferencesContext) break
+            preferencesContext = base
+        }
+        val fieldMPreferencesDir = preferencesContext.javaClass.getDeclaredField("mPreferencesDir")
         fieldMPreferencesDir.isAccessible = true
-        // 创建自定义路径
         val file = File(dir)
-        // SharedPreferences resolves and caches the file while this field points at the
-        // requested directory. Restore it immediately so unrelated preferences keep using
-        // the application's normal shared_prefs directory.
-        return synchronized(objMBase.javaClass) {
-            val originalPreferencesDir = fieldMPreferencesDir.get(objMBase)
-            fieldMPreferencesDir.set(objMBase, file)
+        return synchronized(preferencesContext.javaClass) {
+            val originalPreferencesDir = fieldMPreferencesDir.get(preferencesContext)
+            fieldMPreferencesDir.set(preferencesContext, file)
             try {
-                getSharedPreferences(fileName, Activity.MODE_PRIVATE)
+                preferencesContext.getSharedPreferences(fileName, Activity.MODE_PRIVATE)
             } finally {
-                fieldMPreferencesDir.set(objMBase, originalPreferencesDir)
+                fieldMPreferencesDir.set(preferencesContext, originalPreferencesDir)
             }
         }
     } catch (e: NoSuchFieldException) {

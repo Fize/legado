@@ -1,5 +1,6 @@
 package io.legado.app.ui.qrcode
 
+import android.os.Bundle
 import com.google.zxing.Result
 import com.king.camera.scan.AnalyzeResult
 import com.king.camera.scan.CameraScan
@@ -27,7 +28,10 @@ class QrCodeFragment : BarcodeCameraScanFragment() {
 
     override fun onScanResultCallback(result: AnalyzeResult<Result>) {
         cameraScan.setAnalyzeImage(false)
-        (activity as? QrCodeActivity)?.onScanResultCallback(result.result)
+        parentFragmentManager.setFragmentResult(
+            QR_SCAN_RESULT_REQUEST,
+            Bundle().apply { putString(QR_SCAN_RESULT_TEXT, result.result.text) },
+        )
     }
 
 }

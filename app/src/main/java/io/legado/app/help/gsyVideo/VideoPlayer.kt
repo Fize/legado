@@ -361,7 +361,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
                 }
             )
             addView(
-                moe.codeest.enviews.ENDownloadView(ctx).apply {
+                moe.codeest.enviews.ENDownloadView(ctx, null).apply {
                     id = R.id.loading
                     layoutParams = android.widget.RelativeLayout.LayoutParams(dp(28f), dp(28f)).apply {
                         addRule(android.widget.RelativeLayout.CENTER_HORIZONTAL)
@@ -432,7 +432,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
                 )
             } else {
                 addView(
-                    moe.codeest.enviews.ENPlayView(ctx).apply {
+                    moe.codeest.enviews.ENPlayView(ctx, null).apply {
                         id = R.id.start
                         layoutParams = android.widget.RelativeLayout.LayoutParams(dp(60f), dp(60f)).apply {
                             addRule(android.widget.RelativeLayout.CENTER_HORIZONTAL)
@@ -580,6 +580,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     override fun onVideoPause() {
         super.onVideoPause()
+        VideoPlay.saveRead()
         danmakuOnPause()
     }
     fun danmakuOnPause() {
@@ -883,9 +884,15 @@ class VideoPlayer: StandardGSYVideoPlayer {
         actionBar: Boolean,
         statusBar: Boolean
     ): VideoPlayer? {
+        val pendingSeek = seekOnStart
         val gsyBaseVideoPlayer = super.startWindowFullscreen(context, actionBar, statusBar)
         if (gsyBaseVideoPlayer != null) {
             val gsyVideoPlayer = gsyBaseVideoPlayer as VideoPlayer
+            // The library's fullscreen clone does not copy a seek that is waiting for preparation.
+            if (pendingSeek > 0) {
+                gsyVideoPlayer.seekOnStart = pendingSeek
+                seekOnStart = 0
+            }
             //对弹幕设置偏移记录
 //            gsyVideoPlayer.mDanmakuView = this.mDanmakuView
             gsyVideoPlayer.mDanmakuStartSeekPosition = this.getCurrentPositionWhenPlaying()

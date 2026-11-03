@@ -95,10 +95,10 @@ class ManagePopupActionMigrationTest {
         assertContains("SourceLoginDialog.kt", sourceLogin, "painterResource(R.drawable.ic_clear_all)")
         assertContains("SourceLoginDialog.kt", sourceLogin, "painterResource(R.drawable.ic_history)")
 
-        val appLog = readProjectFile("src/main/java/io/legado/app/ui/about/AppLogDialog.kt")
-        assertContains("AppLogDialog.kt", appLog, "LegadoTopAppBar(")
-        assertContains("AppLogDialog.kt", appLog, "iconRes = R.drawable.ic_clear_all")
-        assertContains("AppLogDialog.kt", appLog, "iconRes = R.drawable.ic_export")
+        val appLog = readProjectFile("src/main/java/io/legado/app/ui/about/AppLogScreen.kt")
+        assertContains("AppLogScreen.kt", appLog, "LegadoTopAppBar(")
+        assertContains("AppLogScreen.kt", appLog, "R.drawable.ic_clear_all")
+        assertContains("AppLogScreen.kt", appLog, "R.drawable.ic_export")
 
         val crashLog = readProjectFile("src/main/java/io/legado/app/ui/about/CrashLogsDialog.kt")
         assertContains("CrashLogsDialog.kt", crashLog, "LegadoTopAppBar(")
@@ -117,7 +117,7 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `management screens use Compose DropdownMenu`() {
-        listOf(RULE_SUB_ACTIVITY, REPLACE_RULE_ACTIVITY, TXT_TOC_RULE_ACTIVITY).forEach { path ->
+        listOf(RULE_SUB_SCREEN, REPLACE_RULE_ACTIVITY, TXT_TOC_RULE_ACTIVITY).forEach { path ->
             val source = readProjectFile(path)
             assertFalse("$path should not import PopupMenu", source.contains("import android.widget.PopupMenu"))
             assertFalse("$path should not import AppCompat PopupMenu", source.contains("import androidx.appcompat.widget.PopupMenu"))
@@ -128,20 +128,18 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `management menu actions keep their current callbacks and side effects`() {
-        assertActions(RULE_SUB_ACTIVITY, "delSubscription(item)")
+        assertActions(RULE_SUB_SCREEN, "viewModel.delete(item)")
         assertActions(
             REPLACE_RULE_ACTIVITY,
-            "toTop(item)",
-            "toBottom(item)",
-            "delete(item)",
-            "selectedIdsState = selectedIdsState - item.id"
+            "onTop = { viewModel.moveToTop(rule) }",
+            "onBottom = { viewModel.moveToBottom(rule) }",
+            "deleteTargets = listOf(rule)"
         )
         assertActions(
             TXT_TOC_RULE_ACTIVITY,
-            "toTop(source)",
-            "toBottom(source)",
-            "del(source)",
-            "selectedIdsState = selectedIdsState - source.id"
+            "onTop()",
+            "onBottom()",
+            "onDelete()"
         )
     }
 
@@ -156,7 +154,7 @@ class ManagePopupActionMigrationTest {
             )
         }
         assertOrdered(
-            RULE_SUB_ACTIVITY,
+            RULE_SUB_SCREEN,
             "stringResource(R.string.delete)"
         )
     }
@@ -187,8 +185,8 @@ class ManagePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val RULE_SUB_ACTIVITY = "src/main/java/io/legado/app/ui/rulesub/RuleSubActivity.kt"
-        const val REPLACE_RULE_ACTIVITY = "src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt"
-        const val TXT_TOC_RULE_ACTIVITY = "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleActivity.kt"
+        const val RULE_SUB_SCREEN = "src/main/java/io/legado/app/ui/rulesub/RuleSubScreen.kt"
+        const val REPLACE_RULE_ACTIVITY = "src/main/java/io/legado/app/ui/replace/ReplaceRuleScreen.kt"
+        const val TXT_TOC_RULE_ACTIVITY = "src/main/java/io/legado/app/ui/book/toc/rule/TextTocRuleScreen.kt"
     }
 }

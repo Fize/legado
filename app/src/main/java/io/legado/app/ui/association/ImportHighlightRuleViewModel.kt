@@ -1,190 +1,78 @@
 package io.legado.app.ui.association
 
-import android.app.Application
-import androidx.core.net.toUri
-import androidx.lifecycle.MutableLiveData
-import com.google.gson.JsonObject
-import com.google.gson.JsonElement
-import io.legado.app.R
-import io.legado.app.base.BaseViewModel
-import io.legado.app.constant.AppLog
-import io.legado.app.data.appDb
-import io.legado.app.data.entities.HighlightRule
-import io.legado.app.data.entities.HighlightRuleFile
-import io.legado.app.model.ReadBook
-import io.legado.app.utils.GSON
-import io.legado.app.utils.GSONStrict
-import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.readText
-import splitties.init.appCtx
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import io.legado.app.data.dao.HighlightImportChoice
+import io.legado.app.data.repository.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
+import javax.inject.Inject
 
-internal enum class HighlightRuleImportStatus {
-    NEW,
-    UPDATE,
-    EXISTING
-}
-
-internal data class HighlightRuleImportItem(
-    val rule: HighlightRule,
-    val status: HighlightRuleImportStatus
-)
-
-internal fun parseHighlightRuleFile(text: String): List<HighlightRule> {
-    val parsed = GSONStrict.fromJsonObject<JsonElement>(text).getOrThrow()
-    val root = if (parsed.isJsonArray) {
-        parsed.asJsonArray.forEach { element ->
-            require(element.isJsonObject)
-            val rule = element.asJsonObject
-            require(rule.has("pattern") && rule.has("style") && rule.has("uuid"))
-            require(!rule.has("replacement"))
-        }
-        JsonObject().apply {
-            addProperty("type", HighlightRuleFile.TYPE)
-            add("rules", parsed)
-        }
-    } else {
-        require(parsed.isJsonObject)
-        parsed.asJsonObject
+@HiltViewModel
+class ImportHighlightRuleViewModel @Inject constructor(private val repository: HighlightRuleImportRepository): ViewModel() {
+    private val mutableState=MutableStateFlow(HighlightRuleImportUiState())
+    val uiState=mutableState.asStateFlow()
+    private val owner=UUID.randomUUID().toString()
+    private val epoch=HighlightManagerOwnership.next()
+    private val mutex=Mutex()
+    private var id: String?=null
+    private var revision=0L
+    private var source: String?=null
+    private var parentManagerId: String?=null
+    private var loadJob: Job?=null
+    private fun accept(value: HighlightImportOwned) {
+        revision=value.session.revision
+        mutableState.update { it.copy(items=value.choices,loading=false,completed=value.session.phase in listOf("completed","cancelled"),
+            error=if(value.session.phase=="failed") true else it.error) }
     }
-    val rules = root.get("rules")
-    require(rules != null && rules.isJsonArray)
-    rules.asJsonArray.forEach { element ->
-        require(element.isJsonObject)
-        val rule = element.asJsonObject
-        val uuid = rule.get("uuid")
-        require(
-            uuid != null && !uuid.isJsonNull &&
-                uuid.isJsonPrimitive && uuid.asJsonPrimitive.isString
-        )
-        listOf("name", "pattern", "style").forEach { field ->
-            rule.get(field)?.let { value ->
-                require(value.isJsonPrimitive && value.asJsonPrimitive.isString)
-            }
-        }
-        rule.get("scope")?.let { value ->
-            require(
-                value.isJsonNull ||
-                    value.isJsonPrimitive && value.asJsonPrimitive.isString
-            )
-        }
-        listOf("isRegex", "isEnabled", "applyToTitle", "applyToBody").forEach { field ->
-            rule.get(field)?.let { value ->
-                require(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean)
-            }
-        }
-        listOf("id", "timeoutMillisecond").forEach { field ->
-            rule.get(field)?.let { value ->
-                require(
-                    value.isJsonPrimitive && value.asJsonPrimitive.isNumber &&
-                        runCatching { value.asBigDecimal.longValueExact() }.isSuccess
-                )
-            }
-        }
-        rule.get("order")?.let { value ->
-            require(
-                value.isJsonPrimitive && value.asJsonPrimitive.isNumber &&
-                    runCatching { value.asBigDecimal.intValueExact() }.isSuccess
-            )
-        }
+    fun load(requestId: String,source: String,parentManagerId: String?=null) {
+        if(id!=null) return
+        id=requestId; this.source=source; this.parentManagerId=parentManagerId
+        loadJob=viewModelScope.launch { mutex.withLock {
+            try { accept(repository.open(requestId,source,owner,epoch,parentManagerId)) }
+            catch(cancelled: CancellationException) { throw cancelled }
+            catch(_: Exception) { mutableState.update { it.copy(loading=false,error=true) } }
+        } }
     }
-    return validateHighlightRuleFile(
-        GSONStrict.fromJson(root, HighlightRuleFile::class.java)
-    )
-}
-
-internal fun validateHighlightRuleFile(file: HighlightRuleFile): List<HighlightRule> {
-    require(file.type == HighlightRuleFile.TYPE)
-    val rules = file.rules ?: error("Missing rules")
-    val uuids = hashSetOf<String>()
-    return rules.map { nullableRule ->
-        val rule = nullableRule ?: error("Invalid rule")
-        @Suppress("USELESS_CAST")
-        val rawUuid = (rule.uuid as String?).orEmpty()
-        val uuid = UUID.fromString(rawUuid).toString()
-        require(uuid.equals(rawUuid, ignoreCase = true))
-        require(uuids.add(uuid))
-        rule.uuid = uuid
-        rule.scope = rule.scope?.ifBlank { null }
-        rule.normalizeForRestore()
-        require(rule.isValid())
-        rule
+    private fun operation(block: suspend (String) -> Unit) {
+        val key=id ?: return
+        if(uiState.value.loading || uiState.value.importing || uiState.value.completed) return
+        mutableState.update { it.copy(importing=true,error=false) }
+        viewModelScope.launch { mutex.withLock {
+            try { block(key) }
+            catch(cancelled: CancellationException) { throw cancelled }
+            catch(_: Exception) { mutableState.update { it.copy(error=true) } }
+            finally { mutableState.update { it.copy(importing=false) } }
+        } }
     }
-}
-
-internal fun compareImportedHighlightRules(
-    imported: List<HighlightRule>,
-    local: List<HighlightRule>
-): List<HighlightRuleImportItem> {
-    val localByUuid = local.associateBy { it.uuid.lowercase() }
-    return imported.map { rule ->
-        val existing = localByUuid[rule.uuid.lowercase()]
-        val status = when {
-            existing == null -> HighlightRuleImportStatus.NEW
-            GSON.toJsonTree(existing.copy(id = 0L, order = 0)) ==
-                GSON.toJsonTree(rule.copy(id = 0L, order = 0)) ->
-                HighlightRuleImportStatus.EXISTING
-            else -> HighlightRuleImportStatus.UPDATE
-        }
-        HighlightRuleImportItem(rule, status)
-    }
-}
-
-class ImportHighlightRuleViewModel(app: Application) : BaseViewModel(app) {
-
-    val errorLiveData = MutableLiveData<String>()
-    val successLiveData = MutableLiveData<Int>()
-    val importingLiveData = MutableLiveData(false)
-    val importSuccessLiveData = MutableLiveData(false)
-    internal val items = arrayListOf<HighlightRuleImportItem>()
-    val selectStatus = arrayListOf<Boolean>()
-    private var loadStarted = false
-
-    val isSelectAll: Boolean
-        get() = selectStatus.isNotEmpty() && selectStatus.all { it }
-
-    val selectCount: Int
-        get() = selectStatus.count { it }
-
-    fun load(source: String) {
-        if (loadStarted) return
-        loadStarted = true
-        execute {
-            val text = source.toUri().readText(appCtx)
-            val comparison = compareImportedHighlightRules(
-                parseHighlightRuleFile(text),
-                appDb.highlightRuleDao.all
-            )
-            items.clear()
-            items.addAll(comparison)
-            selectStatus.clear()
-            selectStatus.addAll(comparison.map { it.status != HighlightRuleImportStatus.EXISTING })
-        }.onError {
-            val message = context.getString(R.string.wrong_format)
-            errorLiveData.postValue(message)
-            AppLog.put("ImportHighlightRuleError:${it.localizedMessage}", it)
-        }.onSuccess {
-            successLiveData.postValue(items.size)
-        }
-    }
-
+    fun toggle(uuid: String,selected: Boolean)=operation { accept(repository.select(it,owner,++revision,uuid,selected)) }
+    fun selectAll(selected: Boolean)=operation { accept(repository.select(it,owner,++revision,null,selected)) }
+    fun retry()=operation { accept(repository.retry(it,owner)) }
     fun importSelected() {
-        if (importingLiveData.value == true) return
-        val selected = items.mapIndexedNotNull { index, item ->
-            item.rule.takeIf { selectStatus[index] }
-        }
-        if (selected.isEmpty()) return
-        importingLiveData.value = true
-        execute {
-            appDb.highlightRuleDao.importRules(selected)
-        }.onError {
-            errorLiveData.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
-            importingLiveData.postValue(false)
-        }.onSuccess {
-            ReadBook.upHighlightRules()
-            importSuccessLiveData.postValue(true)
+        if(uiState.value.selectedCount==0) return
+        operation { accept(repository.finish(it,owner,true)) }
+    }
+    fun cancel() {
+        val key=id ?: return
+        val input=source ?: return
+        if(uiState.value.completed) return
+        loadJob?.cancel()
+        mutableState.update { it.copy(importing=true) }
+        viewModelScope.launch {
+            try { accept(repository.cancel(key,input,owner,epoch,parentManagerId)) }
+            catch(cancelled: CancellationException) { throw cancelled }
+            catch(_: Exception) { mutableState.update { it.copy(error=true) } }
+            finally { mutableState.update { it.copy(completed=true,importing=false,loading=false) } }
         }
     }
+}
+
+data class HighlightRuleImportUiState(val items: List<HighlightImportChoice> = emptyList(),
+    val loading: Boolean=true,val importing: Boolean=false,val error: Boolean=false,val completed: Boolean=false) {
+    val selectedCount get()=items.count { it.selected }
+    val isSelectAll get()=items.isNotEmpty() && selectedCount==items.size
 }

@@ -6,6 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -28,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -79,28 +82,28 @@ class CheckSourceConfig : BaseDialogFragment() {
                     val barContent = Color(context.primaryTextColor)
                     val accent = remember(context) { Color(context.accentColor) }
 
-                    var timeoutText by remember {
+                    var timeoutText by rememberSaveable {
                         mutableStateOf((CheckSource.timeout / 1000).toString())
                     }
-                    var wSourceCommentState by remember {
+                    var wSourceCommentState by rememberSaveable {
                         mutableStateOf(CheckSource.wSourceComment)
                     }
-                    var checkDomainState by remember {
+                    var checkDomainState by rememberSaveable {
                         mutableStateOf(CheckSource.checkDomain)
                     }
-                    var checkSearchState by remember {
+                    var checkSearchState by rememberSaveable {
                         mutableStateOf(CheckSource.checkSearch)
                     }
-                    var checkDiscoveryState by remember {
+                    var checkDiscoveryState by rememberSaveable {
                         mutableStateOf(CheckSource.checkDiscovery)
                     }
-                    var checkInfoState by remember {
+                    var checkInfoState by rememberSaveable {
                         mutableStateOf(CheckSource.checkInfo)
                     }
-                    var checkCategoryState by remember {
+                    var checkCategoryState by rememberSaveable {
                         mutableStateOf(CheckSource.checkCategory)
                     }
-                    var checkContentState by remember {
+                    var checkContentState by rememberSaveable {
                         mutableStateOf(CheckSource.checkContent)
                     }
 
@@ -129,7 +132,9 @@ class CheckSourceConfig : BaseDialogFragment() {
 
                         Column(
                             modifier = Modifier
+                                .weight(1f, fill = false)
                                 .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
@@ -232,47 +237,48 @@ class CheckSourceConfig : BaseDialogFragment() {
                                 )
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(onClick = { dismiss() }) {
-                                    Text(stringResource(R.string.cancel), color = accent)
-                                }
-                                TextButton(
-                                    onClick = {
-                                        val text = timeoutText.trim()
-                                        when {
-                                            text.isBlank() -> {
-                                                toastOnUi("${getString(R.string.timeout)}${getString(R.string.cannot_empty)}")
-                                                return@TextButton
-                                            }
+                        }
 
-                                            (text.toLongOrNull() ?: 0L) <= minTimeout -> {
-                                                toastOnUi(
-                                                    "${getString(R.string.timeout)}${getString(R.string.less_than)}${minTimeout}${
-                                                        getString(R.string.seconds)
-                                                    }"
-                                                )
-                                                return@TextButton
-                                            }
-
-                                            else -> CheckSource.timeout = text.toLong() * 1000
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { dismiss() }) {
+                                Text(stringResource(R.string.cancel), color = accent)
+                            }
+                            TextButton(
+                                onClick = {
+                                    val text = timeoutText.trim()
+                                    when {
+                                        text.isBlank() -> {
+                                            toastOnUi("${getString(R.string.timeout)}${getString(R.string.cannot_empty)}")
+                                            return@TextButton
                                         }
-                                        CheckSource.wSourceComment = wSourceCommentState
-                                        CheckSource.checkDomain = checkDomainState
-                                        CheckSource.checkSearch = checkSearchState
-                                        CheckSource.checkDiscovery = checkDiscoveryState
-                                        CheckSource.checkInfo = checkInfoState
-                                        CheckSource.checkCategory = checkCategoryState
-                                        CheckSource.checkContent = checkContentState
-                                        CheckSource.putConfig()
-                                        putPrefString(PreferKey.checkSource, CheckSource.summary)
-                                        dismiss()
+
+                                        (text.toLongOrNull() ?: 0L) <= minTimeout -> {
+                                            toastOnUi(
+                                                "${getString(R.string.timeout)}${getString(R.string.less_than)}${minTimeout}${
+                                                    getString(R.string.seconds)
+                                                }"
+                                            )
+                                            return@TextButton
+                                        }
+
+                                        else -> CheckSource.timeout = text.toLong() * 1000
                                     }
-                                ) {
-                                    Text(stringResource(R.string.ok), color = accent)
+                                    CheckSource.wSourceComment = wSourceCommentState
+                                    CheckSource.checkDomain = checkDomainState
+                                    CheckSource.checkSearch = checkSearchState
+                                    CheckSource.checkDiscovery = checkDiscoveryState
+                                    CheckSource.checkInfo = checkInfoState
+                                    CheckSource.checkCategory = checkCategoryState
+                                    CheckSource.checkContent = checkContentState
+                                    CheckSource.putConfig()
+                                    putPrefString(PreferKey.checkSource, CheckSource.summary)
+                                    dismiss()
                                 }
+                            ) {
+                                Text(stringResource(R.string.ok), color = accent)
                             }
                         }
                     }

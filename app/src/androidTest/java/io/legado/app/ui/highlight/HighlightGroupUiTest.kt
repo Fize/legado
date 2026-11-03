@@ -3,77 +3,42 @@ package io.legado.app.ui.highlight
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
-import android.content.ClipboardManager
-import android.content.Context
 import android.graphics.Bitmap
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
-import android.view.PixelCopy
-import android.view.View
-import android.view.ViewGroup
-import android.view.Window
-import android.view.inspector.WindowInspector
-import android.widget.ListView
-import android.widget.NumberPicker
-import android.widget.TextView
-import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
-import androidx.test.espresso.action.ViewActions.replaceText
-import androidx.test.espresso.action.ViewActions.scrollTo
-import androidx.test.espresso.action.ViewActions.pressBack as backAction
-import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.ViewMatchers.hasSibling
-import androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
-import fi.iki.elonen.NanoHTTPD
 import io.legado.app.R
-import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.HighlightRuleFile
-import io.legado.app.databinding.ItemHighlightRuleBinding
-import io.legado.app.help.IntentData
-import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.HighlightStyle
-import io.legado.app.ui.file.HandleFileActivity
-import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.TitleBar
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.HighlightRuleRoute
 import io.legado.app.utils.GSON
-import io.legado.app.utils.defaultSharedPreferences
-import org.hamcrest.Matchers.allOf
-import org.junit.After
+import org.junit.*
 import org.junit.Assert.*
-import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
-import java.net.URL
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(AndroidJUnit4::class)
-@SdkSuppress(minSdkVersion = 29)
 class HighlightGroupUiTest {
+    @get:Rule
+    val composeRule = createEmptyComposeRule()
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val dao = appDb.highlightRuleDao
     private val namedUngrouped = context.getString(R.string.no_group)
     private var savedRules = emptyList<HighlightRule>()
-    private var scenario: ActivityScenario<HighlightRuleActivity>? = null
+    private var scenario: ActivityScenario<AppActivity>? = null
+    private val artifacts=HighlightManagerArtifacts()
     private val fixtures = listOf(
         HighlightRule(name = "Alice", pattern = "Alice", group = "Characters", order = 0).apply {
             applyStyle(HighlightStyle(fill = 0xFF209050.toInt(),
@@ -89,131 +54,75 @@ class HighlightGroupUiTest {
         savedRules = dao.all
         dao.deleteAll()
         dao.insert(*fixtures.toTypedArray())
-        scenario = ActivityScenario.launch(HighlightRuleActivity::class.java)
+        scenario = ActivityScenario.launch(AppActivity.startIntent(context, HighlightRuleRoute))
         awaitRules(dao.all)
     }
 
     @After fun cleanUp() {
-        scenario?.close()
+        scenario?.close(); artifacts.cleanup()
+        val fixtureUuids=fixtures.map { it.uuid }.toSet()
+        dao.all.filter { it.uuid in fixtureUuids }.forEach { rule ->
+            appDb.openHelper.writableDatabase.execSQL("DELETE FROM highlight_rule_drafts WHERE ruleId = ?",arrayOf(rule.id))
+        }
         dao.deleteAll()
         if (savedRules.isNotEmpty()) dao.insert(*savedRules.toTypedArray())
     }
 
-    @Test fun fontSizeAndNegativeSpacingPersistAndResetThroughTheActualStyleDialog() {
+    @Test fun fontSizeAndNegativeSpacingPersistAndResetThroughTheActualComposeEditor() {
         fun openStyle() {
-            onView(allOf(withId(R.id.iv_edit), hasSibling(withText("[Characters] Alice")))).perform(click())
-            await {
-                var loaded = false
-                instrumentation.runOnMainSync {
-                    loaded = WindowInspector.getGlobalWindowViews().any {
-                        it.hasWindowFocus() && it.findViewById<View>(R.id.btn_ok)?.isEnabled == true
-                    }
-                }
-                loaded
-            }
-            onView(withId(R.id.btn_style)).inRoot(isDialog()).perform(click())
-            instrumentation.runOnMainSync {
-                val sheet = WindowInspector.getGlobalWindowViews().single { it.hasWindowFocus() }
-                    .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-                com.google.android.material.bottomsheet.BottomSheetBehavior.from(sheet).state =
-                    com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-            }
-            await {
-                var expanded = false
-                instrumentation.runOnMainSync {
-                    val sheet = WindowInspector.getGlobalWindowViews().single { it.hasWindowFocus() }
-                        .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-                    expanded = com.google.android.material.bottomsheet.BottomSheetBehavior.from(sheet).state ==
-                        com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-                }
-                expanded
-            }
+            composeRule.onNodeWithTag("highlightRuleEdit:${fixtures.first().uuid}").performClick()
+            await { composeRule.onAllNodesWithTag("highlightRuleEditStyle").fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithTag("highlightRuleEditSave").assertIsEnabled()
+            composeRule.onNodeWithTag("highlightRuleEditStyle").performScrollTo().performClick()
         }
-        fun edit(id: Int, value: Int?) {
-            onView(withId(id)).inRoot(isDialog()).perform(scrollTo(), click())
-            if (value != null) instrumentation.runOnMainSync {
-                val picker = WindowInspector.getGlobalWindowViews().single { it.hasWindowFocus() }
-                    .findViewById<NumberPicker>(R.id.number_picker)
-                picker.value = value
-                if (id == R.id.tv_highlight_letter_spacing) assertEquals("-20%", picker.displayedValues[value])
-            }
-            onView(withId(if (value == null) android.R.id.button3 else android.R.id.button1))
-                .inRoot(isDialog()).perform(click())
+        fun progress(tag: String,value: Float) {
+            composeRule.onNodeWithTag(tag).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(value)) }
+            composeRule.waitForIdle()
+            assertEquals(value,composeRule.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current,0.0001f)
         }
         fun save() {
-            onView(withId(R.id.tv_highlight_font_size)).inRoot(isDialog()).perform(backAction())
-            onView(withId(R.id.btn_ok)).inRoot(isDialog()).perform(click())
+            composeRule.onNodeWithTag("highlightRuleEditSave").performClick()
+            await { composeRule.onAllNodesWithTag("highlight_rule_editor").fetchSemanticsNodes().isEmpty() }
         }
         openStyle()
-        edit(R.id.tv_highlight_font_size, 42)
-        edit(R.id.tv_highlight_letter_spacing, 30)
+        composeRule.onNodeWithTag("annotation_font_size_toggle").performScrollTo().performClick()
+        progress("annotation_font_size",42f)
+        composeRule.onNodeWithTag("annotation_letter_spacing_toggle").performScrollTo().performClick()
+        progress("annotation_letter_spacing",-0.2f)
         screenshot("highlight-font-metrics-settings")
         save()
-        await { dao.all.first().styleObj().let { it.fontSize == 42f && it.letterSpacing == -0.2f } }
-        scenario!!.recreate()
-        awaitRules(dao.all)
-        openStyle()
-        onView(withId(R.id.tv_highlight_font_size)).inRoot(isDialog()).perform(scrollTo())
-            .check(matches(withText(context.getString(R.string.text_size) + " · 42")))
-        edit(R.id.tv_highlight_font_size, null)
-        edit(R.id.tv_highlight_letter_spacing, null)
+        await { dao.all.first().styleObj().let { it.fontSize==42f && it.letterSpacing==-0.2f } }
+        scenario!!.recreate(); awaitRules(dao.all); openStyle()
+        composeRule.onNodeWithTag("annotation_font_size_toggle").performScrollTo().performClick()
+        composeRule.onNodeWithTag("annotation_letter_spacing_toggle").performScrollTo().performClick()
         save()
-        await { dao.all.first().styleObj().let { it.fontSize == null && it.letterSpacing == null } }
+        await { dao.all.first().styleObj().let { it.fontSize==null && it.letterSpacing==null } }
     }
 
-    @Test fun pillMarginEditsPersistAndResetThroughTheActualStyleDialog() {
-        fun margin(value: Int) = context.getString(R.string.highlight_pill_padding_value, value)
+    @Test fun pillMarginEditsPersistAndResetThroughTheActualComposeEditor() {
         fun openStyle() {
-            onView(allOf(withId(R.id.iv_edit), hasSibling(withText("[Characters] Alice"))))
-                .perform(click())
-            await {
-                var loaded = false
-                instrumentation.runOnMainSync {
-                    loaded = WindowInspector.getGlobalWindowViews().any {
-                        it.hasWindowFocus() && it.findViewById<View>(R.id.btn_ok)?.isEnabled == true
-                    }
-                }
-                loaded
-            }
-            onView(withId(R.id.btn_style)).inRoot(isDialog()).perform(click())
+            composeRule.onNodeWithTag("highlightRuleEdit:${fixtures.first().uuid}").performClick()
+            await { composeRule.onAllNodesWithTag("highlightRuleEditStyle").fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithTag("highlightRuleEditStyle").performScrollTo().performClick()
         }
         fun saveStyle() {
-            onView(withText(R.string.highlight_bg_color)).inRoot(isDialog()).perform(backAction())
-            onView(withId(R.id.btn_ok)).inRoot(isDialog()).perform(click())
+            composeRule.onNodeWithTag("highlightRuleEditSave").performClick()
+            await { composeRule.onAllNodesWithTag("highlight_rule_editor").fetchSemanticsNodes().isEmpty() }
         }
         openStyle()
-        onView(withText(margin(125))).inRoot(isDialog()).perform(click())
-        instrumentation.runOnMainSync {
-            val picker = WindowInspector.getGlobalWindowViews().single { it.hasWindowFocus() }
-                .findViewById<NumberPicker>(R.id.number_picker)
-            assertEquals(25, picker.minValue)
-            assertEquals(200, picker.maxValue)
-            picker.value = 150
-        }
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
-        onView(withText(margin(150))).inRoot(isDialog()).check(matches(isDisplayed()))
-        onView(withText(R.string.highlight_bg_color)).inRoot(isDialog()).perform(click(), click())
-        onView(withText(margin(150))).inRoot(isDialog()).check(matches(isDisplayed()))
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        try {
-            File(context.getExternalFilesDir("ui-regression"), "highlight-pill-margin-settings.png")
-                .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        } finally { bitmap.recycle() }
-        saveStyle()
-        await { dao.all.first().styleObj().resolvedPillPaddingScale == 1.5f }
-        scenario!!.recreate()
-        awaitRules(dao.all)
-        openStyle()
-        onView(withText(margin(150))).inRoot(isDialog()).perform(click())
-        onView(withId(android.R.id.button3)).inRoot(isDialog()).perform(click())
-        onView(withText(margin(100))).inRoot(isDialog()).check(matches(isDisplayed()))
-        saveStyle()
-        await { dao.all.first().styleObj().pillPaddingScale == null }
+        composeRule.onNodeWithTag("annotation_pill_padding").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(150f)) }
+        composeRule.onNodeWithTag("annotation_fill").performScrollTo().performClick()
+        composeRule.onNodeWithTag("annotation_fill").performScrollTo().performClick()
+        composeRule.onNodeWithTag("annotation_pill_padding").performScrollTo()
+        screenshot("highlight-pill-margin-settings")
+        saveStyle(); await { dao.all.first().styleObj().resolvedPillPaddingScale==1.5f }
+        scenario!!.recreate(); awaitRules(dao.all); openStyle()
+        composeRule.onNodeWithTag("annotation_pill_padding_reset").performScrollTo().performClick()
+        saveStyle(); await { dao.all.first().styleObj().pillPaddingScale==null }
     }
 
     @Test fun filterRenameMoveAndDeleteUseRealDialogsAndPreserveOtherRules() {
-        onView(withContentDescription(androidx.appcompat.R.string.abc_action_menu_overflow_description))
-            .perform(click())
+        composeRule.onNodeWithTag("legadoTopAppBarOverflow").performClick()
         instrumentation.waitForIdleSync()
         val menuBitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
@@ -225,162 +134,178 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == "Characters" })
         screenshot("highlight-group-filter")
 
-        menu(R.id.menu_highlight_group_manage)
-        groupAction("Characters", R.id.tv_edit)
-        onView(withId(R.id.edit_view)).inRoot(isDialog())
-            .perform(replaceText("People"), closeSoftKeyboard())
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+        menu(R.string.highlight_rule_group_manage)
+        groupAction("Characters", edit = true)
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("People")
+        composeRule.onNodeWithText(activityString(R.string.ok)).performClick()
         awaitGroup("People")
         screenshot("highlight-group-manager")
-        pressBack()
+        closeGroupManager()
         // Renaming the active group must not leave a stale, empty filter behind.
         awaitRules(dao.all)
 
         filter("[People]")
         awaitRules(dao.all.filter { it.group == "People" })
-        menu(R.id.menu_highlight_group_manage)
-        groupAction("People", R.id.tv_del)
-        onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
+        menu(R.string.highlight_rule_group_manage)
+        groupAction("People", edit = false)
+        composeRule.onNodeWithTag("highlightGroupMove").performClick()
         // This is a real group named like the special ungrouped option.
         choose("[$namedUngrouped]")
         await { dao.all.count { it.group == namedUngrouped } == 3 }
         assertEquals("Quotes", dao.all.single { it.name == "Quote" }.group)
         assertNull(dao.all.single { it.name == "Loose rule" }.group)
-        pressBack()
+        closeGroupManager()
         awaitRules(dao.all)
 
         filter("[$namedUngrouped]")
         awaitRules(dao.all.filter { it.group == namedUngrouped })
-        menu(R.id.menu_highlight_group_manage)
-        groupAction(namedUngrouped, R.id.tv_del)
-        onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
-        choose(context.getString(R.string.no_group))
+        menu(R.string.highlight_rule_group_manage)
+        groupAction(namedUngrouped, edit = false)
+        composeRule.onNodeWithTag("highlightGroupMove").performClick()
+        choose(activityString(R.string.no_group))
         await { dao.all.count { it.group == null } == 4 }
-        pressBack()
+        closeGroupManager()
         awaitRules(dao.all)
-        filter(context.getString(R.string.no_group))
+        filter(activityString(R.string.no_group))
         awaitRules(dao.all.filter { it.group == null })
 
         filter("[Quotes]")
         awaitRules(dao.all.filter { it.group == "Quotes" })
-        menu(R.id.menu_highlight_group_manage)
-        groupAction("Quotes", R.id.tv_del)
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+        menu(R.string.highlight_rule_group_manage)
+        groupAction("Quotes", edit = false)
+        composeRule.onNodeWithTag("highlightManagerConfirm").performClick()
         await { dao.all.size == 4 }
         assertEquals(fixtures.filter { it.group != "Quotes" }.map { it.uuid }.toSet(),
             dao.all.map { it.uuid }.toSet())
-        pressBack()
+        closeGroupManager()
         awaitRules(dao.all)
         screenshot("highlight-group-after-move-delete")
     }
 
     @Test fun exportAllIncludesRulesHiddenByGroupFilter() {
-        filter("[Characters]")
-        awaitRules(dao.all.filter { it.group == "Characters" })
-        val launched = AtomicReference<Intent?>()
-        val monitor = object : Instrumentation.ActivityMonitor() {
+        filter("[Characters]"); awaitRules(dao.all.filter { it.group=="Characters" })
+        val root=File(context.filesDir,"highlight-rule-transfers")
+        val old=root.listFiles()?.map { it.name }?.toSet().orEmpty()
+        val launched=AtomicReference<Intent?>(); val payload=AtomicReference<String?>()
+        val monitor=object: Instrumentation.ActivityMonitor() {
             override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
-                if (intent.component?.className != HandleFileActivity::class.java.name) return null
+                if(intent.action!=Intent.ACTION_CREATE_DOCUMENT) return null
+                payload.set(root.listFiles()!!.single { it.name !in old && it.extension=="json" }.readText())
                 launched.set(intent)
-                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null)
             }
         }
         instrumentation.addMonitor(monitor)
         try {
-            menu(R.id.menu_export_all)
-            await { launched.get() != null }
-            val intent = launched.get()!!
-            assertEquals(HandleFileContract.EXPORT, intent.getIntExtra("mode", -1))
-            assertEquals("HighlightRules.json", intent.getStringExtra("fileName"))
-            val data = checkNotNull(IntentData.get<ByteArray>(intent.getStringExtra("fileKey")))
-            val exported = GSON.fromJson(data.toString(Charsets.UTF_8), HighlightRuleFile::class.java)
-            assertEquals(HighlightRuleFile.TYPE, exported.type)
-            assertEquals(fixtures.map { it.uuid }.toSet(), exported.rules!!.map { it!!.uuid }.toSet())
-            assertEquals(5, exported.rules!!.size)
-            onView(withText(R.string.export_success)).check(doesNotExist())
-        } finally {
-            instrumentation.removeMonitor(monitor)
+            menu(R.string.export_all); await { launched.get()!=null }
+            val intent=launched.get()!!
+            assertEquals("application/json",intent.type)
+            assertEquals("HighlightRules.json",intent.getStringExtra(Intent.EXTRA_TITLE))
+            assertFalse(intent.hasExtra("fileKey")); assertNull(intent.component)
+            val exported=GSON.fromJson(payload.get(),HighlightRuleFile::class.java)
+            assertEquals(HighlightRuleFile.TYPE,exported.type)
+            val rows=checkNotNull(exported.rules)
+            assertEquals(fixtures.map { it.uuid }.toSet(),rows.map { it!!.uuid }.toSet()); assertEquals(5,rows.size)
+            composeRule.onNodeWithTag("highlightExportSuccess").assertDoesNotExist()
+        } finally { instrumentation.removeMonitor(monitor) }
+    }
+
+    @Test fun exportingWritesTheDocumentBeforeSuccessAndRestoresTheReceipt() {
+        val target=File(context.filesDir,"highlight-document-${java.util.UUID.randomUUID()}.json")
+        target.writeText("before")
+        val uri=androidx.core.content.FileProvider.getUriForFile(context,io.legado.app.constant.AppConst.authority,target)
+        val monitor=object: Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                if(intent.action!=Intent.ACTION_CREATE_DOCUMENT) return null
+                return Instrumentation.ActivityResult(Activity.RESULT_OK,Intent().setData(uri))
+            }
         }
+        instrumentation.addMonitor(monitor)
+        try {
+            menu(R.string.export_all)
+            await { composeRule.onAllNodesWithTag("highlightExportSuccess").fetchSemanticsNodes().isNotEmpty() }
+            val exported=GSON.fromJson(target.readText(),HighlightRuleFile::class.java)
+            assertEquals(HighlightRuleFile.TYPE,exported.type)
+            assertEquals(fixtures.map { it.uuid }.toSet(),exported.rules!!.map { it!!.uuid }.toSet())
+            assertEquals(5,exported.rules!!.size)
+            scenario!!.recreate()
+            await { composeRule.onAllNodesWithTag("highlightExportSuccess").fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithText(uri.toString()).assertExists()
+            screenshot("highlight-export-success")
+            pressBack()
+            await { composeRule.onAllNodesWithTag("highlightExportSuccess").fetchSemanticsNodes().isEmpty() }
+        } finally { instrumentation.removeMonitor(monitor); target.delete() }
     }
 
     @Test fun importingGroupAndEnabledChangesRefreshesBothVisibleFields() {
         val changed = dao.all.first().copy(group = "Updated", isEnabled = false)
         dao.importRules(listOf(changed))
+        await { dao.all.first().let { rule -> rule.group == "Updated" && !rule.isEnabled } }
         awaitRules(dao.all)
         screenshot("highlight-group-import-refresh")
     }
 
-    private fun menu(id: Int) {
-        scenario!!.onActivity {
-            assertTrue(it.findViewById<TitleBar>(R.id.title_bar).menu.performIdentifierAction(id, 0))
-        }
+    private fun menu(titleRes: Int) {
+        composeRule.onNodeWithTag("legadoTopAppBarOverflow").performClick()
+        composeRule.onNodeWithText(activityString(titleRes)).performClick()
     }
 
-    private fun filter(label: String) {
-        menu(R.id.menu_highlight_group_filter)
-        choose(label)
+    private fun activityString(resId: Int): String {
+        lateinit var value: String
+        scenario!!.onActivity { value = it.getString(resId) }
+        return value
     }
 
+    private fun closeGroupManager() {
+        pressBack()
+        await { composeRule.onAllNodesWithTag("highlightGroupManager").fetchSemanticsNodes().isEmpty() }
+    }
+    private fun filter(label: String) { menu(R.string.highlight_rule_group_filter); choose(label) }
     private fun choose(label: String) {
-        fun hasChoice(view: View): Boolean {
-            if (view is ListView && (0 until view.count).any { view.getItemAtPosition(it).toString() == label }) {
-                return true
-            }
-            return view is ViewGroup && (0 until view.childCount).any { hasChoice(view.getChildAt(it)) }
-        }
-        // Room's first emission is asynchronous; wait for the actual focused list dialog.
-        await {
-            var ready = false
-            instrumentation.runOnMainSync {
-                ready = WindowInspector.getGlobalWindowViews().any { it.hasWindowFocus() && hasChoice(it) }
-            }
-            ready
-        }
-        onView(withText(label)).inRoot(isDialog()).perform(click())
+        val kind=if(composeRule.onAllNodesWithTag("highlightChoice:filter:ungrouped").fetchSemanticsNodes().isNotEmpty()) "filter" else "moveGroup"
+        val key=if(label==activityString(R.string.no_group)) "ungrouped" else "group:${label.removePrefix("[").removeSuffix("]")}"
+        composeRule.onNodeWithTag("highlightChoice:$kind:$key").performClick()
     }
 
-    private fun groupAction(group: String, action: Int) {
+    private fun groupAction(group: String, edit: Boolean) {
         awaitGroup(group)
-        onView(allOf(withId(action), hasSibling(withText(group)))).inRoot(isDialog()).perform(click())
+        composeRule.onNodeWithTag(
+            if (edit) "highlightGroupEdit:$group" else "highlightGroupDelete:$group"
+        ).performClick()
     }
 
     private fun awaitGroup(group: String) = await {
-        var visible = false
-        scenario!!.onActivity { activity ->
-            val recycler = groupDialog(activity)?.view?.findViewById<RecyclerView>(R.id.recycler_view)
-            visible = recycler != null && !recycler.hasPendingAdapterUpdates() &&
-                (0 until recycler.childCount).any {
-                    recycler.getChildAt(it).findViewById<TextView>(R.id.tv_group).text.toString() == group
-                }
-        }
-        visible
+        composeRule.onAllNodesWithTag("highlightGroupRow:$group").fetchSemanticsNodes().isNotEmpty()
     }
 
-    private fun awaitRules(expected: List<HighlightRule>) = await {
-        var rendered = false
-        scenario!!.onActivity { activity ->
-            val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-            val adapter = recycler.adapter as HighlightRuleAdapter
-            rendered = adapter.getItems().map { it.uuid } == expected.map { it.uuid } &&
-                !recycler.isComputingLayout && !recycler.hasPendingAdapterUpdates() &&
-                !recycler.isLayoutRequested && recycler.itemAnimator?.isRunning != true &&
-                recycler.childCount == expected.size && (0 until recycler.childCount).all { index ->
-                    val binding = ItemHighlightRuleBinding.bind(recycler.getChildAt(index))
-                    val rule = expected[index]
-                    val label = rule.group?.takeIf { it.isNotBlank() }?.let { "[$it] ${rule.getDisplayName()}" }
-                        ?: rule.getDisplayName()
-                    binding.cbName.text.toString() == label && binding.swtEnabled.isChecked == rule.isEnabled
+    private fun awaitRules(expected: List<HighlightRule>) {
+        val expectedUuids = expected.mapTo(hashSetOf()) { it.uuid }
+        await {
+            runCatching {
+                composeRule.waitForIdle()
+                expected.forEach {
+                    composeRule.onNodeWithTag("highlightRuleRow:${it.uuid}").fetchSemanticsNode()
                 }
+                fixtures.filterNot { it.uuid in expectedUuids }.forEach {
+                    composeRule.onAllNodesWithTag("highlightRuleRow:${it.uuid}").assertCountEquals(0)
+                }
+            }.isSuccess
         }
-        rendered
+        expected.forEach { rule ->
+            val label = rule.group?.takeIf { it.isNotBlank() }
+                ?.let { "[$it] ${rule.getDisplayName()}" }
+                ?: rule.getDisplayName()
+            composeRule.onNodeWithTag("highlightRuleRow:${rule.uuid}").assertTextContains(label)
+            composeRule.onNodeWithTag("highlightRuleEnabled:${rule.uuid}").let {
+                if (rule.isEnabled) it.assertIsOn() else it.assertIsOff()
+            }
+        }
     }
-
-    private fun groupDialog(activity: HighlightRuleActivity) =
-        activity.supportFragmentManager.fragments.filterIsInstance<HighlightGroupManageDialog>().firstOrNull()
 
     private fun await(condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15_000
         while (SystemClock.uptimeMillis() < deadline) {
+            composeRule.waitForIdle()
             if (condition()) return
             SystemClock.sleep(50)
         }
@@ -388,38 +313,15 @@ class HighlightGroupUiTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
-        val frame = CountDownLatch(1)
-        lateinit var window: Window
-        lateinit var bitmap: Bitmap
-        scenario!!.onActivity { activity ->
-            fun focusedWindow(fragment: androidx.fragment.app.Fragment): Window? {
-                if (!fragment.isAdded) return null
-                return (fragment as? androidx.fragment.app.DialogFragment)?.dialog?.window
-                    ?.takeIf { it.decorView.hasWindowFocus() }
-                    ?: fragment.childFragmentManager.fragments.firstNotNullOfOrNull(::focusedWindow)
-            }
-            window = activity.supportFragmentManager.fragments.firstNotNullOfOrNull(::focusedWindow)
-                ?: activity.window
-            if (name == "highlight-font-metrics-settings") assertTrue(window !== activity.window)
-            val decor = window.decorView
-            assertTrue(decor.isHardwareAccelerated)
-            bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
-            decor.viewTreeObserver.registerFrameCommitCallback { frame.countDown() }
-            decor.postInvalidateOnAnimation()
+        composeRule.waitForIdle(); instrumentation.waitForIdleSync()
+        if(name=="highlight-font-metrics-settings") {
+            composeRule.onNodeWithTag("highlight_rule_editor").assertExists()
+            scenario!!.onActivity { assertTrue(it.window.decorView.hasWindowFocus()) }
         }
+        val bitmap=checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            assertTrue("Highlight frame was not committed", frame.await(5, TimeUnit.SECONDS))
-            val copied = CountDownLatch(1)
-            var result = PixelCopy.ERROR_UNKNOWN
-            instrumentation.runOnMainSync {
-                PixelCopy.request(window, bitmap, { result = it; copied.countDown() }, Handler(Looper.getMainLooper()))
-            }
-            assertTrue(copied.await(5, TimeUnit.SECONDS))
-            assertEquals(PixelCopy.SUCCESS, result)
-            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-            }
+            assertTrue(bitmap.width>0 && bitmap.height>0)
+            File(context.getExternalFilesDir("ui-regression"),"$name.png").outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,it)) }
         } finally { bitmap.recycle() }
     }
 }

@@ -48,6 +48,10 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -516,11 +520,17 @@ class ReadStyleDialog : BaseDialogFragment(), FontSelectDialog.CallBack {
                     val isSelected = styleSelectState == index
                     val itemTextColor = Color(item.curTextColor())
                     val borderColor = if (isSelected) accent else itemTextColor
+                    val styleLabel = item.name.ifBlank { "文字" }
+                    val styleDescription = "$styleLabel ${index + 1}"
                     Box(
                         modifier = Modifier
                             .size(50.dp)
                             .clip(CircleShape)
                             .border(if (isSelected) 2.dp else 1.dp, borderColor, CircleShape)
+                            .semantics {
+                                contentDescription = styleDescription
+                                role = Role.Button
+                            }
                             .combinedClickable(
                                 onClick = { changeBgTextConfig(index) },
                                 onLongClick = { showBgTextConfig(index) }
@@ -539,7 +549,7 @@ class ReadStyleDialog : BaseDialogFragment(), FontSelectDialog.CallBack {
                             modifier = Modifier.fillMaxSize()
                         )
                         Text(
-                            text = item.name.ifBlank { "文字" },
+                            text = styleLabel,
                             color = itemTextColor,
                             fontSize = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,

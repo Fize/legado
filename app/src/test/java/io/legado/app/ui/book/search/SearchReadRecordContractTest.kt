@@ -7,57 +7,23 @@ import java.io.File
 class SearchReadRecordContractTest {
 
     @Test
-    fun `read records are observed so returning to the search page shows new ones`() {
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/search/SearchViewModel.kt"
-        ).readText().replace(Regex("\\s+"), " ")
-
-        assertTrue(viewModel.contains("appDb.readRecordDao.flowBooks()"))
-        assertTrue(viewModel.contains("distinctUntilChanged()"))
-        assertTrue(viewModel.contains("""upAdapterLiveData.postValue("hasReadRecord")"""))
-    }
-
-    @Test
-    fun `the indicator matches on author and can be turned off`() {
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/search/SearchViewModel.kt"
-        ).readText().replace(Regex("\\s+"), " ")
-
-        assertTrue(viewModel.contains("if (!AppConfig.showSearchReadRecord) { return false }"))
-        assertTrue(viewModel.contains("readRecordIndex.contains(book.name, book.author)"))
-    }
-
-    @Test
-    fun `the search menu toggles the indicator and repaints the list`() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/search/SearchActivity.kt"
-        ).readText().replace(Regex("\\s+"), " ")
-        assertTrue(activity.contains("R.string.show_search_read_record"))
-        assertTrue(
-            activity.contains(
-                "showReadRecordState = AppConfig.showSearchReadRecord"
-            )
-        )
-        assertTrue(
-            activity.contains(
-                "AppConfig.showSearchReadRecord = !AppConfig.showSearchReadRecord"
-            )
-        )
-        assertTrue(activity.contains("""viewModel.upAdapterLiveData.postValue("hasReadRecord")"""))
-    }
-
-    @Test
     fun `reading a book stores the author with the record`() {
         listOf(
             Triple("src/main/java/io/legado/app/model/ReadBook.kt",
-                "val currentBook = book?.copy() ?: return", "getRecord(AppConst.androidId, book.name, book.author)"),
-            Triple("src/main/java/io/legado/app/model/ReadManga.kt",
                 "val currentBook = book?.copy() ?: return", "getRecord(AppConst.androidId, book.name, book.author)"),
         ).forEach { (path, authorCapture, authorAssignment) ->
             val source = projectFile(path).readText().replace(Regex("\\s+"), " ")
             assertTrue(path, source.contains(authorCapture))
             assertTrue(path, source.contains(authorAssignment))
         }
+
+        val mangaSession = projectFile("src/main/java/io/legado/app/model/MangaReaderSession.kt")
+            .readText().replace(Regex("\\s+"), " ")
+        val mangaRepository = projectFile("src/main/java/io/legado/app/data/repository/MangaReaderDataRepository.kt")
+            .readText().replace(Regex("\\s+"), " ")
+        assertTrue(mangaSession.contains("val currentBook = book?.copy() ?: return"))
+        assertTrue(mangaSession.contains("dataRepository.readRecord(book)"))
+        assertTrue(mangaRepository.contains("getRecord(AppConst.androidId, book.name, book.author)"))
 
         val audioPlay = projectFile("src/main/java/io/legado/app/model/AudioPlay.kt")
             .readText().replace(Regex("\\s+"), " ")

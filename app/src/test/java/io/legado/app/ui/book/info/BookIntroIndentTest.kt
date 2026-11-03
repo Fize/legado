@@ -28,22 +28,14 @@ class BookIntroIndentTest {
     }
 
     @Test
-    fun `book info applies indentation only in plain text branch`() {
-        val source = File(
-            repositoryRoot,
-            "app/src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt",
-        ).readText()
-
-        assertTrue(source.contains("setPlainBookIntro(tvIntro, intro)"))
-        assertTrue(source.contains("LeadingMarginSpan.Standard(indentWidth, 0)"))
-        assertTrue(source.contains("intro.startsWith(\"<useweb>\")"))
-        assertTrue(source.contains("intro.startsWith(\"<usehtml>\")"))
-        assertTrue(source.contains("intro.startsWith(\"<md>\")"))
-    }
-
-    private val repositoryRoot: File by lazy {
-        val userDir = requireNotNull(System.getProperty("user.dir"))
-        generateSequence(File(userDir)) { it.parentFile }
-            .first { File(it, "app/src/main").isDirectory }
+    fun `only plain descriptions receive automatic paragraph indentation`() {
+        val parser = io.legado.app.data.repository.BookIntroParser
+        val plain = parser.parse("Plain paragraph", "https://example.test/book")
+        assertTrue((plain.blocks.single() as io.legado.app.data.entities.IntroBlock.Paragraph).indent)
+        listOf("<usehtml><p>HTML</p></usehtml>", "<md>**Markdown**</md>").forEach { raw ->
+            val document = parser.parse(raw, "https://example.test/book")
+            assertTrue(document.blocks.filterIsInstance<io.legado.app.data.entities.IntroBlock.Paragraph>().none { it.indent })
+        }
+        assertEquals(io.legado.app.data.entities.IntroFormat.Web, parser.parse("<useweb><p>Web</p></useweb>", "https://example.test/book").format)
     }
 }

@@ -90,7 +90,6 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setHtml
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.setMarkdown
-import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
@@ -101,6 +100,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.legado.app.ui.photo.openPhoto
 
 class TextDialog() : BaseDialogFragment() {
 
@@ -611,7 +611,7 @@ class TextDialog() : BaseDialogFragment() {
                 currentMarkwon,
                 parsed,
                 imgOnLongClickListener = { source ->
-                    showDialogFragment(PhotoDialog(source))
+                    requireActivity().openPhoto(source)
                 },
             )
             if (searchQuery.isNotBlank()) {

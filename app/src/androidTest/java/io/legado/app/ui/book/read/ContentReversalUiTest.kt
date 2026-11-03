@@ -7,6 +7,12 @@ import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -62,6 +68,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -82,6 +89,7 @@ import kotlinx.coroutines.withTimeout
 /** Exercises the real reader with cached chapters, controlled HTTP responses and menu gestures. */
 @RunWith(AndroidJUnit4::class)
 class ContentReversalUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -210,7 +218,7 @@ class ContentReversalUiTest {
             }
             fun refresh() {
                 showReaderMenu()
-                onView(allOf(withContentDescription(R.string.refresh), isDisplayed())).perform(click())
+                onView(allOf(withContentDescription(label(R.string.refresh)), isDisplayed())).perform(click())
             }
             fun pixel(index: Int): Int {
                 val bitmap = BitmapFactory.decodeFile(BookHelp.getImage(book, "$base/image/$index.png").path)
@@ -219,12 +227,12 @@ class ContentReversalUiTest {
             }
             fun refreshAllResources() {
                 showReaderMenu()
-                onView(allOf(withContentDescription(R.string.refresh), isDisplayed())).perform(longClick())
-                onView(withText(R.string.menu_refresh_resources)).inRoot(isPlatformPopup()).perform(click())
+                onView(allOf(withContentDescription(label(R.string.refresh)), isDisplayed())).perform(longClick())
+                compose.onNodeWithText(label(R.string.menu_refresh_resources)).assertIsDisplayed().performClick()
             }
             fun showsLoading(activity: ReadBookActivity): Boolean {
                 val page = activity.findViewById<ReadView>(R.id.read_view).curPage.textPage
-                return page.isMsgPage && page.text == context.getString(R.string.data_loading)
+                return page.isMsgPage && page.text == activity.getString(R.string.data_loading)
             }
             fun expectResourceFailure(action: () -> Unit) {
                 var layout = ReadBook.curTextChapter
@@ -263,7 +271,7 @@ class ContentReversalUiTest {
                         assertTrue("Refresh uses the existing centered message page", reader.curPage.textPage.isMsgPage)
                         assertTrue(listOf(reader.pageFactory.curPage, reader.pageFactory.prevPage,
                             reader.pageFactory.nextPage, reader.pageFactory.nextPlusPage).all { page ->
-                            page.isMsgPage && page.text == context.getString(R.string.data_loading)
+                            page.isMsgPage && page.text == it.getString(R.string.data_loading)
                         })
                         assertTrue("No second loading Snackbar is shown",
                             it.findViewById<View>(com.google.android.material.R.id.snackbar_text)?.isShown != true)
@@ -440,25 +448,16 @@ class ContentReversalUiTest {
             expectResourceFailure { refreshAllResources() }
             failImage.set(-1)
             showReaderMenu()
-            onView(allOf(withContentDescription(R.string.refresh), isDisplayed())).perform(longClick())
+            onView(allOf(withContentDescription(label(R.string.refresh)), isDisplayed())).perform(longClick())
             screenshot("resource-refresh-menu")
-            var resourceY = 0
-            onView(withText(R.string.menu_refresh_resources)).inRoot(isPlatformPopup()).check { view, error ->
-                if (error != null) throw error
-                val location = IntArray(2)
-                view.getLocationOnScreen(location)
-                resourceY = location[1]
-            }
+            val resourceY = compose.onNodeWithText(label(R.string.menu_refresh_resources))
+                .assertIsDisplayed().fetchSemanticsNode().boundsInRoot.top
             listOf(R.string.menu_refresh_dur, R.string.menu_refresh_after, R.string.menu_refresh_all).forEach {
-                onView(withText(it)).inRoot(isPlatformPopup()).check { view, error ->
-                    if (error != null) throw error
-                    val location = IntArray(2)
-                    view.getLocationOnScreen(location)
-                    assertTrue("Refresh all data must be below the existing actions", location[1] < resourceY)
-                }
+                val y = compose.onNodeWithText(label(it)).assertIsDisplayed().fetchSemanticsNode().boundsInRoot.top
+                assertTrue("Refresh all data must be below the existing actions", y < resourceY)
             }
             val beforeAll = ReadBook.curTextChapter
-            onView(withText(R.string.menu_refresh_resources)).inRoot(isPlatformPopup()).perform(click())
+            compose.onNodeWithText(label(R.string.menu_refresh_resources)).assertIsDisplayed().performClick()
             ready(beforeAll)
             await("all five target chapters and image responses") {
                 (1..5).all { index ->
@@ -609,7 +608,7 @@ class ContentReversalUiTest {
     @Test fun savingInContentEditorAndReplacingRefreshedCacheClearCheckedState() {
         reverseFromMenu(false, reversed)
         openOverflow()
-        onView(withText(R.string.edit_content)).inRoot(isPlatformPopup()).perform(click())
+        compose.onNodeWithText(label(R.string.edit_content)).assertIsDisplayed().performClick()
         await("content editor loaded") { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ContentEditDialog>()
                 .any { it.view != null && it.viewModel.hasDraft }
@@ -644,7 +643,7 @@ class ContentReversalUiTest {
         val previous = ReadBook.curTextChapter
         openOverflow()
         assertReverseCheck(wasChecked)
-        onView(withText(R.string.reverse_content)).inRoot(isPlatformPopup()).perform(click())
+        compose.onNodeWithText(label(R.string.reverse_content)).assertIsDisplayed().performClick()
         await("chapter $index reverse state changed") {
             BookHelp.isContentReversed(book, chapters[index]) != wasChecked &&
                 (expectedRaw == null || BookHelp.getContent(book, chapters[index]) == expectedRaw)
@@ -677,20 +676,19 @@ class ContentReversalUiTest {
 
     private fun openOverflow() {
         showReaderMenu()
-        val description = context.getString(androidx.appcompat.R.string.abc_action_menu_overflow_description)
+        val description = label(androidx.appcompat.R.string.abc_action_menu_overflow_description)
         onView(allOf(withContentDescription(description), isDisplayed())).perform(click())
     }
 
+    private fun label(id: Int): String {
+        var text = ""
+        scenario!!.onActivity { text = it.getString(id) }
+        return text
+    }
+
     private fun assertReverseCheck(expected: Boolean) {
-        onView(withText(R.string.reverse_content)).inRoot(isPlatformPopup()).check { view, error ->
-            if (error != null) throw error
-            val row = view.parent as ViewGroup
-            val info = row.createAccessibilityNodeInfo()
-            assertTrue("The real popup row must expose a checkable action", info.isCheckable)
-            assertEquals("The popup accessibility state follows this chapter", expected, info.isChecked)
-            assertEquals("The visible check mark follows this chapter", expected,
-                row.findViewById<View>(R.id.iv_check_end).isVisible)
-        }
+        val row = compose.onNodeWithText(label(R.string.reverse_content)).assertIsDisplayed()
+        if (expected) row.assertIsOn() else row.assertIsOff()
     }
 
     private fun assertRenderedImages() {

@@ -14,8 +14,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.ImageView
 import androidx.activity.addCallback
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
@@ -31,9 +31,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -71,6 +73,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
@@ -102,15 +106,16 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.SourceCallBack
 import io.legado.app.model.VideoPlay
 import io.legado.app.service.VideoPlayService
-import io.legado.app.ui.about.AppLogDialog
-import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.about.openAppLogs
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.OnlineImportRoute
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.compose.component.LegadoTopAppBar
-import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.navigation.SourceLoginRoute
+import io.legado.app.ui.navigation.SourceLoginTarget
 import io.legado.app.ui.video.config.SettingsDialog
-import io.legado.app.ui.widget.dialog.PhotoDialog
-import io.legado.app.ui.widget.image.CoverImageView
+import io.legado.app.ui.compose.component.LegadoBookCover
 import io.legado.app.ui.widget.text.ScrollTextView
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.dpToPx
@@ -133,18 +138,17 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.glide.GlideImagesPlugin
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import io.legado.app.ui.photo.openPhoto
 
 class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
 
+    override val guardsRestoreRecovery = true
+
     private val viewModel by viewModels<VideoPlayerViewModel>()
     private val playerView: VideoPlayer by lazy { VideoPlayer(this) }
-    private val ivCoverView: CoverImageView by lazy {
-        CoverImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            setImageResource(R.drawable.image_cover_default)
-        }
-    }
     private val tvIntroContainer: FrameLayout by lazy { FrameLayout(this) }
     private var isIntroTextViewAttached = false
     private val introTextView by lazy {
@@ -229,24 +233,92 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
 
     @OptIn(UnstableApi::class)
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        onBackPressedDispatcher.addCallback(this) {
+            if (isFullScreen) toggleFullScreen() else finish()
+        }
+        lifecycleScope.launch {
+            viewModel.handoffStopped.collect { stopped -> if (stopped) super.finish() }
+        }
+        preparePlayer(intent)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    delay(VideoPlay.PROGRESS_CHECKPOINT_INTERVAL_MS)
+                    if (VideoPlay.videoManager.isPlaying) checkpointPlayback()
+                }
+            }
+        }
+    }
+
+    private fun checkpointPlayback() {
+        if (playerInitialized && !forwardedToFloatingWindow && !isRestoreRecoveryBlocked) {
+            VideoPlay.saveRead()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (redirectIfRestoreRecoveryRequired()) return
+        if (playerInitialized) VideoPlay.saveRead()
+        VideoPlay.stopLoading()
+        setIntent(intent)
+        preparePlayer(intent)
+    }
+
+    private var playerInitialized = false
+
+    private fun preparePlayer(input: Intent) {
+        if (redirectIfRestoreRecoveryRequired()) return
+        if (!VideoPlayService.prepareForPlayerEntry(input)) { super.finish(); return }
+        viewModel.receiveHandoff(input)
+        if (isFinishing) return
+        if (!input.getBooleanExtra("isNew", true) && VideoPlay.videoManager.listener() == null) {
+            input.putExtra("isNew", true).putExtra("forceNormalPlayer", true)
+        }
+        // Ordinary entries can initialize synchronously. A handoff validates its actor ticket even
+        // without a detail receipt; the old service waits for finishPlayerEntry before retiring.
+        if (!viewModel.needsPreparation(input)) {
+            initializePlayer()
+            return
+        }
+        if (input.getBooleanExtra("isNew", true) && input.action == null &&
+            VideoPlay.defaultFloatWindow && !input.getBooleanExtra("forceNormalPlayer", false)) {
+            input.putExtra("forwardedToFloatingWindow", true)
+        }
+        viewModel.preparePlayer(input, ready = { prepared ->
+            if (!isFinishing && !isDestroyed) {
+                setIntent(prepared)
+                initializePlayer()
+            }
+        }, failed = { super.finish() })
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun initializePlayer() {
         isNew = intent.getBooleanExtra("isNew", true)
         if (isNew &&
             intent.action == null &&
             VideoPlay.defaultFloatWindow &&
             !intent.getBooleanExtra("forceNormalPlayer", false)
         ) {
-            forwardedToFloatingWindow = true
-            intent.putExtra("forwardedToFloatingWindow", true)
-            playerView.needDestroy = false
-            ContextCompat.startForegroundService(
-                this,
-                Intent(intent).setClass(this, VideoPlayService::class.java)
-            )
-            super.finish()
-            return
+            val accepted = viewModel.handoffTo(Intent(intent).setClass(this, VideoPlayService::class.java)) {
+                ContextCompat.startForegroundService(this, it)
+            }
+            if (accepted) {
+                forwardedToFloatingWindow = true
+                intent.putExtra("forwardedToFloatingWindow", true)
+                playerView.needDestroy = false
+                super.finish()
+                return
+            }
+            intent.removeExtra("forwardedToFloatingWindow")
         }
+        playerInitialized = true
         playerView.enlargeImageRes = R.drawable.ic_fullscreen
         if (isNew) {
+            VideoPlay.stopLoading()
+            VideoPlay.releaseAllVideos()
+            VideoPlay.singleUrl = intent.getStringExtra("videoUrl") != null
             intent.getStringExtra("videoUrl")?.let {
                 VideoPlay.videoUrl = it
                 VideoPlay.singleUrl = true
@@ -265,30 +337,25 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
                 return
             }
             VideoPlay.startPlay(playerView)
-            VideoPlay.saveRead()
+            VideoPlay.saveRead(VideoPlay.durChapterPos)
         } else {
             VideoPlay.clonePlayState(playerView)
             playerView.setSurfaceToPlay()
             playerView.startAfterPrepared()
             titleState = VideoPlay.videoTitle.orEmpty()
         }
+        VideoPlayService.finishPlayerEntry(intent)
         customBtnVisibleState = (VideoPlay.source as? BookSource)?.customButton == true
         setupPlayerView()
         initView()
         upView()
-        onBackPressedDispatcher.addCallback(this) {
-            if (isFullScreen) {
-                toggleFullScreen()
-                return@addCallback
-            }
-            finish()
-        }
     }
 
     private fun initView() {
         viewModel.upStarMenuData.observe(this) { upStarMenu() }
         val book = VideoPlay.book
         bookState = book
+        viewModel.updateCover(book)
         if (book == null) {
             return
         }
@@ -300,7 +367,6 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
     }
 
     private fun showBook(book: Book) {
-        showCover(book)
         showBookIntro(book)
     }
 
@@ -315,9 +381,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
                 return when (uri.scheme) {
                     "http", "https" -> false
                     "legado", "yuedu" -> {
-                        startActivity<OnLineImportActivity> {
-                            data = uri
-                        }
+                        startActivity(AppActivity.startIntent(this@VideoPlayerActivity, OnlineImportRoute(uri.toString())))
                         true
                     }
 
@@ -408,7 +472,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
                 glideImageGetter,
                 textViewTagHandler,
                 imgOnLongClickListener = {
-                    showDialogFragment(PhotoDialog(it, VideoPlay.source?.getKey()))
+                    openPhoto(it, VideoPlay.source?.getKey())
                 },
                 imgOnClickListener = {
                     viewModel.onButtonClick(this@VideoPlayerActivity, "info image", it)
@@ -448,17 +512,13 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
                     markwon,
                     markdown,
                     imgOnLongClickListener = { source ->
-                        showDialogFragment(PhotoDialog(source, VideoPlay.source?.getKey()))
+                        openPhoto(source, VideoPlay.source?.getKey())
                     }
                 )
             }
         } else {
             tvIntro.text = intro
         }
-    }
-
-    private fun showCover(book: Book) {
-        ivCoverView.load(book, false)
     }
 
     private fun upView() {
@@ -502,6 +562,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
     @SuppressLint("SwitchIntDef")
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        if (isRestoreRecoveryBlocked) return
         if (isFullScreen) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -575,13 +636,18 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
     private fun upStarMenu() {}
 
     private fun startFloatingWindow() {
+        if (forwardedToFloatingWindow || redirectIfRestoreRecoveryRequired() || !playerInitialized) return
+        VideoPlay.saveRead()
         VideoPlay.savePlayState(playerView)
-        val intent = Intent(this, VideoPlayService::class.java).apply {
+        val floatingIntent = Intent(intent).setClass(this, VideoPlayService::class.java).apply {
             putExtra("isNew", false)
         }
-        ContextCompat.startForegroundService(this, intent)
+        if (!viewModel.handoffTo(floatingIntent) { ContextCompat.startForegroundService(this, it) }) return
+        forwardedToFloatingWindow = true
+        intent.putExtra("forwardedToFloatingWindow", true)
         playerView.needDestroy = false
-        finish()
+        callBackBookEnd()
+        super.finish()
     }
 
     override fun observeLiveBus() {
@@ -599,6 +665,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
     }
 
     override fun finish() {
+        if (isRestoreRecoveryBlocked) return super.finish()
         val book = VideoPlay.book ?: return super.finish()
         if (VideoPlay.inBookshelf) {
             callBackBookEnd()
@@ -641,6 +708,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
     }
 
     override fun onStop() {
+        checkpointPlayback()
         super.onStop()
         if (initGetter) {
             glideImageGetter.stop()
@@ -648,16 +716,22 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
     }
 
     override fun onDestroy() {
+        if (isFinishing) {
+            viewModel.retireIncomingHandoff()
+            io.legado.app.data.repository.MediaHandoffTickets.expire(intent)
+        }
+        if (!wasActivityContentCreated) { super.onDestroy(); return }
         destroyWeb()
         super.onDestroy()
         if (initGetter) {
             glideImageGetter.clear()
         }
-        if (!forwardedToFloatingWindow) {
-            VideoPlay.saveRead()
+        if (playerInitialized && !forwardedToFloatingWindow) {
+            if (!isRestoreRecoveryBlocked) VideoPlay.saveRead()
             VideoPlay.stopLoading()
             playerView.getCurrentPlayer().release()
         }
+        if (isFinishing && !forwardedToFloatingWindow && !isRestoreRecoveryBlocked) viewModel.finishPlatformReturn()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
@@ -755,9 +829,15 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
                                             overflowExpanded = false
                                             VideoPlay.source?.let { s ->
                                                 if (s is BookSource) {
-                                                    startActivity<SourceLoginActivity> {
-                                                        putExtra("bookType", BookType.video)
-                                                    }
+                                                    startActivity(
+                                                        AppActivity.startIntent(
+                                                            this@VideoPlayerActivity,
+                                                            SourceLoginRoute(
+                                                                SourceLoginTarget.CurrentReading,
+                                                                bookType = BookType.video,
+                                                            ),
+                                                        ),
+                                                    )
                                                 }
                                             }
                                         }
@@ -819,7 +899,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
                                     text = { Text(stringResource(R.string.log)) },
                                     onClick = {
                                         overflowExpanded = false
-                                        showDialogFragment<AppLogDialog>()
+                                        this@VideoPlayerActivity.openAppLogs()
                                     }
                                 )
                             }
@@ -837,6 +917,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
             )
 
             val book = bookState
+            val cover by viewModel.cover.collectAsStateWithLifecycle()
             if (!isFullScreen && book != null) {
                 // Book Data Section
                 Row(
@@ -846,15 +927,9 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
                         .padding(8.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    AndroidView(
-                        modifier = Modifier
-                            .width(110.dp)
-                            .height(160.dp),
-                        factory = {
-                            (ivCoverView.parent as? ViewGroup)?.removeView(ivCoverView)
-                            ivCoverView
-                        }
-                    )
+                    LegadoBookCover(cover?.path, cover?.name, cover?.author,
+                        Modifier.widthIn(max = 110.dp).heightIn(max = 160.dp).fillMaxHeight(),
+                        sourceOrigin = cover?.sourceOrigin)
 
                     Column(
                         modifier = Modifier
@@ -992,7 +1067,7 @@ class VideoPlayerActivity : BaseComposeActivity(), SettingsDialog.CallBack {
 }
 
 @Composable
-private fun VideoChapterItem(
+internal fun VideoChapterItem(
     title: String,
     isSelected: Boolean,
     isVolume: Boolean,
@@ -1003,7 +1078,7 @@ private fun VideoChapterItem(
     Box(
         modifier = Modifier
             .width(if (isVolume) 80.dp else 100.dp)
-            .height(if (isVolume) 40.dp else 50.dp)
+            .heightIn(min = if (isVolume) 40.dp else 50.dp)
             .padding(2.dp)
             .clip(shape)
             .border(

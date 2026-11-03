@@ -170,7 +170,7 @@ class ManualHighlightRenderTest {
         assertTrue(notify.contains("highlightRangeIntersects("))
         assertTrue(notify.contains("highlightRuleAtColumn("))
         assertTrue(activity.contains("override fun onHighlightRuleClick(ruleId: Long"))
-        assertTrue(activity.contains("HighlightRuleEditDialog.edit(ruleId)"))
+        assertTrue(activity.contains("HighlightRuleEditRoute(ruleId)"))
         assertTrue(activity.contains("R.string.highlight_rule_disable"))
         assertTrue(activity.contains("copy(isEnabled = false)"))
         assertTrue(activity.contains("appDb.highlightRuleDao.update(rule)"))

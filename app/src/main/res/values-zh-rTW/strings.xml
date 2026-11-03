@@ -1006,6 +1006,10 @@
     <string name="open_sys_doc_picker_error">打開系統檔案選擇器出錯，自動打開應用文件選擇器</string>
     <string name="expand_text_menu">展開文字選擇選單</string>
     <string name="search_content_size">搜尋結果</string>
+    <string name="search_menu_results">結果</string>
+    <string name="search_menu_chapter_summary">搜尋結果：%1$d / 目前章節：%2$s</string>
+    <string name="previous_search_result">上一個搜尋結果</string>
+    <string name="next_search_result">下一個搜尋結果</string>
     <string name="search_content_empty">搜索内容为空，检查净化/简繁设置</string>
     <string name="book_tree_uri_t">書籍儲存位置</string>
     <string name="book_tree_uri_s">從其它應用程式打開的書籍儲存位置</string>

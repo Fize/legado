@@ -1,5 +1,7 @@
 package io.legado.app.help.book
 
+import io.legado.app.data.cache.bookCacheChanges
+
 import android.os.ParcelFileDescriptor
 import androidx.core.util.AtomicFile
 import androidx.documentfile.provider.DocumentFile
@@ -8,6 +10,11 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
+import io.legado.app.data.cache.bookCacheKey
+import io.legado.app.data.cache.epubCacheStore
+import io.legado.app.data.cache.cacheResourceLeases
+import io.legado.app.data.cache.cacheMaintenance
+import io.legado.app.data.cache.textReaderImageStore
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
@@ -17,7 +24,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.LocalBook
-import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.ImageUtils
 import io.legado.app.utils.MD5Utils
@@ -34,6 +40,7 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.onEachParallel
 import io.legado.app.utils.postEvent
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -138,20 +145,26 @@ object BookHelp {
     val cachePath = FileUtils.getPath(downloadDir, cacheFolderName)
 
     fun clearCache() {
+        textReaderImageStore().clearAll()
         FileUtils.delete(
             FileUtils.getPath(downloadDir, cacheFolderName)
         )
+        bookCacheChanges().changedAll()
     }
 
-    fun clearCache(book: Book) {
+    fun clearCache(book: Book): Unit = cacheResourceLeases().use(bookCacheKey(book), mutating = true) {
+        textReaderImageStore().clearBook(book.bookUrl)
         val filePath = FileUtils.getPath(downloadDir, cacheFolderName, book.getFolderName())
         FileUtils.delete(filePath)
+        bookCacheChanges().changed(book.bookUrl)
     }
 
-    fun updateCacheFolder(oldBook: Book, newBook: Book) {
+    fun updateCacheFolder(oldBook: Book, newBook: Book): Unit =
+        cacheResourceLeases().use(bookCacheKey(oldBook), mutating = true) {
+        cacheResourceLeases().use(bookCacheKey(newBook), mutating = true) move@ {
         val oldFolderName = oldBook.getFolderNameNoCache()
         val newFolderName = newBook.getFolderNameNoCache()
-        if (oldFolderName == newFolderName) return
+        if (oldFolderName == newFolderName) return@move
         val oldFolderPath = FileUtils.getPath(
             downloadDir,
             cacheFolderName,
@@ -163,77 +176,12 @@ object BookHelp {
             newFolderName
         )
         FileUtils.move(oldFolderPath, newFolderPath)
-    }
+    } }
 
     /**
      * 清除已删除书的缓存 解压缓存
      */
-    suspend fun clearInvalidCache() {
-        withContext(IO) {
-            val bookFolderNames = hashSetOf<String>()
-            val originNames = hashSetOf<String>()
-            val cleanupSnapshot = appDb.bookDao.getCacheCleanupSnapshot(
-                includeImageBooks = AppConfig.imageRetainNum > 0,
-            )
-            cleanupSnapshot.imageBooks.forEach(::clearComicCache)
-            cleanupSnapshot.books.forEach {
-                bookFolderNames.add(it.getFolderName())
-                if (it.isEpub) originNames.add(it.originName)
-            }
-            downloadDir.getFile(cacheFolderName)
-                .listFiles()?.forEach { bookFile ->
-                    if (!bookFolderNames.contains(bookFile.name)) {
-                        FileUtils.delete(bookFile.absolutePath)
-                    }
-                }
-            downloadDir.getFile(cacheEpubFolderName)
-                .listFiles()?.forEach { epubFile ->
-                    if (!originNames.contains(epubFile.name)) {
-                        FileUtils.delete(epubFile.absolutePath)
-                    }
-                }
-            FileUtils.delete(ArchiveUtils.TEMP_PATH)
-            val filesDir = appCtx.filesDir
-            FileUtils.delete("$filesDir/shareBookSource.json")
-            FileUtils.delete("$filesDir/shareRssSource.json")
-            FileUtils.delete("$filesDir/books.json")
-        }
-    }
-
-    //清除已经看过的漫画数据
-    private fun clearComicCache(book: Book) {
-        //只处理漫画
-        //为0的时候，不清除已缓存数据
-        if (!book.isImage || AppConfig.imageRetainNum == 0) {
-            return
-        }
-        //向前保留设定数量，向后保留预下载数量
-        val startIndex = book.durChapterIndex - AppConfig.imageRetainNum
-        val endIndex = book.durChapterIndex + AppConfig.preDownloadNum
-        val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl, startIndex, endIndex)
-        val imgNames = hashSetOf<String>()
-        //获取需要保留章节的图片信息
-        chapterList.forEach {
-            val content = getContent(book, it)
-            if (content != null) {
-                val matcher = AppPattern.imgPattern.matcher(content)
-                while (matcher.find()) {
-                    val src = matcher.group(1) ?: continue
-                    val mSrc = NetworkUtils.getAbsoluteURL(it.url, src)
-                    imgNames.add("${MD5Utils.md5Encode16(mSrc)}.${getImageSuffix(mSrc)}")
-                }
-            }
-        }
-        downloadDir.getFile(
-            cacheFolderName,
-            book.getFolderName(),
-            cacheImageFolderName
-        ).listFiles()?.forEach { imgFile ->
-            if (!imgNames.contains(imgFile.name)) {
-                imgFile.delete()
-            }
-        }
-    }
+    suspend fun clearInvalidCache() { cacheMaintenance().clean() }
 
     fun saveContent(
         bookSource: BookSource,
@@ -269,6 +217,7 @@ object BookHelp {
                 }
             }
             if (saved) {
+                bookCacheChanges().changed(book.bookUrl)
                 //saveImages(bookSource, book, bookChapter, content)
                 postEvent(EventBus.SAVE_CONTENT, Pair(book, bookChapter))
             }
@@ -300,6 +249,7 @@ object BookHelp {
                 )
             }
         }
+        bookCacheChanges().changed(book.bookUrl)
     }
 
     fun isContentReversed(book: Book, chapter: BookChapter): Boolean {
@@ -312,11 +262,11 @@ object BookHelp {
         }.getOrDefault(false)
     }
 
-    fun reverseContent(book: Book, chapter: BookChapter): Boolean {
+    fun reverseContent(book: Book, chapter: BookChapter): Boolean = cacheResourceLeases().use(bookCacheKey(book), mutating = true) {
         val folderName = book.getFolderName()
         val fileName = contentSaveFileName(book, chapter) ?: chapter.getFileName()
         val file = downloadDir.getFile(cacheFolderName, folderName, fileName)
-        if (!file.isFile || file.length() == 0L) return false
+        if (!file.isFile || file.length() == 0L) return@use false
         var saved = false
         contentSaveFence.replace(contentSaveKey(book, chapter), fileName) {
             if (!file.isFile) return@replace
@@ -353,7 +303,7 @@ object BookHelp {
             if (wasReversed) marker.delete()
             saved = true
         }
-        return saved
+        return@use saved
     }
 
     internal fun contentSaveToken(book: Book, bookChapter: BookChapter): ContentSaveToken {
@@ -392,7 +342,7 @@ object BookHelp {
         images: Map<String, File>,
         imageTokens: Map<String, Long>,
         generation: Long? = null,
-    ) = contentSaveFence.exclusive { synchronized(this) {
+    ) = cacheResourceLeases().use(bookCacheKey(book), mutating = true) { contentSaveFence.exclusive { synchronized(this) {
         if (chapters.any { !isContentSaveCurrent(it.token) || it.token.folderName != book.getFolderName() ||
                 it.token.key.bookUrl != book.bookUrl || it.token.key.chapterIndex != it.chapter.index } ||
             imageTokens.any { (src, version) -> imageSaveVersion(book, src) != version }) {
@@ -438,8 +388,9 @@ object BookHelp {
             val path = getImage(book, src).absolutePath
             imageVersions[path] = (imageVersions[path] ?: 0L) + 1L
         }
+        if (images.isNotEmpty()) textReaderImageStore().clearBook(book.bookUrl)
         chapters.map { it.copy(token = contentSaveToken(book, it.chapter)) }
-    } }
+    } } }
 
     private fun contentSaveFileName(book: Book, bookChapter: BookChapter): String? {
         return contentSaveFence.state(contentSaveKey(book, bookChapter)).fileName
@@ -454,7 +405,7 @@ object BookHelp {
         folderName: String,
         fileName: String,
         content: String,
-    ) {
+    ) = cacheResourceLeases().use(bookCacheKey(book), mutating = true) {
         //保存文本
         FileUtils.createFileIfNotExist(
             downloadDir,
@@ -487,10 +438,20 @@ object BookHelp {
         book: Book,
         bookChapter: BookChapter,
         content: String,
-        concurrency: Int = AppConfig.threadCount
+        concurrency: Int = AppConfig.threadCount,
+        publish: (() -> Unit) -> Unit = { it() },
+    ) = saveImagesWithPublication(bookSource, book, bookChapter, content, concurrency) { publish(it) }
+
+    internal suspend fun saveImagesWithPublication(
+        bookSource: BookSource,
+        book: Book,
+        bookChapter: BookChapter,
+        content: String,
+        concurrency: Int,
+        publish: suspend (() -> Unit) -> Unit,
     ) = coroutineScope {
         flowImages(bookChapter, content).onEachParallel(concurrency) { mSrc ->
-            saveImage(bookSource, book, mSrc, bookChapter)
+            saveImageWithPublication(bookSource, book, mSrc, bookChapter, publish)
         }.collect()
     }
 
@@ -498,7 +459,16 @@ object BookHelp {
         bookSource: BookSource?,
         book: Book,
         src: String,
-        chapter: BookChapter? = null
+        chapter: BookChapter? = null,
+        publish: (() -> Unit) -> Unit = { it() },
+    ) = saveImageWithPublication(bookSource, book, src, chapter) { publish(it) }
+
+    private suspend fun saveImageWithPublication(
+        bookSource: BookSource?,
+        book: Book,
+        src: String,
+        chapter: BookChapter?,
+        publish: suspend (() -> Unit) -> Unit,
     ) {
         val imagePath = getImage(book, src).absolutePath
         val version = synchronized(this) {
@@ -509,6 +479,7 @@ object BookHelp {
             downloadImages.getOrPut(src) { Mutex() }
         }
         mutex.lock()
+        val resource = cacheResourceLeases().acquire(bookCacheKey(book), mutating = true)
         try {
             if (isImageExist(book, src)) {
                 return
@@ -518,19 +489,24 @@ object BookHelp {
                     // 如果部分图片失效，每次进入正文都会花很长时间再次获取图片数据
                     // 所以无论如何都要将数据写入到文件里
                     // throw NoStackTraceException("数据异常")
-                    AppLog.put("${book.name} ${chapter?.title} 图片 $src 下载错误 数据异常")
+                    publish { AppLog.put("${book.name} ${chapter?.title} 图片 $src 下载错误 数据异常") }
                 }
-                synchronized(this) {
-                    if ((imageVersions[imagePath] ?: 0L) == version) {
-                        writeImage(book, src, it)
+                publish {
+                    synchronized(this) {
+                        if ((imageVersions[imagePath] ?: 0L) == version) {
+                            writeImage(book, src, it)
+                        }
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
             val msg = "${book.name} ${chapter?.title} 图片 $src 下载失败\n${e.localizedMessage}"
-            AppLog.put(msg, e)
+            publish { AppLog.put(msg, e) }
         } finally {
+            resource.close()
             downloadImages.remove(src)
             mutex.unlock()
         }
@@ -547,7 +523,14 @@ object BookHelp {
 
     @Synchronized
     fun writeImage(book: Book, src: String, bytes: ByteArray) {
-        getImage(book, src).createFileIfNotExist().writeBytes(bytes)
+        cacheResourceLeases().use(bookCacheKey(book), mutating = true) {
+            val file = getImage(book, src)
+            if (file.isFile) {
+                imageVersions[file.absolutePath] = (imageVersions[file.absolutePath] ?: 0L) + 1L
+                textReaderImageStore().clearBook(book.bookUrl)
+            }
+            file.createFileIfNotExist().writeBytes(bytes)
+        }
     }
 
     internal suspend fun fetchImage(bookSource: BookSource?, book: Book, src: String): ByteArray? {
@@ -558,10 +541,11 @@ object BookHelp {
 
     @Synchronized
     fun delImage(book: Book, src: String) {
-        val file = getImage(book, src)
-        imageVersions[file.absolutePath] = (imageVersions[file.absolutePath] ?: 0L) + 1L
-        if (file.exists() && !file.delete()) {
-            throw IOException("删除图片缓存失败: ${file.name}")
+        cacheResourceLeases().use(bookCacheKey(book), mutating = true) {
+            val file = getImage(book, src)
+            imageVersions[file.absolutePath] = (imageVersions[file.absolutePath] ?: 0L) + 1L
+            textReaderImageStore().clearBook(book.bookUrl)
+            if (file.exists() && !file.delete()) throw IOException("删除图片缓存失败: ${file.name}")
         }
     }
 
@@ -577,22 +561,12 @@ object BookHelp {
     @Throws(IOException::class, FileNotFoundException::class)
     fun getEpubFile(book: Book): ZipFile {
         val uri = book.getLocalUri()
-        if (uri.isContentScheme()) {
-            FileUtils.createFolderIfNotExist(downloadDir, cacheEpubFolderName)
-            val path = FileUtils.getPath(downloadDir, cacheEpubFolderName, book.originName)
-            val file = File(path)
-            val doc = DocumentFile.fromSingleUri(appCtx, uri)
-                ?: throw IOException("文件不存在")
-            if (!file.exists() || doc.lastModified() > book.latestChapterTime) {
-                LocalBook.getBookInputStream(book).use { inputStream ->
-                    FileOutputStream(file).use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
-                }
-            }
-            return ZipFile(file)
+        if (!uri.isContentScheme()) return ZipFile(uri.path)
+        val parent = FileUtils.createFolderIfNotExist(downloadDir, cacheEpubFolderName)
+        val doc = DocumentFile.fromSingleUri(appCtx, uri) ?: throw IOException("文件不存在")
+        return epubCacheStore().open(parent, book.originName, doc.lastModified() > book.latestChapterTime) {
+            LocalBook.getBookInputStream(book)
         }
-        return ZipFile(uri.path)
     }
 
     /**
@@ -708,7 +682,7 @@ object BookHelp {
         bookChapter: BookChapter,
         folderName: String,
         fileName: String,
-    ): String? = contentSaveFence.exclusive {
+    ): String? = cacheResourceLeases().use(bookCacheKey(book)) { contentSaveFence.exclusive {
         val file = downloadDir.getFile(
             cacheFolderName,
             folderName,
@@ -744,12 +718,13 @@ object BookHelp {
             return@exclusive string
         }
         null
-    }
+    } }
 
     /**
      * 删除章节内容
      */
-    fun delContent(book: Book, bookChapter: BookChapter) {
+    fun delContent(book: Book, bookChapter: BookChapter): Unit =
+        cacheResourceLeases().use(bookCacheKey(book), mutating = true) {
         val folderName = book.getFolderName()
         val fileName = contentSaveFileName(book, bookChapter)
             ?: bookChapter.getFileName()
@@ -763,12 +738,14 @@ object BookHelp {
             ).delete()
             File(downloadDir.getFile(cacheFolderName, folderName, fileName).path + ".reversed").delete()
         }
+        bookCacheChanges().changed(book.bookUrl)
     }
 
     /**
      * 设置是否禁用正文的去除重复标题,针对单个章节
      */
-    fun setRemoveSameTitle(book: Book, bookChapter: BookChapter, removeSameTitle: Boolean) {
+    fun setRemoveSameTitle(book: Book, bookChapter: BookChapter, removeSameTitle: Boolean): Unit =
+        cacheResourceLeases().use(bookCacheKey(book), mutating = true) {
         val fileName = bookChapter.getFileName("nr")
         val contentProcessor = ContentProcessor.get(book)
         if (removeSameTitle) {

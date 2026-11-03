@@ -1,16 +1,16 @@
-@file:OptIn(com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi::class)
-
 package io.legado.app.ui.book.manga
 
 import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -36,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -46,34 +48,43 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import com.bumptech.glide.integration.compose.GlideImage
-import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
-import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.Transformation
-import com.bumptech.glide.load.engine.GlideException
-import com.bumptech.glide.request.RequestListener
-import com.bumptech.glide.request.target.Target
-import io.legado.app.help.book.BookHelp
 import io.legado.app.model.BookCover
-import io.legado.app.model.ReadManga
+import io.legado.app.R
+import io.legado.app.ui.compose.component.LegadoImageState
+import io.legado.app.ui.compose.component.rememberLegadoImageState
 import io.legado.app.ui.book.manga.entities.EpaperTransformation
+import io.legado.app.ui.book.manga.entities.BaseMangaPage
 import io.legado.app.ui.book.manga.entities.GrayscaleTransformation
 import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.entities.ReaderLoading
-import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
+import java.io.File
 import kotlin.math.abs
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun MangaReaderContent(
     state: MangaReaderUiState,
-    commands: ReceiveChannel<MangaReaderCommand>,
-    onVisiblePage: (MangaPage) -> Unit,
+    onVisibleItem: (BaseMangaPage, Int, Int) -> Unit,
+    onCommandHandled: (Long) -> Unit,
     onMiddleTap: () -> Unit,
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
@@ -81,59 +92,122 @@ internal fun MangaReaderContent(
     onLoadNextChapter: () -> Unit,
 ) {
     val pageColor = MaterialTheme.colorScheme.surface
+    val focusRequester = remember { FocusRequester() }
+    val previousPageLabel = stringResource(R.string.prev_page)
+    val nextPageLabel = stringResource(R.string.next_page)
+    val readerInputModifier = Modifier
+        .focusRequester(focusRequester)
+        .onPreviewKeyEvent { event ->
+            if (!state.interactive || state.menuVisible || state.loadingVisible) return@onPreviewKeyEvent false
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent event.key == Key.VolumeUp || event.key == Key.VolumeDown
+            when (event.key) {
+                Key.DirectionLeft -> {
+                    if (state.horizontal && state.rightToLeft) onNextPage() else onPreviousPage()
+                    true
+                }
+                Key.DirectionRight -> {
+                    if (state.horizontal && state.rightToLeft) onPreviousPage() else onNextPage()
+                    true
+                }
+                Key.DirectionUp, Key.PageUp, Key.VolumeUp -> { onPreviousPage(); true }
+                Key.DirectionDown, Key.PageDown, Key.VolumeDown -> { onNextPage(); true }
+                Key.Spacebar -> {
+                    if (event.isShiftPressed) onPreviousPage() else onNextPage()
+                    true
+                }
+                else -> false
+            }
+        }
+        .focusable()
+        .semantics {
+            stateDescription = "${state.seekPage + 1}/${state.seekPageCount}"
+            customActions = if (state.loadingVisible) emptyList() else listOf(
+                    CustomAccessibilityAction(previousPageLabel) {
+                        onPreviousPage()
+                        true
+                    },
+                    CustomAccessibilityAction(nextPageLabel) {
+                        onNextPage()
+                        true
+                    },
+                )
+        }
+    LaunchedEffect(focusRequester, state.horizontal, state.pageSnapEnabled) {
+        focusRequester.requestFocus()
+    }
     if (state.horizontal) {
         val spreads = remember(state.items, state.doublePage) {
             buildMangaSpreads(state.items, state.doublePage)
         }
-        val initialPage = remember(state.contentVersion, state.layoutVersion, state.doublePage) {
-            findMangaSpreadIndex(spreads, state.anchorItemIndex)
+        val initialPage = findMangaSpreadIndex(spreads, state.anchorItemIndex)
+        if (!state.pageSnapEnabled) {
+            MangaFreeScrollRow(
+                state = state,
+                spreads = spreads,
+                initialPage = initialPage,
+                pageColor = pageColor,
+                onVisibleItem = onVisibleItem,
+                onCommandHandled = onCommandHandled,
+                onMiddleTap = onMiddleTap,
+                onPreviousPage = onPreviousPage,
+                onNextPage = onNextPage,
+                onSaveImage = onSaveImage,
+                modifier = readerInputModifier,
+            )
+            return
         }
         val pagerState = rememberPagerState(initialPage = initialPage) { spreads.size.coerceAtLeast(1) }
-        var restoringPosition by remember(state.contentVersion, state.layoutVersion) {
-            mutableStateOf(true)
-        }
-
-        LaunchedEffect(pagerState, spreads) {
-            snapshotFlow { pagerState.currentPage }.collectLatest { page ->
-                if (!restoringPosition) {
-                    (spreads.getOrNull(page)?.first as? MangaPage)?.let(onVisiblePage)
+        val identity = Triple(state.contentVersion, state.layoutVersion, state.interactive)
+        val currentIdentity by rememberUpdatedState(identity)
+        val restored = remember(identity) { kotlinx.coroutines.CompletableDeferred<Unit>() }
+        LaunchedEffect(pagerState, spreads, identity) {
+            if (!state.interactive) return@LaunchedEffect
+            if (spreads.isEmpty()) return@LaunchedEffect
+            pagerState.scrollToPage(initialPage)
+            val expected = spreads.getOrNull(initialPage)?.key
+            snapshotFlow {
+                if (pagerState.isScrollInProgress || pagerState.currentPage != initialPage ||
+                    pagerState.settledPage != initialPage) null
+                else pagerState.layoutInfo.visiblePagesInfo.firstOrNull { it.index == initialPage }?.key
+            }.first { it == expected }
+            spreads.getOrNull(initialPage)?.first?.let { onVisibleItem(it, state.contentVersion, state.layoutVersion) }
+            restored.complete(Unit)
+            snapshotFlow {
+                if (pagerState.isScrollInProgress) null else pagerState.layoutInfo.visiblePagesInfo
+                    .firstOrNull { it.index == pagerState.settledPage }?.key
+            }.collectLatest { key ->
+                if (currentIdentity == identity) {
+                    spreads.firstOrNull { it.key == key }?.first?.let { onVisibleItem(it, state.contentVersion, state.layoutVersion) }
                 }
             }
         }
-        LaunchedEffect(state.contentVersion, state.layoutVersion, initialPage, spreads.size) {
-            if (spreads.isNotEmpty()) pagerState.scrollToPage(initialPage)
-            restoringPosition = false
-            (spreads.getOrNull(initialPage)?.first as? MangaPage)?.let(onVisiblePage)
-        }
-        LaunchedEffect(commands, pagerState, spreads, state.rightToLeft) {
-            for (command in commands) {
-                when (command) {
-                    is MangaReaderCommand.ScrollToItem -> {
-                        val target = findMangaSpreadIndex(spreads, command.itemIndex)
-                        if (command.animated) pagerState.animateScrollToPage(target) else pagerState.scrollToPage(target)
+        LaunchedEffect(state.commandVersion, pagerState, spreads, identity) {
+            if (!state.interactive) return@LaunchedEffect
+            val command = state.command ?: return@LaunchedEffect
+            restored.await()
+            when (command) {
+                is MangaScrollRequest.ToPage -> {
+                    val item = mangaScrollTarget(state.items, command)
+                    if (item >= 0) {
+                        val target = findMangaSpreadIndex(spreads, item)
+                        if (command.animated && state.pageAnimationEnabled) pagerState.animateScrollToPage(target, animationSpec = tween(260))
+                        else pagerState.scrollToPage(target)
                     }
-                    is MangaReaderCommand.TurnPage -> {
-                        val target = (pagerState.currentPage + command.direction)
-                            .coerceIn(0, (spreads.size - 1).coerceAtLeast(0))
-                        if (command.animated && state.pageAnimationEnabled) {
-                            pagerState.animateScrollToPage(target, animationSpec = tween(260))
-                        } else {
-                            pagerState.scrollToPage(target)
-                        }
-                    }
-                    is MangaReaderCommand.ScrollBy -> pagerState.scrollBy(command.pixels)
                 }
+                is MangaScrollRequest.ByPixels -> { onCommandHandled(state.commandVersion); pagerState.scrollBy(command.pixels) }
             }
+            onCommandHandled(state.commandVersion)
         }
 
         Box(Modifier.fillMaxSize()) {
             HorizontalPager(
                 state = pagerState,
                 reverseLayout = state.rightToLeft,
-                userScrollEnabled = true,
+                userScrollEnabled = state.interactive,
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(pageColor),
+                    .background(pageColor)
+                    .then(readerInputModifier),
                 key = { spreads.getOrNull(it)?.key ?: "empty" },
             ) { spreadIndex ->
                 val spread = spreads.getOrNull(spreadIndex)
@@ -157,44 +231,49 @@ internal fun MangaReaderContent(
         }
     } else {
         val listState = rememberLazyListState(state.anchorItemIndex.coerceAtLeast(0))
-        var restoringPosition by remember(state.contentVersion, state.layoutVersion) { mutableStateOf(true) }
-        LaunchedEffect(listState, state.items) {
-            snapshotFlow { listState.firstVisibleItemIndex }.collectLatest { index ->
-                if (!restoringPosition) {
-                    (state.items.getOrNull(index) as? MangaPage)?.let(onVisiblePage)
-                }
-            }
-        }
-        LaunchedEffect(state.contentVersion, state.layoutVersion, state.anchorItemIndex, state.items.size) {
-            if (state.items.isNotEmpty()) {
-                listState.scrollToItem(state.anchorItemIndex.coerceIn(0, state.items.lastIndex))
-            }
-            restoringPosition = false
-            (state.items.getOrNull(state.anchorItemIndex) as? MangaPage)?.let(onVisiblePage)
-        }
-        LaunchedEffect(commands, listState, state.items) {
-            for (command in commands) {
-                when (command) {
-                    is MangaReaderCommand.ScrollToItem -> {
-                        val target = command.itemIndex.coerceIn(0, (state.items.size - 1).coerceAtLeast(0))
-                        if (command.animated) listState.animateScrollToItem(target) else listState.scrollToItem(target)
+        val identity = Triple(state.contentVersion, state.layoutVersion, state.interactive)
+        val currentIdentity by rememberUpdatedState(identity)
+        val restored = remember(identity) { kotlinx.coroutines.CompletableDeferred<Unit>() }
+        LaunchedEffect(listState, state.items, identity) {
+            if (!state.interactive) return@LaunchedEffect
+            if (state.items.isEmpty()) return@LaunchedEffect
+            val target = state.anchorItemIndex.coerceIn(0, state.items.lastIndex)
+            listState.scrollToItem(target)
+            val expected = mangaItemKey(target, state.items[target])
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == expected } }.first { it }
+            state.items.getOrNull(state.anchorItemIndex)?.let { onVisibleItem(it, state.contentVersion, state.layoutVersion) }
+            restored.complete(Unit)
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == listState.firstVisibleItemIndex }?.key }
+                .collectLatest { key ->
+                    if (currentIdentity == identity) {
+                        state.items.withIndex().firstOrNull { mangaItemKey(it.index, it.value) == key }?.value?.let { onVisibleItem(it, state.contentVersion, state.layoutVersion) }
                     }
-                    is MangaReaderCommand.TurnPage -> {
-                        val target = (listState.firstVisibleItemIndex + command.direction)
-                            .coerceIn(0, (state.items.size - 1).coerceAtLeast(0))
+                }
+        }
+        LaunchedEffect(state.commandVersion, listState, state.items, identity) {
+            if (!state.interactive) return@LaunchedEffect
+            val command = state.command ?: return@LaunchedEffect
+            restored.await()
+            when (command) {
+                is MangaScrollRequest.ToPage -> {
+                    val target = mangaScrollTarget(state.items, command)
+                    if (target >= 0) {
                         if (command.animated && state.pageAnimationEnabled) listState.animateScrollToItem(target)
                         else listState.scrollToItem(target)
                     }
-                    is MangaReaderCommand.ScrollBy -> listState.scrollBy(command.pixels)
                 }
+                is MangaScrollRequest.ByPixels -> { onCommandHandled(state.commandVersion); listState.scrollBy(command.pixels) }
             }
+            onCommandHandled(state.commandVersion)
         }
 
         LazyColumn(
             state = listState,
+            userScrollEnabled = state.interactive,
             modifier = Modifier
                 .fillMaxSize()
-                .background(pageColor),
+                .background(pageColor)
+                .then(readerInputModifier),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             itemsIndexed(
@@ -207,14 +286,14 @@ internal fun MangaReaderContent(
                         state = state,
                         horizontal = false,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = 680.dp),
+                            .widthIn(max = 680.dp)
+                            .fillMaxWidth(),
                         onMiddleTap = onMiddleTap,
                         onPreviousPage = onPreviousPage,
                         onNextPage = onNextPage,
                         onSaveImage = onSaveImage,
                     )
-                    is ReaderLoading -> MangaLoadingPage(item, horizontal = false)
+                    is ReaderLoading -> MangaLoadingPage(item, state, horizontal = false, onMiddleTap, onPreviousPage, onNextPage)
                 }
             }
             item(key = "manga-footer") {
@@ -229,6 +308,81 @@ internal fun MangaReaderContent(
 }
 
 @Composable
+private fun MangaFreeScrollRow(
+    state: MangaReaderUiState,
+    spreads: List<MangaSpread>,
+    initialPage: Int,
+    pageColor: Color,
+    onVisibleItem: (BaseMangaPage, Int, Int) -> Unit,
+    onCommandHandled: (Long) -> Unit,
+    onMiddleTap: () -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
+    onSaveImage: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialPage)
+    val identity = Triple(state.contentVersion, state.layoutVersion, state.interactive)
+    val currentIdentity by rememberUpdatedState(identity)
+    val restored = remember(identity) { kotlinx.coroutines.CompletableDeferred<Unit>() }
+    LaunchedEffect(listState, spreads, identity) {
+        if (!state.interactive) return@LaunchedEffect
+        if (spreads.isEmpty()) return@LaunchedEffect
+        listState.scrollToItem(initialPage)
+        val expected = spreads.getOrNull(initialPage)?.key
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == expected } }.first { it }
+        spreads.getOrNull(initialPage)?.first?.let { onVisibleItem(it, state.contentVersion, state.layoutVersion) }
+        restored.complete(Unit)
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == listState.firstVisibleItemIndex }?.key }
+            .collectLatest { key ->
+                if (currentIdentity == identity) {
+                    spreads.firstOrNull { it.key == key }?.first?.let { onVisibleItem(it, state.contentVersion, state.layoutVersion) }
+                }
+            }
+    }
+    LaunchedEffect(state.commandVersion, listState, spreads, identity) {
+        if (!state.interactive) return@LaunchedEffect
+        val command = state.command ?: return@LaunchedEffect
+        restored.await()
+        when (command) {
+            is MangaScrollRequest.ToPage -> {
+                val item = mangaScrollTarget(state.items, command)
+                if (item >= 0) {
+                    val target = findMangaSpreadIndex(spreads, item)
+                    if (command.animated && state.pageAnimationEnabled) listState.animateScrollToItem(target)
+                    else listState.scrollToItem(target)
+                }
+            }
+            is MangaScrollRequest.ByPixels -> { onCommandHandled(state.commandVersion); listState.scrollBy(command.pixels) }
+        }
+        onCommandHandled(state.commandVersion)
+    }
+
+    LazyRow(
+        state = listState,
+        reverseLayout = state.rightToLeft,
+        modifier = modifier
+            .fillMaxSize()
+            .background(pageColor),
+    ) {
+        itemsIndexed(
+            items = spreads,
+            key = { _, spread -> spread.key },
+        ) { _, spread ->
+            MangaSpreadPage(
+                spread = spread,
+                state = state,
+                onMiddleTap = onMiddleTap,
+                onPreviousPage = onPreviousPage,
+                onNextPage = onNextPage,
+                onSaveImage = onSaveImage,
+                modifier = Modifier.fillParentMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
 private fun MangaSpreadPage(
     spread: MangaSpread,
     state: MangaReaderUiState,
@@ -236,16 +390,17 @@ private fun MangaSpreadPage(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onSaveImage: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val first = spread.first
     if (first is ReaderLoading) {
-        MangaLoadingPage(first, horizontal = true)
+        MangaLoadingPage(first, state, horizontal = true, onMiddleTap, onPreviousPage, onNextPage)
         return
     }
     val firstPage = first as MangaPage
     val pages = if (state.rightToLeft) listOfNotNull(spread.second, firstPage) else listOfNotNull(firstPage, spread.second)
     Row(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.Center,
     ) {
         pages.forEach { page ->
@@ -276,9 +431,6 @@ private fun MangaImagePage(
     onNextPage: () -> Unit,
     onSaveImage: (String) -> Unit,
 ) {
-    val context = LocalContext.current
-    var loading by remember(page.mImageUrl) { mutableStateOf(true) }
-    var failed by remember(page.mImageUrl) { mutableStateOf(false) }
     var reloadKey by remember(page.mImageUrl) { mutableStateOf(0) }
     var scale by remember(page.mImageUrl) { mutableFloatStateOf(1f) }
     var offsetX by remember(page.mImageUrl) { mutableFloatStateOf(0f) }
@@ -304,6 +456,18 @@ private fun MangaImagePage(
             )
         )
     }
+    val imageLoadState by rememberLegadoImageState(
+        requestKey = listOf(page.mImageUrl, state.contentVersion, transformation),
+        retryKey = reloadKey,
+    ) { requestContext ->
+        BookCover.loadManga(
+            context = requestContext,
+            path = mangaImagePath(page),
+            sourceOrigin = state.sourceOrigin,
+            bookUrl = state.bookUrl,
+            transformation = transformation,
+        )
+    }
     val gestureModifier = if (state.scaleEnabled) {
         Modifier.pointerInput(page.mImageUrl) {
             detectTransformGestures { _, pan, zoom, _ ->
@@ -320,65 +484,45 @@ private fun MangaImagePage(
         }
     } else Modifier
 
+    val decoded = (imageLoadState as? LegadoImageState.Success)?.bitmap
+    val imageRatio = when {
+        decoded != null && decoded.height > 0 -> decoded.width.toFloat() / decoded.height
+        page.imageWidth > 0 && page.imageHeight > 0 -> page.imageWidth.toFloat() / page.imageHeight
+        else -> 2f / 3f
+    }
     Box(
         modifier = modifier
+            .then(if (horizontal) Modifier else Modifier.aspectRatio(imageRatio))
             .clipToBounds()
             .then(gestureModifier),
         contentAlignment = Alignment.Center,
     ) {
-        GlideImage(
-            model = "${mangaImagePath(page.mImageUrl)}#$reloadKey",
-            contentDescription = page.mChapterName,
-            contentScale = if (horizontal) ContentScale.Fit else ContentScale.FillWidth,
-            colorFilter = ColorFilter.colorMatrix(matrix),
-            modifier = Modifier
-                .then(if (horizontal) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offsetX
-                    translationY = offsetY
-                },
-            requestBuilderTransform = {
-                BookCover.loadManga(
-                    context = context,
-                    path = mangaImagePath(page.mImageUrl),
-                    sourceOrigin = ReadManga.book?.origin,
-                    transformation = transformation,
-                ).listener(object : RequestListener<Drawable> {
-                    override fun onLoadFailed(
-                        e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean,
-                    ): Boolean {
-                        loading = false
-                        failed = true
-                        return false
-                    }
-
-                    override fun onResourceReady(
-                        resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource,
-                        isFirstResource: Boolean,
-                    ): Boolean {
-                        loading = false
-                        failed = false
-                        return false
-                    }
-                })
-            },
-        )
-        if (loading) CircularProgressIndicator()
-        if (failed) {
-            Button(onClick = {
-                loading = true
-                failed = false
-                reloadKey++
-            }) { Text("重新加载") }
+        when (val loadState = imageLoadState) {
+            LegadoImageState.Loading -> CircularProgressIndicator()
+            LegadoImageState.Error -> Button(onClick = { reloadKey++ }) {
+                Text("重新加载")
+            }
+            is LegadoImageState.Success -> Image(
+                bitmap = loadState.bitmap,
+                contentDescription = "${page.mChapterName} ${page.index + 1}/${page.imageCount}",
+                contentScale = if (horizontal) ContentScale.Fit else ContentScale.FillWidth,
+                colorFilter = ColorFilter.colorMatrix(matrix),
+                modifier = Modifier
+                    .then(if (horizontal) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offsetX
+                        translationY = offsetY
+                    },
+            )
         }
         MangaTapOverlay(
-            enabled = scale <= 1.01f,
+            enabled = state.interactive && scale <= 1.01f,
             clickScrollEnabled = state.clickScrollEnabled,
             onMiddleTap = onMiddleTap,
-            onPreviousPage = onPreviousPage,
-            onNextPage = onNextPage,
+            onPreviousPage = if (horizontal && state.rightToLeft) onNextPage else onPreviousPage,
+            onNextPage = if (horizontal && state.rightToLeft) onPreviousPage else onNextPage,
             onLongPress = { onSaveImage(page.mImageUrl) },
             onDoubleTap = {
                 if (state.scaleEnabled) {
@@ -404,18 +548,23 @@ private fun MangaTapOverlay(
     onDoubleTap: () -> Unit,
 ) {
     if (!enabled) return
+    val middleTap by rememberUpdatedState(onMiddleTap)
+    val previousPage by rememberUpdatedState(onPreviousPage)
+    val nextPage by rememberUpdatedState(onNextPage)
+    val longPress by rememberUpdatedState(onLongPress)
+    val doubleTap by rememberUpdatedState(onDoubleTap)
     Box(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(clickScrollEnabled) {
                 detectTapGestures(
-                    onLongPress = { onLongPress() },
-                    onDoubleTap = { onDoubleTap() },
+                    onLongPress = { longPress() },
+                    onDoubleTap = { doubleTap() },
                     onTap = { offset ->
                         when {
-                            offset.x in size.width * 0.33f..size.width * 0.67f -> onMiddleTap()
-                            clickScrollEnabled && offset.x < size.width * 0.33f -> onPreviousPage()
-                            clickScrollEnabled -> onNextPage()
+                            offset.x in size.width * 0.33f..size.width * 0.67f -> middleTap()
+                            clickScrollEnabled && offset.x < size.width * 0.33f -> previousPage()
+                            clickScrollEnabled -> nextPage()
                         }
                     },
                 )
@@ -449,7 +598,14 @@ private fun MangaPageCurlCanvas(offsetFraction: Float, rightToLeft: Boolean) {
 }
 
 @Composable
-private fun MangaLoadingPage(item: ReaderLoading, horizontal: Boolean) {
+private fun MangaLoadingPage(
+    item: ReaderLoading,
+    state: MangaReaderUiState,
+    horizontal: Boolean,
+    onMiddleTap: () -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -458,6 +614,15 @@ private fun MangaLoadingPage(item: ReaderLoading, horizontal: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         Text(item.mMessage.orEmpty(), color = MaterialTheme.colorScheme.onSurface)
+        MangaTapOverlay(
+            enabled = state.interactive,
+            clickScrollEnabled = state.clickScrollEnabled,
+            onMiddleTap = onMiddleTap,
+            onPreviousPage = if (horizontal && state.rightToLeft) onNextPage else onPreviousPage,
+            onNextPage = if (horizontal && state.rightToLeft) onPreviousPage else onNextPage,
+            onLongPress = {},
+            onDoubleTap = {},
+        )
     }
 }
 
@@ -478,13 +643,10 @@ private fun MangaChapterFooter(hasNextChapter: Boolean, loading: Boolean, onClic
     }
 }
 
-private fun mangaItemKey(index: Int, item: Any): String = when (item) {
+private fun mangaItemKey(index: Int, item: BaseMangaPage): String = when (item) {
     is MangaPage -> "page:${item.chapterIndex}:${item.index}:${item.mImageUrl}"
     is ReaderLoading -> "loading:${item.chapterIndex}:${item.index}:${item.mMessage}"
-    else -> "unknown:$index"
 }
 
-internal fun mangaImagePath(imageUrl: String): String {
-    val book = ReadManga.book ?: return imageUrl
-    return BookHelp.getImage(book, imageUrl).takeIf { it.isFile }?.absolutePath ?: imageUrl
-}
+internal fun mangaImagePath(page: MangaPage): String =
+    page.cachePath?.takeIf { File(it).isFile } ?: page.mImageUrl

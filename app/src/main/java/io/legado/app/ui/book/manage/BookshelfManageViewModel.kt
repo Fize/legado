@@ -1,7 +1,7 @@
 package io.legado.app.ui.book.manage
 
 import android.app.Application
-import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import io.legado.app.R
@@ -28,12 +28,24 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
+import io.legado.app.utils.cnCompare
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.mergeFilteredOrder
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeToOutputStream
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
@@ -47,16 +59,97 @@ internal data class PersistentCoverResult(
 )
 
 class BookshelfManageViewModel(application: Application) : BaseViewModel(application) {
+    private val _uiState = MutableStateFlow(BookshelfManageUiState())
+    val uiState: StateFlow<BookshelfManageUiState> = _uiState.asStateFlow()
+    private var booksJob: Job? = null
+    private var groupsJob: Job? = null
+    private var sourceJob: Job? = null
     var groupId: Long = -1L
     var groupName: String? = null
-    val batchChangeSourceState = MutableLiveData<Boolean>()
-    val batchChangeSourceProcessLiveData = MutableLiveData<String>()
+    private var initialised = false
     var batchChangeSourceCoroutine: Coroutine<Unit>? = null
-    val batchPersistCoverState = MutableLiveData<Boolean>()
-    val batchPersistCoverProcess = MutableLiveData<String>()
     internal var batchPersistCoverCoroutine: Coroutine<*>? = null
     private val coverOperationSemaphore = Semaphore(1)
     private var coverOperationId = 0
+
+    fun initialize(initialGroupId: Long) {
+        if (initialised) return
+        initialised = true
+        groupId = initialGroupId
+        groupsJob = viewModelScope.launch {
+            appDb.bookGroupDao.flowAll().catch {
+                AppLog.put("书架管理界面获取分组数据失败\n${it.localizedMessage}", it)
+                emit(emptyList())
+            }.flowOn(Dispatchers.IO).conflate().collect { groups ->
+                val currentName = groups.firstOrNull { group -> group.groupId == groupId }?.groupName
+                    ?: context.getString(R.string.no_group)
+                groupName = currentName
+                _uiState.update { state -> state.copy(groups = groups, groupName = currentName) }
+            }
+        }
+        selectGroup(initialGroupId)
+    }
+
+    fun selectGroup(groupId: Long) {
+        this.groupId = groupId
+        val currentGroup = uiState.value.groups.firstOrNull { it.groupId == groupId }
+        groupName = currentGroup?.groupName ?: context.getString(R.string.no_group)
+        _uiState.update { it.copy(groupId = groupId, groupName = groupName.orEmpty()) }
+        booksJob?.cancel()
+        booksJob = viewModelScope.launch {
+            val bookSort = AppConfig.getBookSortByGroupId(groupId)
+            appDb.bookDao.flowByGroup(groupId).map { list ->
+                when (bookSort) {
+                    1 -> list.sortedByDescending { it.latestChapterTime }
+                    2 -> list.sortedWith { first, second -> first.name.cnCompare(second.name) }
+                    3 -> list.sortedBy { it.order }
+                    4 -> list.sortedByDescending { maxOf(it.latestChapterTime, it.durChapterTime) }
+                    else -> list.sortedByDescending { it.durChapterTime }
+                }
+            }.catch {
+                AppLog.put("书架管理界面获取书籍列表失败\n${it.localizedMessage}", it)
+                emit(emptyList())
+            }.flowOn(Dispatchers.IO).conflate().collect { books ->
+                _uiState.update { it.copy(books = books) }
+            }
+        }
+    }
+
+    fun searchSources(query: String) {
+        sourceJob?.cancel()
+        sourceJob = viewModelScope.launch {
+            val flow = if (query.isBlank()) appDb.bookSourceDao.flowEnabled()
+            else appDb.bookSourceDao.flowSearchEnabled(query)
+            flow.catch { emit(emptyList()) }.flowOn(Dispatchers.IO).collect { sources ->
+                _uiState.update { it.copy(sources = sources) }
+            }
+        }
+    }
+
+    suspend fun source(sourceUrl: String): BookSource? = appDb.bookSourceDao.getBookSource(sourceUrl)
+
+    fun changeSourceByUrl(books: List<Book>, sourceUrl: String) {
+        viewModelScope.launch {
+            source(sourceUrl)?.let { changeSource(books, it) }
+        }
+    }
+
+    fun assignGroup(books: List<Book>, groupId: Long, add: Boolean = false, remove: Boolean = false) {
+        val updates = books.map { book ->
+            val group = when {
+                add -> book.group or groupId
+                remove -> book.group and groupId.inv()
+                else -> groupId
+            }
+            book.copy(group = group)
+        }
+        if (updates.isNotEmpty()) updateBook(*updates.toTypedArray())
+    }
+
+    fun cancelBatchOperation() {
+        batchChangeSourceCoroutine?.cancel()
+        batchPersistCoverCoroutine?.cancel()
+    }
 
     fun upCanUpdate(books: List<Book>, canUpdate: Boolean) {
         execute {
@@ -131,7 +224,9 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
         batchChangeSourceCoroutine = execute {
             val changeSourceDelay = AppConfig.batchChangeSourceDelay * 1000L
             books.forEachIndexed { index, book ->
-                batchChangeSourceProcessLiveData.postValue("${index + 1} / ${books.size}")
+                _uiState.update {
+                    it.copy(batchChangeSourceProgress = "${index + 1} / ${books.size}")
+                }
                 if (book.isLocal) return@forEachIndexed
                 if (book.origin == source.bookSourceUrl) return@forEachIndexed
                 val newBook = WebBook.preciseSearchAwait(source, book.name, book.author)
@@ -157,9 +252,9 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                 delay(changeSourceDelay)
             }
         }.onStart {
-            batchChangeSourceState.postValue(true)
+            _uiState.update { it.copy(batchChangeSource = true) }
         }.onFinally {
-            batchChangeSourceState.postValue(false)
+            _uiState.update { it.copy(batchChangeSource = false) }
         }
     }
 
@@ -188,9 +283,15 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                     return@forEachIndexed
                 }
                 if (operationId == coverOperationId) {
-                    batchPersistCoverProcess.postValue(
-                        context.getString(R.string.persist_cover_progress, index + 1, books.size)
-                    )
+                    _uiState.update {
+                        it.copy(
+                            batchPersistCoverProgress = context.getString(
+                                R.string.persist_cover_progress,
+                                index + 1,
+                                books.size,
+                            ),
+                        )
+                    }
                 }
                 val coverUrl = currentBook.networkCoverForPersistence()
                 if (coverUrl == null) {
@@ -199,6 +300,7 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                 }
                 val expectedOrigin = currentBook.origin
                 val expectedCoverUrl = currentBook.coverUrl
+                val expectedCustomCoverSource = currentBook.customCoverSource
                 val expectedCustomCoverUrl = currentBook.customCoverUrl
                 val expectedPersistedCoverUrl = currentBook.persistedCoverUrl
                 try {
@@ -232,7 +334,8 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                                 expectedCoverUrl,
                                 expectedCustomCoverUrl,
                                 expectedPersistedCoverUrl,
-                                persistent.absolutePath
+                                persistent.absolutePath,
+                                expectedCustomCoverSource
                             ) == 1
                         ) {
                             saved++
@@ -251,7 +354,7 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
             PersistentCoverResult(saved, skipped, failed)
         }.onStart {
             if (operationId == coverOperationId) {
-                batchPersistCoverState.postValue(true)
+                _uiState.update { it.copy(batchPersistCover = true) }
             }
         }.onSuccess {
             context.toastOnUi(
@@ -264,7 +367,7 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
             )
         }.onFinally {
             if (operationId == coverOperationId) {
-                batchPersistCoverState.postValue(false)
+                _uiState.update { it.copy(batchPersistCover = false) }
             }
         }
     }
@@ -304,6 +407,7 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                     currentBook.bookUrl,
                     currentBook.customCoverUrl,
                     currentBook.persistedCoverUrl,
+                    currentBook.customCoverSource,
                 )
             }
         }.onSuccess {
@@ -316,8 +420,20 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
     private fun beginCoverOperation(): Int {
         val operationId = ++coverOperationId
         batchPersistCoverCoroutine?.cancel()
-        batchPersistCoverState.postValue(false)
+        _uiState.update { it.copy(batchPersistCover = false) }
         return operationId
     }
 
 }
+
+data class BookshelfManageUiState(
+    val groupId: Long = -1,
+    val groupName: String = "",
+    val groups: List<io.legado.app.data.entities.BookGroup> = emptyList(),
+    val books: List<Book> = emptyList(),
+    val sources: List<io.legado.app.data.entities.BookSourcePart> = emptyList(),
+    val batchChangeSource: Boolean = false,
+    val batchChangeSourceProgress: String = "",
+    val batchPersistCover: Boolean = false,
+    val batchPersistCoverProgress: String = "",
+)

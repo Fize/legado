@@ -48,6 +48,24 @@ fun resolveBookListSpanCount(screenWidthDp: Int): Int {
     return if (screenWidthDp >= 600) 2 else 1
 }
 
+/** Limit preferred columns using the actual content bounds, after rails and pane padding. */
+fun resolveContentGridColumns(
+    preferredColumns: Int,
+    contentWidthDp: Float,
+    minimumCellWidthDp: Float,
+    fontScale: Float = 1f,
+    horizontalPaddingDp: Float = 0f,
+    spacingDp: Float = 0f,
+): Int {
+    if (!contentWidthDp.isFinite() || contentWidthDp <= 0 || !minimumCellWidthDp.isFinite() || minimumCellWidthDp <= 0) return 1
+    val scale = if (fontScale.isFinite()) fontScale.coerceIn(1f, 1.5f) else 1f
+    val gap = if (spacingDp.isFinite()) spacingDp.coerceAtLeast(0f) else 0f
+    val padding = if (horizontalPaddingDp.isFinite()) horizontalPaddingDp.coerceAtLeast(0f) else 0f
+    val available = (contentWidthDp - padding).coerceAtLeast(0f)
+    val fitting = ((available + gap) / (minimumCellWidthDp * scale + gap)).toInt().coerceAtLeast(1)
+    return preferredColumns.coerceAtLeast(1).coerceAtMost(fitting)
+}
+
 /**
  * 平板单栏模式下的内容区水平留白边距：
  * 当处于平板竖屏单栏模式时，约束单列列表（如「我的」设置项、「发现」书源卡片）的最大版心宽度并居中。

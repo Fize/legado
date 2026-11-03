@@ -99,7 +99,11 @@ class AudioReadTimeTrackerTest {
             .readText()
             .replace(Regex("\\s+"), " ")
         assertTrue(model.contains("@Synchronized fun upReadTime()"))
-        assertTrue(model.contains("executor.execute { record.saveWithCover(snapshotBook, elapsed) }"))
+        val recordSave = model.substringAfter("@Synchronized fun upReadTime()")
+            .substringBefore("private fun addLoading")
+        assertTrue(recordSave.contains("executor.execute {"))
+        assertTrue(recordSave.contains("record.saveWithCover(snapshotBook, elapsed)"))
+        assertTrue(recordSave.contains("if (RestoreRecoveryGate.isQuarantined) return@execute"))
 
         val viewModel = projectFile(
             "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"

@@ -1,14 +1,10 @@
 package io.legado.app
 
-import cn.hutool.core.lang.JarClassLoader
 import com.script.ScriptBindings
 import com.script.rhino.RhinoScriptEngine
-import dalvik.system.DexClassLoader
 import org.intellij.lang.annotations.Language
 import org.junit.Assert
 import org.junit.Test
-import org.htmlunit.corejs.javascript.DefiningClassLoader
-import java.net.URLClassLoader
 
 class AndroidJsTest {
 
@@ -51,11 +47,7 @@ class AndroidJsTest {
     }
 
     @Test
-    fun testPackages1() {
-        URLClassLoader.getSystemClassLoader()
-        DefiningClassLoader.getSystemClassLoader()
-        JarClassLoader.getSystemClassLoader()
-        DexClassLoader.getSystemClassLoader()
+    fun scriptsCannotAccessProtectedClassLoaders() {
         @Language("js")
         val js = """
             var ji = new JavaImporter(Packages.org.htmlunit.corejs.javascript.DefiningClassLoader)
@@ -63,7 +55,9 @@ class AndroidJsTest {
               let x = DefiningClassLoader.getSystemClassLoader()
             }
         """.trimIndent()
-        RhinoScriptEngine.eval(js)
+        Assert.assertThrows(Exception::class.java) {
+            RhinoScriptEngine.eval(js)
+        }
     }
 
     @Test

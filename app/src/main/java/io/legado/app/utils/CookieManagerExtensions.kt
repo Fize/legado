@@ -7,7 +7,7 @@ import android.webkit.CookieManager
 
 @Suppress("unused")
 fun CookieManager.removeCookie(url: String) {
-    val cm = CookieManager.getInstance()
+    val cm = this
     val domains = arrayOf(
         NetworkUtils.getDomain(url),
         NetworkUtils.getSubDomain(url)

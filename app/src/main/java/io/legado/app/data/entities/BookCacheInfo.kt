@@ -13,11 +13,6 @@ data class BookCacheInfo(
     val type: Int,
 )
 
-data class BookCacheCleanupSnapshot(
-    val books: List<BookCacheInfo>,
-    val imageBooks: List<Book>,
-)
-
 internal fun BookCacheInfo.getFolderName(): String {
     return name.replace(AppPattern.fileNameRegex, "").let {
         it.substring(0, min(9, it.length)) + MD5Utils.md5Encode16(bookUrl)

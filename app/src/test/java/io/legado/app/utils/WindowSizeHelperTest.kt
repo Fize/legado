@@ -2,9 +2,35 @@ package io.legado.app.utils
 
 import android.view.ViewGroup
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WindowSizeHelperTest {
+    @Test fun `content columns account for rail width padding spacing and large fonts`() {
+        assertEquals(5, resolveContentGridColumns(5, 600f, 96f, horizontalPaddingDp = 32f, spacingDp = 8f))
+        assertEquals(4, resolveContentGridColumns(5, 520f, 96f, horizontalPaddingDp = 32f, spacingDp = 8f))
+        assertEquals(2, resolveContentGridColumns(6, 360f, 96f, fontScale = 2f, horizontalPaddingDp = 32f, spacingDp = 8f))
+        assertEquals(1, resolveContentGridColumns(2, 560f, 280f, horizontalPaddingDp = 16f, spacingDp = 8f))
+        assertEquals(2, resolveContentGridColumns(2, 600f, 280f, horizontalPaddingDp = 32f, spacingDp = 8f))
+    }
+
+    @Test fun `short and malformed content bounds always yield at least one column`() {
+        for (width in listOf(0f, -1f, 80f, Float.NaN, Float.POSITIVE_INFINITY)) {
+            assertEquals(1, resolveContentGridColumns(6, width, 96f))
+        }
+        assertEquals(1, resolveContentGridColumns(0, 800f, 96f))
+        assertEquals(1, resolveContentGridColumns(6, 800f, 0f))
+    }
+
+    @Test fun `columns fit available content on both sides of adaptive breakpoints`() {
+        for (window in listOf(599, 600, 839, 840)) {
+            for (rail in listOf(0, 80)) {
+                val content = (window - rail).toFloat()
+                val count = resolveContentGridColumns(6, content, 96f, horizontalPaddingDp = 32f, spacingDp = 8f)
+                assertTrue(count * 96f + (count - 1) * 8f + 32f <= content)
+            }
+        }
+    }
 
     @Test
     fun `resolveWindowWidthSizeClass classifies compact medium and expanded widths`() {

@@ -57,9 +57,7 @@ class LiveUpdateNotificationTest {
         val service = source("app/src/main/java/io/legado/app/service/DownloadService.kt")
         val helper = source("app/src/main/java/io/legado/app/utils/NotificationExtensions.kt")
         val manifest = source("app/src/main/AndroidManifest.xml")
-        val settings = source(
-            "app/src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt"
-        )
+        val settings = source("app/src/main/java/io/legado/app/ui/config/OtherSettingsScreen.kt")
         val download = source("app/src/main/java/io/legado/app/model/Download.kt")
         val updateDialog = source("app/src/main/java/io/legado/app/ui/about/UpdateDialog.kt")
 
@@ -114,11 +112,11 @@ class LiveUpdateNotificationTest {
         assertTrue(secondProbe > colorizedFallback)
         assertFalse(helper.contains("SDK_INT_FULL"))
         assertTrue(download.contains("isAppUpdate: Boolean = false"))
-        assertTrue(settings.contains("canConfigurePromotedNotifications()"))
+        assertTrue(settings.contains("supportsPromotedNotifications() && ("))
         assertTrue(settings.contains("canPostPromotedNotifications() ||"))
-        assertTrue(settings.contains("promotedNotificationSettingsIntent().resolveActivity"))
-        assertTrue(settings.contains("intent.resolveActivity(requireContext().packageManager)"))
-        assertTrue(settings.contains("putPrefBoolean(PreferKey.liveUpdateNotifications, false)"))
+        assertTrue(settings.contains("promotedNotificationSettingsIntent(context).resolveActivity(packageManager)"))
+        assertTrue(settings.contains("intent.resolveActivity(packageManager)"))
+        assertTrue(settings.contains("context.putPrefBoolean(PreferKey.liveUpdateNotifications, false)"))
         assertTrue(updateDialog.contains("isAppUpdate = true"))
     }
 

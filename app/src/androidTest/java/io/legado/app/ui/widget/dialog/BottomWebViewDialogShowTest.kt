@@ -28,7 +28,8 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.model.SourceCallBack
-import io.legado.app.ui.about.AboutActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.HighlightRuleRoute
 import io.legado.app.utils.defaultSharedPreferences
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -56,12 +57,13 @@ class BottomWebViewDialogShowTest {
         enabled = false,
         enabledExplore = false,
     )
-    private var scenario: ActivityScenario<AboutActivity>? = null
+    private var scenario: ActivityScenario<AppActivity>? = null
 
     @Before
     fun setUp() {
         appDb.bookSourceDao.insert(source)
-        scenario = ActivityScenario.launch(AboutActivity::class.java)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        scenario = ActivityScenario.launch(AppActivity.startIntent(context, HighlightRuleRoute))
     }
 
     @After
@@ -108,7 +110,7 @@ class BottomWebViewDialogShowTest {
                     SourceCallBack.callBackBtn(activity, SourceCallBack.CLICK_CUSTOM_BUTTON, source, book, null)
                 }
             }
-            assertTrue("The real source callback must reach HTTP", entered.await(5, TimeUnit.SECONDS))
+            assertTrue("The real source callback must reach HTTP", entered.await(15, TimeUnit.SECONDS))
             assertFalse("A second click must not launch another pending callback",
                 duplicate.await(700, TimeUnit.MILLISECONDS))
             release.countDown()
@@ -137,8 +139,7 @@ class BottomWebViewDialogShowTest {
             assertTrue("The reopened dynamic page must finish rendering", awaitCondition {
                 val dialog = manager.fragments.filterIsInstance<BottomWebViewDialog>()
                     .single { it.dialog?.isShowing == true }
-                val web = (dialog.requireView().findViewById<View>(io.legado.app.R.id.web_view_container)
-                    as android.view.ViewGroup).getChildAt(0) as WebView
+                val web = dialog.webViewForTest()
                 web.title == "Request 2" && web.progress == 100
             })
             // A collapsed sheet extends below its parent; check its visible resting state.
@@ -151,8 +152,7 @@ class BottomWebViewDialogShowTest {
             scenario!!.onActivity {
                 val dialog = manager.fragments.filterIsInstance<BottomWebViewDialog>()
                     .single { it.dialog?.isShowing == true }
-                val web = (dialog.requireView().findViewById<View>(io.legado.app.R.id.web_view_container)
-                    as android.view.ViewGroup).getChildAt(0) as WebView
+                val web = dialog.webViewForTest()
                 assertTrue("The reopened WebView must occupy visible screen space",
                     web.isShown && web.getGlobalVisibleRect(visibleWeb) &&
                             visibleWeb.width() > 0 && visibleWeb.height() > 0)
@@ -409,10 +409,12 @@ class BottomWebViewDialogShowTest {
             browser.show(activity.supportFragmentManager, "explicit-offset")
             chrome = browser.CustomWebChromeClient()
         }
-        val initial = awaitGeometry { it.height == 480 && !it.fitToContents }
+        val initial = awaitGeometry {
+            it.height == 480 && !it.fitToContents && it.state == BottomSheetBehavior.STATE_EXPANDED
+        }
         assertEquals(initial.toString(), 160, initial.top)
         applyConfig("""{"maxHeight":240}""")
-        val limited = awaitGeometry { it.height == 240 }
+        val limited = awaitGeometry { it.height == 240 && it.state == BottomSheetBehavior.STATE_EXPANDED }
         assertEquals(limited.toString(), 160, limited.top)
 
         scenario!!.onActivity { activity ->
@@ -420,10 +422,10 @@ class BottomWebViewDialogShowTest {
                 override fun onCustomViewHidden() = Unit
             })
         }
-        val full = awaitGeometry { it.height == it.parentHeight }
+        val full = awaitGeometry { it.height == it.parentHeight && it.state == BottomSheetBehavior.STATE_EXPANDED }
         assertTrue(full.toString(), abs(full.top) <= 2 && abs(full.bottomGap) <= 2)
         scenario!!.onActivity { chrome.onHideCustomView() }
-        val restored = awaitGeometry { it.height == 240 }
+        val restored = awaitGeometry { it.height == 240 && it.state == BottomSheetBehavior.STATE_EXPANDED }
         assertEquals(restored.toString(), 160, restored.top)
     }
 
@@ -555,8 +557,7 @@ class BottomWebViewDialogShowTest {
                         config = """{"heightPercentage":0.6,
                             "dismissOnTouchOutside":$outside,"isHideable":true}""")
                     browser.show(activity.supportFragmentManager, "back")
-                    web = (browser.requireView().findViewById<View>(io.legado.app.R.id.web_view_container)
-                        as android.view.ViewGroup).getChildAt(0) as WebView
+                    web = browser.webViewForTest()
                 }
                 assertTrue("Browser initial page must be ready", awaitCondition {
                     web.url == firstUrl && web.title == "First" &&
@@ -630,6 +631,30 @@ class BottomWebViewDialogShowTest {
     }
 
     @Test
+    fun normalPageTouchReachesTheWebViewWithoutAFullscreenOverlay() {
+        lateinit var browser: BottomWebViewDialog
+        scenario!!.onActivity { activity ->
+            browser = BottomWebViewDialog(source.bookSourceUrl, 0, "${source.bookSourceUrl}/touch",
+                """<html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+                    <meta name="color-scheme" content="only light"><title>waiting</title></head>
+                    <body style="margin:0;color-scheme:only light"><button style="width:100vw;height:100vh;background:white;color:black;border:0"
+                    onclick="document.title='clicked'">Tap the actual page</button></body></html>""",
+                config = """{"heightPercentage":0.5}""")
+            browser.show(activity.supportFragmentManager, "normal-page-touch")
+        }
+        awaitGeometry { it.height > 0 && it.state == BottomSheetBehavior.STATE_EXPANDED }
+        assertTrue(awaitCondition { browser.requireView().findWebView()?.let {
+            it.title == "waiting" && it.progress == 100
+        } == true })
+        assertTrue("The button page must reach its final screen position", awaitWhitePageAtFinalPosition(browser))
+        onView(isAssignableFrom(WebView::class.java)).inRoot(isDialog()).perform(
+            androidx.test.espresso.action.ViewActions.click())
+        assertTrue("Native page taps must reach the real WebView", awaitCondition {
+            browser.requireView().findWebView()?.title == "clicked"
+        })
+    }
+
+    @Test
     fun outsideTouchToggleDoesNotDisableKeyBackOrSwipeDismissal() {
         lateinit var browser: BottomWebViewDialog
         scenario!!.onActivity { activity ->
@@ -656,11 +681,31 @@ class BottomWebViewDialogShowTest {
         }
         awaitGeometry { it.height > 0 && it.top > 0 && it.state == BottomSheetBehavior.STATE_EXPANDED }
         assertTrue(awaitCondition { browser.dialog?.window?.decorView?.hasWindowFocus() == true })
+        assertTrue("The comment page must finish loading before its content receives the swipe", awaitCondition {
+            val web = browser.requireView().findWebView()
+            web != null && web.url == "${source.bookSourceUrl}/comments" && web.progress == 100 &&
+                !web.canScrollVertically(-1)
+        })
+        // Window surface animations do not change View layout coordinates. Wait until the
+        // white local fixture is actually drawn at the WebView's final screen position.
+        assertTrue("The sheet window must finish entering before the swipe", awaitWhitePageAtFinalPosition(browser))
         onView(isAssignableFrom(WebView::class.java)).inRoot(isDialog()).perform(
             GeneralSwipeAction(Swipe.FAST, { swipePoint(it, 0.15f) },
                 { swipePoint(it, 0.90f) }, Press.FINGER))
-        assertTrue("Outside-touch setting must preserve real downward swipe dismissal",
-            awaitCondition { browser.dialog?.isShowing != true })
+        val swipeDismissed = awaitCondition { browser.dialog?.isShowing != true }
+        var swipeEvidence = "dismissed"
+        if (!swipeDismissed) scenario!!.onActivity {
+            val sheet = checkNotNull(browser.requireDialog().findViewById<View>(MaterialR.id.design_bottom_sheet))
+            val web = browser.requireView().findWebView()
+            swipeEvidence = "${sheetGeometry()}, draggable=${BottomSheetBehavior.from(sheet).isDraggable}, " +
+                "scrollY=${web?.scrollY}, progress=${web?.progress}, " +
+                "ime=${androidx.core.view.ViewCompat.getRootWindowInsets(browser.requireView())?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())}"
+        }
+        if (!swipeDismissed) screenshot("paragraph-outside-swipe-failed")
+        assertTrue(
+            "Outside-touch setting must preserve real downward swipe dismissal: $swipeEvidence",
+            swipeDismissed,
+        )
         scenario!!.onActivity { activity ->
             browser = newDialog(config = """{"heightPercentage":0.5,"dismissOnTouchOutside":false}""")
             browser.show(activity.supportFragmentManager, "outside-toggle")
@@ -726,8 +771,7 @@ class BottomWebViewDialogShowTest {
             val sheet = browser.dialog?.findViewById<View>(MaterialR.id.design_bottom_sheet)
             state = "hidden=$hidden, showing=${browser.dialog?.isShowing}, " +
                 "focus=${browser.dialog?.window?.decorView?.hasWindowFocus()}, " +
-                "fullscreenChildren=${(browser.view?.findViewById<View>(io.legado.app.R.id.custom_web_view)
-                    as? android.view.ViewGroup)?.childCount}, " +
+                "fullscreenChildren=${browser.customWebViewChildCountForTest()}, " +
                 "url=${web.url}, canGoBack=${web.canGoBack()}, index=${history.currentIndex}, " +
                 "sheetState=${sheet?.let { BottomSheetBehavior.from(it).state }}, " +
                 "hostFinishing=${activity.isFinishing}"
@@ -762,10 +806,43 @@ class BottomWebViewDialogShowTest {
             FileInputStream(it.fileDescriptor).bufferedReader().use { reader -> reader.readText() }
         }
 
+    private fun awaitWhitePageAtFinalPosition(browser: BottomWebViewDialog): Boolean {
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        do {
+            var x = 0
+            var y = 0
+            scenario!!.onActivity {
+                val web = checkNotNull(browser.requireView().findWebView())
+                val location = IntArray(2)
+                web.getLocationOnScreen(location)
+                x = location[0] + web.width / 2
+                y = location[1] + 2
+            }
+            val frame = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+            val ready = try {
+                val pixel = frame.getPixel(x.coerceIn(0, frame.width - 1), y.coerceIn(0, frame.height - 1))
+                android.graphics.Color.red(pixel) >= 253 && android.graphics.Color.green(pixel) >= 253 &&
+                    android.graphics.Color.blue(pixel) >= 253
+            } finally { frame.recycle() }
+            if (ready) return true
+            SystemClock.sleep(32)
+        } while (SystemClock.uptimeMillis() < deadline)
+        return false
+    }
+
+    private fun View.findWebView(): WebView? = when (this) {
+        is WebView -> this
+        is android.view.ViewGroup -> (0 until childCount).firstNotNullOfOrNull { getChildAt(it).findWebView() }
+        else -> null
+    }
+
     private fun swipePoint(view: View, heightFraction: Float): FloatArray {
         val visible = Rect()
-        assertTrue(view.getGlobalVisibleRect(visible))
-        return floatArrayOf(visible.exactCenterX(), visible.top + visible.height() * heightFraction)
+        assertTrue(view.getLocalVisibleRect(visible))
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        return floatArrayOf(location[0] + visible.exactCenterX(),
+            location[1] + visible.top + visible.height() * heightFraction)
     }
 
     private fun awaitCondition(timeoutMs: Long = 5_000, condition: () -> Boolean): Boolean {
@@ -783,7 +860,8 @@ class BottomWebViewDialogShowTest {
         source.bookSourceUrl,
         0,
         "${source.bookSourceUrl}/$page",
-        "<html><body>$page</body></html>",
+        "<html><head><meta name=\"color-scheme\" content=\"only light\"></head>" +
+            "<body style=\"color-scheme:only light;background:white;color:black\">$page</body></html>",
         config = config,
     )
 

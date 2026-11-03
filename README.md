@@ -14,7 +14,9 @@
 
 ## 本地构建与测试
 
-环境要求：**JDK 21**、**Android SDK (API 36)**。
+维护范围与兼容性验证见 [安卓维护与兼容性说明](docs/android-maintenance.md)。
+
+环境要求：**JDK 21**、**Android SDK (API 37)**。
 
 ```bash
 # 构建 Debug 分包 APK

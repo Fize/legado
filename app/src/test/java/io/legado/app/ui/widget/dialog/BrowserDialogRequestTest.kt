@@ -35,6 +35,7 @@ class BrowserDialogRequestTest {
             request.copy(html = null),
             request.copy(preloadJs = "initComments(2)"),
             request.copy(config = "{\"height\":600}"),
+            request.copy(ownerKey = "another-navigation-entry"),
         ).forEach { other ->
             assertFalse(other in listOf(request))
         }

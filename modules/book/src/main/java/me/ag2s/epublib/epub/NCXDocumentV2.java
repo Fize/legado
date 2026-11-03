@@ -167,7 +167,7 @@ public class NCXDocumentV2 {
         String result = DOMUtil
                 .getAttribute(contentElement, NAMESPACE_NCX, NCXAttributes.src);
         try {
-            result = URLDecoder.decode(result, Constants.CHARACTER_ENCODING);
+            result = URLDecoder.decode(result.replace("+", "%2B"), Constants.CHARACTER_ENCODING);
         } catch (UnsupportedEncodingException e) {
             Log.e(TAG, e.getMessage());
         }

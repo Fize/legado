@@ -4,12 +4,13 @@ import android.app.Activity.RESULT_OK
 import android.content.Context
 import android.content.Intent
 import androidx.activity.result.contract.ActivityResultContract
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.BookTocRoute
 
 class TocActivityResult : ActivityResultContract<String, Array<Any>?>() {
 
     override fun createIntent(context: Context, input: String): Intent {
-        return Intent(context, TocActivity::class.java)
-            .putExtra("bookUrl", input)
+        return AppActivity.startIntent(context, BookTocRoute(input))
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): Array<Any>? {

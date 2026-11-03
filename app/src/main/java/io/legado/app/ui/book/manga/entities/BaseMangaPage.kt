@@ -1,6 +1,6 @@
 package io.legado.app.ui.book.manga.entities
 
-interface BaseMangaPage {
+sealed interface BaseMangaPage {
     val chapterIndex: Int
     val index: Int
 }

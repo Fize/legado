@@ -47,7 +47,7 @@ class SearchResultLayoutTest {
     }
 
     private fun searchBookGridItemSource(): String = listOf(
-        File("src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"),
-        File("app/src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"),
-    ).firstOrNull { it.isFile }?.readText() ?: error("ExploreShowActivity.kt not found")
+        File("src/main/java/io/legado/app/ui/book/explore/ExploreShowScreen.kt"),
+        File("app/src/main/java/io/legado/app/ui/book/explore/ExploreShowScreen.kt"),
+    ).firstOrNull { it.isFile }?.readText() ?: error("ExploreShowScreen.kt not found")
 }

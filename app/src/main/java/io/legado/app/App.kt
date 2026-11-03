@@ -1,5 +1,10 @@
 package io.legado.app
 
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration as WorkConfiguration
+import javax.inject.Inject
+import io.legado.app.work.BookInfoDeleteScheduler
+import io.legado.app.work.CacheMaintenanceScheduler
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,6 +20,7 @@ import com.jeremyliao.liveeventbus.logger.DefaultLogger
 import com.script.rhino.ReadOnlyJavaObject
 import com.script.rhino.RhinoScriptEngine
 import com.script.rhino.RhinoWrapFactory
+import dagger.hilt.android.HiltAndroidApp
 import io.legado.app.base.AppContextWrapper
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppConst.channelIdDownload
@@ -36,7 +42,6 @@ import io.legado.app.help.DefaultData
 import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.RuleBigDataHelp
-import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ResourceThemeGeneration
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
@@ -49,6 +54,11 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.rhino.NativeBaseSource
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.storage.Backup
+import io.legado.app.help.storage.RestoreFileRecovery
+import io.legado.app.help.storage.RestoreRecoveryGate
+import io.legado.app.help.storage.RestoreRecoveryWorkerFactory
+import io.legado.app.help.storage.backupRestoreMutex
+import kotlinx.coroutines.sync.withLock
 import io.legado.app.lib.theme.WallpaperTheme
 import io.legado.app.model.BookCover
 import io.legado.app.utils.ChineseUtils
@@ -64,17 +74,36 @@ import java.net.URL
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 
-class App : Application() {
+@HiltAndroidApp
+class App : Application(), WorkConfiguration.Provider {
+    @Inject lateinit var workerFactory: HiltWorkerFactory
+    override val workManagerConfiguration: WorkConfiguration
+        get() = WorkConfiguration.Builder().setWorkerFactory(RestoreRecoveryWorkerFactory(workerFactory)).build()
+
 
     private lateinit var oldConfig: Configuration
+    private var recoveryBaseContext: android.content.MutableContextWrapper? = null
 
     override fun onCreate() {
         super.onCreate()
         CrashHandler(this)
+        // Resolve interrupted directory/file swaps before any reader loads them.
+        oldConfig = Configuration(resources.configuration)
+        val startupHadRecoveryRecord = RestoreFileRecovery.hasPending(this)
+        try {
+            RestoreFileRecovery.recover(this, cleanup = false)
+            recoveryBaseContext?.let { it.baseContext = AppContextWrapper.wrap(it.baseContext) }
+            recoveryBaseContext = null
+            oldConfig = Configuration(resources.configuration)
+            RestoreRecoveryGate.onStartupReady()
+        } catch (failure: Throwable) {
+            RestoreRecoveryGate.requireRecovery()
+            android.util.Log.e("RestoreRecovery", "Startup is waiting for recovery", failure)
+            return
+        }
         if (isDebuggable) {
             ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(true)
         }
-        oldConfig = Configuration(resources.configuration)
         ResourceThemeGeneration.observeSystemNight(
             oldConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES,
             AppConfig.themeMode !in listOf("1", "2", "3"),
@@ -84,7 +113,19 @@ class App : Application() {
         registerActivityLifecycleCallbacks(LifecycleHelp)
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)
         initRhino()
+        if (startupHadRecoveryRecord) io.legado.app.api.ShortCuts.buildShortCuts(this)
+        CacheMaintenanceScheduler.enqueue(this)
+        BookInfoDeleteScheduler.recover(this)
+        io.legado.app.work.BookInfoUploadScheduler.recover(this)
         Coroutine.async {
+            backupRestoreMutex.recover {
+                runCatching {
+                    if (RestoreFileRecovery.recover(this@App, cleanup = true)) {
+                        ReadBookConfig.initConfigs()
+                        ReadBookConfig.initShareConfig()
+                    }
+                }.onFailure { AppLog.put("恢复临时文件清理待重试", it) }
+            }
             LogUtils.init(this@App)
             LogUtils.d("App", "onCreate")
             LogUtils.logDeviceInfo()
@@ -113,9 +154,10 @@ class App : Application() {
                 appDb.searchBookDao.clearExpired(clearTime)
             }
             RuleBigDataHelp.clearInvalid()
-            BookHelp.clearInvalidCache()
             Backup.clearCache()
-            ReadBookConfig.clearBgAndCache()
+            backupRestoreMutex.withLock {
+                if (!RestoreRecoveryGate.isQuarantined && !RestoreFileRecovery.hasPending(this@App)) ReadBookConfig.clearBgAndCache()
+            }
 //            ThemeConfig.clearBg() //每次手动切换主题时清理多余图片
             //初始化简繁转换引擎
             when (AppConfig.chineseConverterType) {
@@ -135,12 +177,26 @@ class App : Application() {
         }
     }
 
+    override fun getBaseContext(): Context {
+        val attached = super.getBaseContext()
+        // Framework manifest-receiver dispatch expects the underlying ContextImpl.
+        // Resource delegation still uses the deferred wrapper until recovery completes.
+        return if (attached is android.content.MutableContextWrapper) attached.baseContext else attached
+    }
+
     override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(AppContextWrapper.wrap(base))
+        if (RestoreFileRecovery.hasPending(base)) {
+            val deferred = android.content.MutableContextWrapper(base)
+            recoveryBaseContext = deferred
+            super.attachBaseContext(deferred)
+        } else {
+            super.attachBaseContext(AppContextWrapper.wrap(base))
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        if (RestoreRecoveryGate.isQuarantined) { oldConfig = Configuration(newConfig); return }
         val diff = newConfig.diff(oldConfig)
         if ((diff and ActivityInfo.CONFIG_UI_MODE) != 0) {
             ResourceThemeGeneration.observeSystemNight(

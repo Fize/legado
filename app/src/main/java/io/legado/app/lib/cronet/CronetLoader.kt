@@ -187,7 +187,7 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
                 download(soUrl, md5, downloadFile, soFile)
                 downloadState.awaitCompletion()
                 if (install()) {
-                    System.load(soFile.absolutePath)
+                    loadVerifiedDownloadedLibrary()
                     return
                 }
                 //如果文件不存在或不是文件，则调用系统行为进行加载
@@ -199,7 +199,7 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
                 val fileMD5 = getFileMD5(soFile)
                 if (fileMD5 != null && fileMD5.equals(md5, ignoreCase = true)) {
                     //md5值一样，则加载
-                    System.load(soFile.absolutePath)
+                    loadVerifiedDownloadedLibrary()
                     DebugLog.d(javaClass.simpleName, "load from:$soFile")
                     return
                 }
@@ -210,7 +210,7 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
             download(soUrl, md5, downloadFile, soFile)
             downloadState.awaitCompletion()
             if (install()) {
-                System.load(soFile.absolutePath)
+                loadVerifiedDownloadedLibrary()
                 return
             }
             //使用系统加载方法
@@ -327,28 +327,18 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
     /**
      * 拷贝文件
      */
+    private fun loadVerifiedDownloadedLibrary() {
+        System.load(prepareVerifiedCronetLibrary(soFile, md5).absolutePath)
+    }
+
     private fun copyFile(source: File, dest: File): Boolean {
-        if (!source.exists() || !source.isFile) {
-            return false
-        }
-        if (source.absolutePath == dest.absolutePath) {
-            return true
-        }
-        val parent = dest.parentFile
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs()
-        }
-        try {
-            FileInputStream(source).use { input ->
-                FileOutputStream(dest, false).use { output ->
-                    input.copyTo(output, 1024 * 512)
-                }
-            }
-            return true
+        return try {
+            installVerifiedCronetLibrary(source, dest, md5)
+            true
         } catch (e: Exception) {
             e.printOnDebug()
+            false
         }
-        return false
     }
 
     /**

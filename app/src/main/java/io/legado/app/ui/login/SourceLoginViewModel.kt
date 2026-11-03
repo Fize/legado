@@ -2,6 +2,8 @@ package io.legado.app.ui.login
 
 import android.app.Application
 import android.content.Intent
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.text.input.TextFieldValue
 import com.script.rhino.runScriptWithContext
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
@@ -15,6 +17,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.ReadBook
 import io.legado.app.model.VideoPlay
+import io.legado.app.ui.navigation.SourceLoginRoute
 import io.legado.app.utils.toastOnUi
 
 class SourceLoginViewModel(application: Application) : BaseViewModel(application) {
@@ -25,6 +28,9 @@ class SourceLoginViewModel(application: Application) : BaseViewModel(application
     var bookType: Int = 0
     var chapter: BookChapter? = null
     var loginInfo: MutableMap<String, String> = mutableMapOf()
+    internal var readyRoute: SourceLoginRoute? = null
+    internal val loginEditorValues = mutableStateMapOf<String, TextFieldValue>()
+    internal var loginV2Snapshot: SourceLoginV2Snapshot? = null
 
     fun initData(intent: Intent, success: (bookSource: BaseSource) -> Unit, error: () -> Unit) {
         execute {

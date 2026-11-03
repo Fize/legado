@@ -1,6 +1,7 @@
 package io.legado.app.help.config
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.core.content.edit
 import io.legado.app.data.entities.ReplaceRule
 import splitties.init.appCtx
@@ -9,7 +10,7 @@ import splitties.init.appCtx
 object ReplacePreviewConfig {
 
     const val MAX_SAMPLE_LENGTH = 300
-    private const val PREFS_NAME = "replace_preview"
+    internal const val PREFS_NAME = "replace_preview"
     private const val SAMPLE_PREFIX = "sample_"
 
     private val preferences by lazy {
@@ -60,18 +61,21 @@ object ReplacePreviewConfig {
     fun saveImportedSamples(
         rules: List<ReplaceRule>,
         insertedIds: List<Long>,
-        clearMissing: Boolean = false
+        clearMissing: Boolean = false,
+        editor: SharedPreferences.Editor? = null,
     ) {
+        val target = editor ?: preferences.edit()
         rules.forEachIndexed { index, rule ->
             val ruleId = insertedIds.getOrNull(index)?.takeIf { it > 0 } ?: rule.id
             if (ruleId <= 0) return@forEachIndexed
             val sample = rule.previewText
-            if (sample == null) {
-                if (clearMissing) removeSample(ruleId)
-            } else {
-                saveSample(ruleId, sample)
-            }
+            if (sample == null && !clearMissing) return@forEachIndexed
+            val normalized = sample?.let(::normalizeSample).orEmpty()
+            if (normalized.isEmpty()) target.remove(sampleKey(ruleId))
+            else target.putString(sampleKey(ruleId), normalized)
         }
+        // Restore supplies a journaled editor; ordinary callers retain asynchronous writes.
+        target.apply()
     }
 
     private fun sampleKey(ruleId: Long): String = "$SAMPLE_PREFIX$ruleId"

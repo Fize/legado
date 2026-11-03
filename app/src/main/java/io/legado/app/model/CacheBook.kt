@@ -1,9 +1,7 @@
 package io.legado.app.model
 
-import android.content.Context
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
-import io.legado.app.constant.IntentAction
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -17,10 +15,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.CompositeCoroutine
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.webBook.WebBook
-import io.legado.app.service.CacheBookService
 import io.legado.app.utils.onEachParallel
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.startService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -91,32 +87,6 @@ object CacheBook {
             val model = it.value
             if (model.bookSource.bookSourceUrl == newBookSource.bookSourceUrl) {
                 model.bookSource = newBookSource
-            }
-        }
-    }
-
-    fun start(context: Context, book: Book, start: Int, end: Int) {
-        if (!book.isLocal) {
-            context.startService<CacheBookService> {
-                action = IntentAction.start
-                putExtra("bookUrl", book.bookUrl)
-                putExtra("start", start)
-                putExtra("end", end)
-            }
-        }
-    }
-
-    fun remove(context: Context, bookUrl: String) {
-        context.startService<CacheBookService> {
-            action = IntentAction.remove
-            putExtra("bookUrl", bookUrl)
-        }
-    }
-
-    fun stop(context: Context) {
-        if (CacheBookService.isRun) {
-            context.startService<CacheBookService> {
-                action = IntentAction.stop
             }
         }
     }

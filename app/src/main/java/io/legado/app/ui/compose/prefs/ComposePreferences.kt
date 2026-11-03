@@ -1,7 +1,10 @@
 package io.legado.app.ui.compose.prefs
 
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,19 +43,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import io.legado.app.R
 import io.legado.app.ui.compose.component.LegadoSingleChoiceDialog
 import io.legado.app.ui.compose.component.LegadoTextInputDialog
 import io.legado.app.ui.compose.component.combinedClickableCompat
-import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.defaultSharedPreferences
 import kotlin.math.roundToInt
 
@@ -404,6 +409,7 @@ fun IconListPreferenceItem(
             .takeIf { it != 0 }
             ?: R.mipmap.ic_launcher
     }
+    val currentIconPainter = rememberResourcePainter(currentIconRes)
 
     PreferenceItem(
         title = title,
@@ -411,10 +417,9 @@ fun IconListPreferenceItem(
         modifier = modifier,
         onClick = { showDialog = true },
         trailingContent = {
-            Icon(
-                painter = painterResource(currentIconRes),
+            Image(
+                painter = currentIconPainter,
                 contentDescription = null,
-                tint = Color.Unspecified,
                 modifier = Modifier.size(36.dp),
             )
         }
@@ -434,6 +439,7 @@ fun IconListPreferenceItem(
                             "mipmap",
                             context.packageName
                         ).takeIf { it != 0 } ?: R.mipmap.ic_launcher
+                        val iconPainter = rememberResourcePainter(iconRes)
 
                         Row(
                             modifier = Modifier
@@ -452,10 +458,9 @@ fun IconListPreferenceItem(
                                 onClick = null,
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Icon(
-                                painter = painterResource(iconRes),
+                            Image(
+                                painter = iconPainter,
                                 contentDescription = null,
-                                tint = Color.Unspecified,
                                 modifier = Modifier.size(36.dp),
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -473,6 +478,18 @@ fun IconListPreferenceItem(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun rememberResourcePainter(resourceId: Int): Painter {
+    val context = LocalContext.current
+    return remember(context, resourceId) {
+        val drawable = requireNotNull(ContextCompat.getDrawable(context, resourceId)).mutate()
+        val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, bitmap.width, bitmap.height)
+        drawable.draw(Canvas(bitmap))
+        BitmapPainter(bitmap.asImageBitmap())
     }
 }
 
@@ -595,39 +612,12 @@ fun SeekBarPreferenceItem(
 }
 
 @Composable
-fun CoverPreviewItem(
-    refreshTrigger: Any?,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
-    ) {
-        AndroidView(
-            factory = { ctx ->
-                CoverImageView(ctx).apply {
-                    load(name = "开源阅读", author = "开源阅读LegadoTeam")
-                }
-            },
-            update = { view ->
-                refreshTrigger.hashCode()
-                view.load(name = "开源阅读", author = "开源阅读LegadoTeam")
-            },
-            modifier = Modifier.width(108.dp),
-        )
-        AndroidView(
-            factory = { ctx ->
-                CoverImageView(ctx).apply {
-                    load(name = "开源阅读可以看小说、看漫画、听书", author = "开源阅读")
-                }
-            },
-            update = { view ->
-                refreshTrigger.hashCode()
-                view.load(name = "开源阅读可以看小说、看漫画、听书", author = "开源阅读")
-            },
-            modifier = Modifier.width(108.dp),
-        )
+fun CoverPreviewItem(modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)) {
+        io.legado.app.ui.compose.component.LegadoBookCover(null, "开源阅读", "开源阅读LegadoTeam",
+            Modifier.width(108.dp), description = stringResource(R.string.cover_preview_short))
+        io.legado.app.ui.compose.component.LegadoBookCover(null, "开源阅读可以看小说、看漫画、听书", "开源阅读",
+            Modifier.width(108.dp), description = stringResource(R.string.cover_preview_long))
     }
 }

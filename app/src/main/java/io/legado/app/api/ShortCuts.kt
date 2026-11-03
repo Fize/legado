@@ -1,14 +1,14 @@
 package io.legado.app.api
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import io.legado.app.R
-import io.legado.app.receiver.SharedReceiverActivity
+import io.legado.app.ui.AppActivity
 import io.legado.app.ui.book.read.ReadBookActivity
-import io.legado.app.ui.main.MainActivity
 
 object ShortCuts {
 
@@ -19,7 +19,7 @@ object ShortCuts {
     }
 
     private fun buildBookShelfShortCutInfo(context: Context): ShortcutInfoCompat {
-        val bookShelfIntent = buildIntent<MainActivity>(context)
+        val bookShelfIntent = buildIntent<AppActivity>(context)
         return ShortcutInfoCompat.Builder(context, "bookshelf")
             .setShortLabel(context.getString(R.string.bookshelf))
             .setLongLabel(context.getString(R.string.bookshelf))
@@ -29,7 +29,7 @@ object ShortCuts {
     }
 
     private fun buildReadBookShortCutInfo(context: Context): ShortcutInfoCompat {
-        val bookShelfIntent = buildIntent<MainActivity>(context)
+        val bookShelfIntent = buildIntent<AppActivity>(context)
         val readBookIntent = buildIntent<ReadBookActivity>(context)
         return ShortcutInfoCompat.Builder(context, "lastRead")
             .setShortLabel(context.getString(R.string.last_read))
@@ -40,7 +40,12 @@ object ShortCuts {
     }
 
     private fun buildReadAloudShortCutInfo(context: Context): ShortcutInfoCompat {
-        val readAloudIntent = buildIntent<SharedReceiverActivity>(context)
+        val readAloudIntent = Intent(Intent.ACTION_VIEW).setComponent(
+            ComponentName(
+                context.packageName,
+                "${context.packageName}.receiver.SharedReceiverActivity",
+            ),
+        )
         readAloudIntent.putExtra("action", "readAloud")
         return ShortcutInfoCompat.Builder(context, "readAloud")
             .setShortLabel(context.getString(R.string.read_aloud))

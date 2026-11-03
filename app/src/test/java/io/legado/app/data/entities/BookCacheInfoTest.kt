@@ -6,7 +6,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BookCacheInfoTest {
 
@@ -55,30 +54,6 @@ class BookCacheInfoTest {
         )
     }
 
-    @Test
-    fun `cache cleanup queries stay projected transactional and flag aware`() {
-        val daoSource = source("app/src/main/java/io/legado/app/data/dao/BookDao.kt")
-        val helpSource = source("app/src/main/java/io/legado/app/help/book/BookHelp.kt")
-
-        assertTrue(
-            daoSource.contains(
-                "SELECT bookUrl, name, origin, originName, type FROM books",
-            ),
-        )
-        assertTrue(daoSource.contains("WHERE (type & \${BookType.image}) > 0"))
-        assertTrue(
-            Regex("""@Transaction\s+fun getCacheCleanupSnapshot\(""")
-                .containsMatchIn(daoSource),
-        )
-        assertTrue(
-            daoSource.contains(
-                "if (includeImageBooks) getCacheCleanupImageBooks() else emptyList()",
-            ),
-        )
-        assertTrue(helpSource.contains("includeImageBooks = AppConfig.imageRetainNum > 0"))
-        assertFalse(helpSource.contains("appDb.bookDao.all"))
-    }
-
     private fun cacheInfo(
         bookUrl: String = "book-url",
         name: String = "book-name",
@@ -95,10 +70,4 @@ class BookCacheInfoTest {
         )
     }
 
-    private fun source(relativePath: String): String {
-        val userDir = requireNotNull(System.getProperty("user.dir"))
-        val root = generateSequence(File(userDir)) { it.parentFile }
-            .first { File(it, "app/src/main").isDirectory }
-        return File(root, relativePath).readText().replace("\r\n", "\n")
-    }
 }

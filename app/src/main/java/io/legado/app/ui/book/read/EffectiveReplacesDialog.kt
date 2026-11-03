@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -48,7 +49,8 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.replace.edit.ReplaceEditActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.ReplaceRuleEditRoute
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.setLayout
 
@@ -102,7 +104,7 @@ class EffectiveReplacesDialog() : BaseDialogFragment() {
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         isEdit = savedInstanceState?.getBoolean("isEdit") == true
         val effectiveReplaceRules = if (sourceReplacement) {
-            appDb.replaceRuleDao.findByIds(*arguments!!.getLongArray("sourceRuleIds")!!)
+            appDb.replaceRuleDao.findByIds(*requireArguments().getLongArray("sourceRuleIds")!!)
         } else ReadBook.curTextChapter?.effectiveReplaceRules ?: emptyList()
         rulesState.clear()
         if (!sourceReplacement && AppConfig.chineseConverterType > 0) {
@@ -151,12 +153,16 @@ class EffectiveReplacesDialog() : BaseDialogFragment() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .testTag("effectiveSourceRule:${item.id}")
                                 .clickable {
                                     if (item == chineseConvert) {
                                         showChineseConvertAlert()
                                     } else {
                                         editActivity.launch(
-                                            ReplaceEditActivity.startIntent(requireContext(), item.id)
+                                            AppActivity.startIntent(
+                                                requireContext(),
+                                                ReplaceRuleEditRoute(ruleId = item.id),
+                                            )
                                         )
                                     }
                                 }
@@ -202,7 +208,7 @@ class EffectiveReplacesDialog() : BaseDialogFragment() {
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         if (isEdit) {
-            if (sourceReplacement) (parentFragment as? Callback)?.onEffectiveSourceRulesChanged()
+            if (sourceReplacement) ((parentFragment as? Callback) ?: (activity as? Callback))?.onEffectiveSourceRulesChanged()
             else viewModel.replaceRuleChanged()
         }
     }

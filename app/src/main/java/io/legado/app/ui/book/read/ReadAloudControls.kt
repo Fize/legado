@@ -296,7 +296,7 @@ class ReadAloudControls(
             }
             // Fit complete labels inside the scaled background, including larger system fonts.
             val textPixels = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
-                (if (compact) 22f else 14f) * scale, context.resources.displayMetrics).roundToInt().coerceAtLeast(2)
+                (if (compact) 22f else 13f) * scale, context.resources.displayMetrics).roundToInt().coerceAtLeast(2)
             TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(text, 1, textPixels, 1, TypedValue.COMPLEX_UNIT_PX)
         }
     }

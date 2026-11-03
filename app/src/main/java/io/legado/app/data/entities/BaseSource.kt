@@ -242,8 +242,8 @@ interface BaseSource : JsExtensions {
     }
 
     fun removeLoginHeader() {
-        CacheManager.delete("loginHeader_${getKey()}")
         CookieStore.removeCookie(getKey())
+        CacheManager.delete("loginHeader_${getKey()}")
     }
 
     /**

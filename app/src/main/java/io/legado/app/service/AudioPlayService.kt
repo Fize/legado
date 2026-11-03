@@ -126,7 +126,9 @@ class AudioPlayService : BaseService(),
         }
     }
 
-    private val useWakeLock = AppConfig.audioPlayUseWakeLock
+    override val guardsRestoreRecovery = true
+    private var mediaInitialized = false
+    private var useWakeLock = false
     private val wakeLock by lazy {
         powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "legado:AudioPlayService")
             .apply {
@@ -164,6 +166,9 @@ class AudioPlayService : BaseService(),
 
     override fun onCreate() {
         super.onCreate()
+        if (isRestoreRecoveryBlocked) return
+        mediaInitialized = true
+        useWakeLock = AppConfig.audioPlayUseWakeLock
         isRun = true
         chapterToStop = chapterStopTimer.remaining
         if (chapterToStop > 0) {
@@ -186,6 +191,7 @@ class AudioPlayService : BaseService(),
                 .submit()
                 .get()
         }.onSuccess {
+            if (stopIfRestoreRecoveryRequired()) return@onSuccess
             if (it.width > 16 && it.height > 16) {
                 cover = it
                 upMediaMetadata()
@@ -195,6 +201,7 @@ class AudioPlayService : BaseService(),
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (stopIfRestoreRecoveryRequired()) return START_NOT_STICKY
         intent?.action?.let { action ->
             when (action) {
                 IntentAction.play, IntentAction.playNew -> {
@@ -256,8 +263,22 @@ class AudioPlayService : BaseService(),
         return super.onStartCommand(intent, flags, startId)
     }
 
+    override fun onRestoreRecoveryRequired() {
+        if (mediaInitialized) {
+            AudioPlay.cancelPendingForRecovery()
+            upPlayProgressJob?.cancel()
+            dsJob?.cancel()
+            upNotificationJob?.cancel()
+            exoPlayer.stop()
+        }
+        acknowledgeRecoveryForegroundStart(NotificationId.AudioPlayService)
+        super.onRestoreRecoveryRequired()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        if (isRestoreRecoveryBlocked) stopForeground(STOP_FOREGROUND_REMOVE)
+        if (!mediaInitialized) return
         isPlaying = false
         AudioPlay.upReadTime()
         defaultSharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
@@ -371,6 +392,7 @@ class AudioPlayService : BaseService(),
      * 暂停播放
      */
     private fun pause(abandonFocus: Boolean = true) {
+        if (stopIfRestoreRecoveryRequired()) return
         if (useWakeLock) {
             wakeLock.release()
             wifiLock?.release()
@@ -398,6 +420,7 @@ class AudioPlayService : BaseService(),
      */
     @SuppressLint("WakelockTimeout")
     private fun resume() {
+        if (stopIfRestoreRecoveryRequired()) return
         try {
             val generation = AudioPlay.currentPlaybackGeneration()
             var currentUrl = ""
@@ -445,6 +468,7 @@ class AudioPlayService : BaseService(),
      * 调节进度
      */
     private fun adjustProgress(position: Int) {
+        if (stopIfRestoreRecoveryRequired()) return
         this.position = position
         exoPlayer.seekTo(position.toLong())
     }
@@ -454,6 +478,7 @@ class AudioPlayService : BaseService(),
      */
     @SuppressLint(value = ["ObsoleteSdkInt"])
     private fun upSpeed(speed: Float) {
+        if (stopIfRestoreRecoveryRequired()) return
         kotlin.runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 playSpeed = speed
@@ -548,6 +573,7 @@ class AudioPlayService : BaseService(),
         sharedPreferences: SharedPreferences?,
         key: String?,
     ) {
+        if (stopIfRestoreRecoveryRequired()) return
         if (key != PreferKey.enableReadRecord) return
         if (AppConfig.enableReadRecord && exoPlayer.isPlaying) {
             AudioPlay.markReadTimeStart()
@@ -557,6 +583,7 @@ class AudioPlayService : BaseService(),
     }
 
     private fun upMediaMetadata() {
+        if (stopIfRestoreRecoveryRequired()) return
         val metadata = MediaMetadataCompat.Builder()
             .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, cover)
             .putText(MediaMetadataCompat.METADATA_KEY_TITLE, AudioPlay.durChapter?.title ?: "null")
@@ -574,7 +601,7 @@ class AudioPlayService : BaseService(),
     }
 
     private fun isCurrentPlayback(generation: Long = playbackGeneration): Boolean {
-        return generation == AudioPlay.currentPlaybackGeneration()
+        return !isRestoreRecoveryBlocked && generation == AudioPlay.currentPlaybackGeneration()
     }
 
     private fun currentAudioSkipWindow(durationMs: Long): AudioSkipWindow? {
@@ -777,6 +804,7 @@ class AudioPlayService : BaseService(),
         )
         mediaSessionCompat.setCallback(object : MediaSessionCompat.Callback() {
             override fun onSeekTo(pos: Long) {
+                if (stopIfRestoreRecoveryRequired()) return
                 position = pos.toInt()
                 AudioPlay.playPositionChanged(position)
                 exoPlayer.seekTo(pos)
@@ -791,6 +819,7 @@ class AudioPlayService : BaseService(),
             override fun onPause() = pause()
 
             override fun onCustomAction(action: String?, extras: Bundle?) {
+                if (stopIfRestoreRecoveryRequired()) return
                 action ?: return
 
                 when (action) {
@@ -835,6 +864,7 @@ class AudioPlayService : BaseService(),
      * 音频焦点变化
      */
     override fun onAudioFocusChange(focusChange: Int) {
+        if (stopIfRestoreRecoveryRequired()) return
         if (AppConfig.ignoreAudioFocus) {
             AppLog.put("忽略音频焦点处理(有声)")
             return
@@ -944,7 +974,9 @@ class AudioPlayService : BaseService(),
     }
 
     private fun upAudioPlayNotification() {
+        if (stopIfRestoreRecoveryRequired()) return
         upNotificationJob = execute {
+            if (isRestoreRecoveryBlocked) return@execute
             try {
                 val notification = createNotification()
                 notificationManager.notify(NotificationId.AudioPlayService, notification.build())
@@ -958,7 +990,9 @@ class AudioPlayService : BaseService(),
      * 更新通知
      */
     override fun startForegroundNotification() {
+        if (stopIfRestoreRecoveryRequired()) return
         execute {
+            if (isRestoreRecoveryBlocked) return@execute
             try {
                 val notification = createNotification()
                 startForeground(NotificationId.AudioPlayService, notification.build())

@@ -9,31 +9,42 @@ class ReadMangaOfflineActionsTest {
     @Test
     fun `manga reader exposes offline cache and long press image saving`() {
         val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt"
+            "src/main/java/io/legado/app/ui/book/manga/MangaReaderDestination.kt"
         ).readText()
+        val surface = projectFile("src/main/java/io/legado/app/ui/book/manga/MangaReaderSurface.kt").readText()
+        val menus = projectFile("src/main/java/io/legado/app/ui/book/manga/MangaReaderMenus.kt").readText()
         val viewModel = projectFile(
             "src/main/java/io/legado/app/ui/book/manga/ReadMangaViewModel.kt"
         ).readText()
+        val sessionRepository = projectFile(
+            "src/main/java/io/legado/app/data/repository/MangaReaderSessionRepository.kt"
+        ).readText()
         val preferKey = projectFile("src/main/java/io/legado/app/constant/PreferKey.kt").readText()
-        val appConfig = projectFile("src/main/java/io/legado/app/help/config/AppConfig.kt").readText()
-        val downloadDialog = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/BaseReadBookActivity.kt"
+        val preferencesRepository = projectFile(
+            "src/main/java/io/legado/app/data/repository/MangaReaderPreferencesRepository.kt"
         ).readText()
         val cacheBook = projectFile("src/main/java/io/legado/app/model/CacheBook.kt").readText()
+        val dataRepository = projectFile(
+            "src/main/java/io/legado/app/data/repository/MangaReaderDataRepository.kt"
+        ).readText()
         val mangaContent = projectFile(
             "src/main/java/io/legado/app/ui/book/manga/MangaReaderContent.kt"
         ).readText()
         val bookCover = projectFile("src/main/java/io/legado/app/model/BookCover.kt").readText()
 
-        assertTrue(activity.contains("R.string.offline_cache"))
-        assertTrue(activity.contains("R.string.manga_long_click_save_image"))
-        assertTrue(activity.contains("showBookDownloadDialog"))
+        assertTrue(projectFile("src/main/java/io/legado/app/ui/book/manga/MangaReaderDialogs.kt").readText().contains("R.string.offline_cache"))
+        assertTrue(menus.contains("R.string.manga_long_click_save_image"))
+        assertTrue(viewModel.contains("MangaReaderDialog.DownloadRange"))
         assertTrue(mangaContent.contains("onLongPress = { onSaveImage(page.mImageUrl) }"))
-        assertTrue(activity.contains("AppConfig.mangaLongClickSaveImage"))
-        assertTrue(activity.contains("onSaveImage ="))
-        assertTrue(downloadDialog.contains("fun Context.showBookDownloadDialog(book: Book)"))
-        assertTrue(viewModel.contains("BookHelp.saveImage(ReadManga.bookSource, book, src)"))
-        assertTrue(viewModel.contains("createFileIfNotExist(image.name).writeFile(image)"))
+        assertTrue(surface.contains("if (state.longClickSaveEnabled) onAction(MangaReaderAction.SaveImage(it))"))
+        assertTrue(surface.contains("onSaveImage ="))
+        assertTrue(activity.contains("viewModel.savedImageDirectory()"))
+        assertTrue(activity.contains("viewModel.rememberImageDirectory(uri)"))
+        assertTrue(dataRepository.contains("ACache.get()"))
+        assertTrue(dataRepository.contains("AppConst.imagePathKey"))
+        assertTrue(viewModel.contains("sessionRepository.saveImage(src, uri)"))
+        assertTrue(sessionRepository.contains("BookHelp.saveImage(session.bookSource, book, sourceUrl)"))
+        assertTrue(sessionRepository.contains("createFileIfNotExist(image.name).writeFile(image)"))
         val cacheSuccess = cacheBook.substringAfter("val ticket = downloads.claimManual(index)")
             // Ordinary offline caching still finishes only after its images are saved.
             // Theme resource refresh now has a separate staged transaction above this branch.
@@ -43,11 +54,11 @@ class ReadMangaOfflineActionsTest {
         assertTrue(cacheSuccess.contains("BookHelp.saveImages(source, requestBook, chapter, content, 1)"))
         assertTrue(cacheSuccess.contains("val currentContent = BookHelp.getContent(requestBook, chapter) ?: content"))
         assertTrue(cacheSuccess.indexOf("BookHelp.saveImages") < cacheSuccess.indexOf("onSuccess(ticket"))
-        assertTrue(mangaContent.contains("mangaImagePath(page.mImageUrl)"))
-        assertTrue(mangaContent.contains("takeIf { it.isFile }?.absolutePath ?: imageUrl"))
+        assertTrue(mangaContent.contains("mangaImagePath(page)"))
+        assertTrue(mangaContent.contains("page.cachePath?.takeIf { File(it).isFile } ?: page.mImageUrl"))
         assertTrue(bookCover.contains("ImageLoader.loadFile(context, path).apply(options)"))
         assertTrue(preferKey.contains("mangaLongClickSaveImage = \"mangaLongClickSaveImage\""))
-        assertTrue(appConfig.contains("getPrefBoolean(PreferKey.mangaLongClickSaveImage, true)"))
+        assertTrue(preferencesRepository.contains("longClickSaveEnabled: Boolean = true"))
     }
 
     private fun projectFile(pathInApp: String): File {

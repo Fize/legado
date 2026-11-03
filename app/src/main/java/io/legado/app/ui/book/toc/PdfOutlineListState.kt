@@ -50,7 +50,7 @@ internal class PdfOutlineListState(val nodes: List<PdfOutlineNode>, expanded: Bo
     }
 }
 
-internal data class PdfOutlineRow(
+data class PdfOutlineRow(
     val node: PdfOutlineNode,
     val hasChildren: Boolean,
     val collapsed: Boolean,

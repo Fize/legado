@@ -3,7 +3,6 @@ package io.legado.app.data
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.testing.MigrationTestHelper
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.constant.AppConst
@@ -14,10 +13,11 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.ContentRule
 import io.legado.app.data.entities.saveWithCover
+import io.legado.app.data.repository.MangaReaderDataRepository
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.globalExecutor
 import io.legado.app.model.ReadBook
-import io.legado.app.model.ReadManga
+import io.legado.app.model.MangaReaderSession
 import io.legado.app.model.AudioPlay
 import io.legado.app.help.book.ReadRecordCoverCache
 import io.legado.app.help.storage.Restore
@@ -45,8 +45,8 @@ class ReadRecordAuthorIdentityTest {
     @get:Rule
     val helper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
-        AppDatabase::class.java.canonicalName,
-        FrameworkSQLiteOpenHelperFactory(),
+        AppDatabase::class.java,
+        DatabaseMigrations.autoMigrationSpecs.toList(),
     )
 
     @Test
@@ -82,12 +82,12 @@ class ReadRecordAuthorIdentityTest {
             helper.runMigrationsAndValidate(name, 107, true, *DatabaseMigrations.migrations).close()
             // Also preserve those records when opening the current generated Room database.
             val database = Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(*DatabaseMigrations.migrations)
+                .addLegadoMigrations()
                 .allowMainThreadQueries()
                 .build()
             try {
                 val dao = database.readRecordDao
-                assertEquals(111, database.openHelper.writableDatabase.version)
+                assertEquals(132, database.openHelper.writableDatabase.version)
                 assertEquals(legacy.toSet(), dao.all.toSet())
                 assertEquals(1350L, dao.allTime)
                 assertNull(dao.getRecord("phone", "Same", "Author A"))
@@ -155,7 +155,7 @@ class ReadRecordAuthorIdentityTest {
             }
             // Opening the generated Room database runs and validates the real migration.
             val database = Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(*DatabaseMigrations.migrations)
+                .addLegadoMigrations()
                 .setQueryCallback(object : RoomDatabase.QueryCallback {
                     override fun onQuery(sqlQuery: String, bindArgs: List<Any?>) {
                         if (sqlQuery.trimStart().startsWith("select history.bookName")) {
@@ -165,7 +165,7 @@ class ReadRecordAuthorIdentityTest {
                 }, Executor { it.run() }).build()
             try {
                 val sqlite = database.openHelper.writableDatabase
-                assertEquals(111, sqlite.version)
+                assertEquals(132, sqlite.version)
                 assertEquals(records.toSet(), database.readRecordDao.all.toSet())
                 for (search in listOf(false, true)) {
                     val start = android.os.SystemClock.elapsedRealtime()
@@ -423,7 +423,8 @@ class ReadRecordAuthorIdentityTest {
             AppConfig.enableReadRecord = true
             // Invoke each real resume loader, then its real timer/write path. Reflection only
             // avoids starting chapter/network loading and preserves the shared reader state.
-            for (model in listOf(ReadBook, ReadManga)) {
+            for (model in listOf(ReadBook, MangaReaderSession(MangaReaderDataRepository()))) {
+                if (model is MangaReaderSession) model.beginReading()
                 awaitWrites()
                 val type = model.javaClass
                 val bookField = type.getDeclaredField("book").apply { isAccessible = true }
@@ -515,7 +516,8 @@ class ReadRecordAuthorIdentityTest {
         val saved = dao.all
         try {
             AppConfig.enableReadRecord = true
-            for (model in listOf(ReadBook, ReadManga, AudioPlay)) {
+            for (model in listOf(ReadBook, MangaReaderSession(MangaReaderDataRepository()), AudioPlay)) {
+                if (model is MangaReaderSession) model.beginReading()
                 globalExecutor.submit {}.get(10, TimeUnit.SECONDS)
                 val type = model.javaClass
                 val bookField = type.getDeclaredField("book").apply { isAccessible = true }
@@ -736,6 +738,7 @@ class ReadRecordAuthorIdentityTest {
 
     private fun withDatabase(block: (AppDatabase) -> Unit) {
         val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .addLegadoMigrations()
             .allowMainThreadQueries().build()
         try { block(database) } finally { database.close() }
     }

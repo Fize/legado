@@ -1,5 +1,7 @@
 package io.legado.app.ui.association
 
+import io.legado.app.data.repository.*
+
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.exception.NoStackTraceException

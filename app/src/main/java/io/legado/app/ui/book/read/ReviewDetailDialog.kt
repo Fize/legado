@@ -92,7 +92,6 @@ import io.legado.app.model.analyzeRule.ReviewRuleParser
 import io.legado.app.model.analyzeRule.ReviewRuleParser.DetailItem as ReviewDetailItem
 import io.legado.app.model.jsSource.JsSourceReview
 import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
@@ -109,6 +108,7 @@ import splitties.systemservices.windowManager
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
+import io.legado.app.ui.photo.openPhoto
 
 class ReviewDetailDialog() : BaseDialogFragment() {
 
@@ -1187,8 +1187,7 @@ class ReviewDetailDialog() : BaseDialogFragment() {
                         update = { imageView ->
                             bindReviewImage(context, imageView, imageUrl)
                             imageView.setOnClickListener {
-                                PhotoDialog(imageUrl, sourceKey)
-                                    .show(this@ReviewDetailDialog.childFragmentManager, "reviewPhoto")
+                                requireActivity().openPhoto(imageUrl, sourceKey)
                             }
                         }
                     )

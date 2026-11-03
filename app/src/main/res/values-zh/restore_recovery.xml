@@ -1,0 +1,13 @@
+<resources>
+    <string name="restore_recovery_title">需要完成恢复</string>
+    <string name="restore_recovery_message">上次恢复尚未完成。为保护数据，已暂停生成新的备份。请释放存储空间、重新连接原存储或恢复文件访问权限，然后重试。恢复记录会保留。</string>
+    <string name="restore_recovery_retry">重试恢复</string>
+    <string name="restore_recovery_close">关闭应用</string>
+    <string name="restore_recovery_working">正在恢复数据…</string>
+    <string name="restore_recovery_complete_title">恢复已完成</string>
+    <string name="restore_recovery_complete_message">数据已恢复。请关闭并重新打开应用后继续使用。重新打开前仍会暂停生成新的备份。</string>
+    <string name="restore_recovery_retry_failed">恢复仍未完成。请检查剩余空间、重新连接原存储或恢复文件访问权限后再试。恢复记录仍会保留，新的备份仍已暂停。</string>
+    <string name="restore_recovery_notification_channel">数据恢复</string>
+    <string name="restore_recovery_playback_stopped">播放已停止。请打开应用完成恢复。</string>
+    <string name="restore_recovery_background_stopped">后台任务已停止。请打开应用完成数据恢复。</string>
+</resources>

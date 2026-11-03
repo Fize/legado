@@ -16,21 +16,18 @@ class FileManagePopupActionMigrationTest {
         assertContains(source, "DropdownMenu(")
         assertContains(source, "stringResource(R.string.delete)")
         assertContains(source, "color = MaterialTheme.colorScheme.error")
-        assertContains(source, "viewModel.delFile(item)")
+        assertContains(source, "viewModel.delete(file)")
     }
 
     @Test
-    fun `parent directory remains excluded from the deletion menu`() {
+    fun `parent navigation is modeled by breadcrumbs instead of a deletable row`() {
         val source = readProjectFile(FILE_MANAGE)
-        val longClick = source.indexOf("onLongClick = {")
-        val guard = source.indexOf("if (item == viewModel.lastDir)", longClick + 1)
-        val guardReturn = source.indexOf("return@combinedClickable", guard + 1)
-        val menu = source.indexOf("menuExpanded = true", guard + 1)
+        val viewModel = readProjectFile(FILE_MANAGE_VIEW_MODEL)
 
-        assertTrue("file rows should define a long-click listener", longClick >= 0)
-        assertTrue("parent directory guard should remain before the menu call", guard >= 0)
-        assertTrue("parent directory guard should consume the long click", guardReturn in (guard + 1)..<menu)
-        assertTrue("file menu should only be shown after the parent directory guard", menu > guard)
+        assertContains(source, "state.breadcrumbs")
+        assertContains(source, "if (!viewModel.goBack()) onExit()")
+        assertFalse(source.contains("dirParent"))
+        assertTrue(viewModel.contains("breadcrumbs.dropLast(1)"))
     }
 
     @Test
@@ -39,7 +36,7 @@ class FileManagePopupActionMigrationTest {
     }
 
     private fun assertContains(source: String, expected: String) {
-        assertTrue("FileManageActivity.kt should contain $expected", source.contains(expected))
+        assertTrue("FileManagerScreen.kt should contain $expected", source.contains(expected))
     }
 
     private fun readProjectFile(pathInApp: String): String =
@@ -53,6 +50,7 @@ class FileManagePopupActionMigrationTest {
             .firstOrNull(File::isFile)
 
     private companion object {
-        const val FILE_MANAGE = "src/main/java/io/legado/app/ui/file/FileManageActivity.kt"
+        const val FILE_MANAGE = "src/main/java/io/legado/app/ui/file/FileManagerScreen.kt"
+        const val FILE_MANAGE_VIEW_MODEL = "src/main/java/io/legado/app/ui/file/FileManageViewModel.kt"
     }
 }

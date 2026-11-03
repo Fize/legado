@@ -1,5 +1,6 @@
 package io.legado.app.help
 
+import android.content.Intent
 import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import androidx.annotation.Keep
@@ -32,8 +33,9 @@ import io.legado.app.model.Debug
 import io.legado.app.model.VideoPlay
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.QueryTTF
-import io.legado.app.ui.association.OnLineImportActivity
-import io.legado.app.ui.association.OpenUrlConfirmActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.OpenUrlConfirmRoute
+import io.legado.app.ui.navigation.OnlineImportRoute
 import io.legado.app.ui.widget.dialog.BottomWebViewDialog
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.ChineseUtils
@@ -1250,19 +1252,22 @@ interface JsExtensions : JsEncodeUtils {
         rhinoContextOrNull?.ensureActive()
         if (!canOpenSourceUi()) return
         if (url.startsWith("legado://") || url.startsWith("yuedu://")) {
-            appCtx.startActivity<OnLineImportActivity> {
-                data = url.toUri()
-            }
+            appCtx.startActivity(AppActivity.startIntent(appCtx, OnlineImportRoute(url)))
             return
         }
         val source = getSource() ?: throw NoStackTraceException("openUrl source cannot be null")
-        appCtx.startActivity<OpenUrlConfirmActivity> {
-            putExtra("uri", url)
-            putExtra("mimeType", mimeType)
-            putExtra("sourceOrigin", source.getKey())
-            putExtra("sourceName", source.getTag())
-            putExtra("sourceType", source.getSourceType())
-        }
+        appCtx.startActivity(
+            AppActivity.startIntent(
+                appCtx,
+                OpenUrlConfirmRoute(
+                    uri = url,
+                    mimeType = mimeType,
+                    sourceOrigin = source.getKey(),
+                    sourceName = source.getTag(),
+                    sourceType = source.getSourceType(),
+                ),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 
     fun showBrowser(url: String) = showBrowser(url, null, null, null)

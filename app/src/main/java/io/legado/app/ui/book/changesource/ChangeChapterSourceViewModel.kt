@@ -1,8 +1,6 @@
 package io.legado.app.ui.book.changesource
 
-import android.app.Application
 import android.os.Bundle
-import androidx.lifecycle.MutableLiveData
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -18,6 +16,9 @@ import kotlinx.coroutines.Dispatchers.IO
 import io.legado.app.help.source.SuppressSourceNavigation
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 internal sealed interface OriginalChaptersState {
@@ -88,6 +89,18 @@ internal sealed interface ChapterSourceAutomationState {
 
     data class Finished(val total: Int) : ChapterSourceAutomationState
 }
+
+internal data class ChangeChapterSourceUiState(
+    val originalChaptersState: OriginalChaptersState? = null,
+    val tocState: ChapterTocState = ChapterTocState.Idle,
+    val contentLoading: Boolean = false,
+    val contentResultRevision: Long = 0,
+    val contentResult: ChapterContentResult? = null,
+    val batchCaching: Boolean = false,
+    val batchCacheResultRevision: Long = 0,
+    val batchCacheResult: ChapterCacheResult? = null,
+    val automationState: ChapterSourceAutomationState = ChapterSourceAutomationState.Idle,
+)
 
 internal class ChapterSourceAutomationSession(
     val id: Long,
@@ -173,8 +186,7 @@ internal class ChapterSourceProgress {
 }
 
 @Suppress("MemberVisibilityCanBePrivate")
-class ChangeChapterSourceViewModel(application: Application) :
-    ChangeBookSourceViewModel(application) {
+class ChangeChapterSourceViewModel : ChangeBookSourceViewModel() {
 
     protected override val pinCurrentSource = true
     private val progress = ChapterSourceProgress()
@@ -182,15 +194,8 @@ class ChangeChapterSourceViewModel(application: Application) :
         get() = progress.chapterIndex
     val chapterTitle: String
         get() = progress.chapterTitle
-    internal val originalChaptersState = MutableLiveData<OriginalChaptersState>()
-    internal val tocState = MutableLiveData<ChapterTocState>(ChapterTocState.Idle)
-    val contentLoading = MutableLiveData(false)
-    internal val contentResult = MutableLiveData<PendingEvent<ChapterContentResult>>()
-    val batchCaching = MutableLiveData(false)
-    internal val batchCacheResult = MutableLiveData<PendingEvent<ChapterCacheResult>>()
-    internal val automationState = MutableLiveData<ChapterSourceAutomationState>(
-        ChapterSourceAutomationState.Idle
-    )
+    private val _chapterUiState = MutableStateFlow(ChangeChapterSourceUiState())
+    internal val chapterUiState = _chapterUiState.asStateFlow()
     private var originalBookUrl: String? = null
     private var originalChapters = emptyList<BookChapter>()
     private var originalChaptersTask: Coroutine<List<BookChapter>>? = null
@@ -200,6 +205,8 @@ class ChangeChapterSourceViewModel(application: Application) :
     private var cacheCommitStarted = false
     private var automationGeneration = 0L
     private var automationSession: ChapterSourceAutomationSession? = null
+    private var consumedContentResultRevision = 0L
+    private var consumedBatchCacheResultRevision = 0L
 
     val currentOriginalChapter: BookChapter?
         get() = progress.currentChapter(originalChapters)
@@ -226,26 +233,36 @@ class ChangeChapterSourceViewModel(application: Application) :
         nextChapterUrl: String?,
     ) {
         contentTask?.cancel()
-        contentLoading.value = true
+        _chapterUiState.update { it.copy(contentLoading = true) }
         contentTask = execute(context = IO + SuppressSourceNavigation) {
             val bookSource = appDb.bookSourceDao.getBookSource(book.origin)
                 ?: throw NoStackTraceException("书源不存在")
             WebBook.getContentAwait(bookSource, book, chapter, nextChapterUrl, false)
         }.onSuccess {
             contentTask = null
-            contentLoading.value = false
-            contentResult.value = PendingEvent(ChapterContentResult.Success(it))
+            _chapterUiState.update { state ->
+                state.copy(
+                    contentLoading = false,
+                    contentResultRevision = state.contentResultRevision + 1,
+                    contentResult = ChapterContentResult.Success(it),
+                )
+            }
         }.onError {
             contentTask = null
-            contentLoading.value = false
-            contentResult.value = PendingEvent(
-                ChapterContentResult.Error(it.localizedMessage ?: "获取正文出错")
-            )
+            _chapterUiState.update { state ->
+                state.copy(
+                    contentLoading = false,
+                    contentResultRevision = state.contentResultRevision + 1,
+                    contentResult = ChapterContentResult.Error(
+                        it.localizedMessage ?: "获取正文出错"
+                    ),
+                )
+            }
         }
     }
 
     fun loadOriginalChapters(bookUrl: String) {
-        val state = originalChaptersState.value
+        val state = _chapterUiState.value.originalChaptersState
         if (originalBookUrl == bookUrl &&
             (state is OriginalChaptersState.Loading || state is OriginalChaptersState.Success)
         ) {
@@ -253,32 +270,40 @@ class ChangeChapterSourceViewModel(application: Application) :
         }
         originalBookUrl = bookUrl
         originalChaptersTask?.cancel()
-        originalChaptersState.value = OriginalChaptersState.Loading
+        _chapterUiState.update { it.copy(originalChaptersState = OriginalChaptersState.Loading) }
         originalChaptersTask = execute {
             appDb.bookChapterDao.getChapterList(bookUrl)
         }.onSuccess { chapters ->
             originalChaptersTask = null
             originalChapters = chapters
-            originalChaptersState.value = OriginalChaptersState.Success(chapters)
+            _chapterUiState.update {
+                it.copy(originalChaptersState = OriginalChaptersState.Success(chapters))
+            }
         }.onError {
             originalChaptersTask = null
-            originalChaptersState.value = OriginalChaptersState.Error(
-                it.localizedMessage ?: "获取目录出错"
-            )
+            _chapterUiState.update { state ->
+                state.copy(
+                    originalChaptersState = OriginalChaptersState.Error(
+                        it.localizedMessage ?: "获取目录出错"
+                    )
+                )
+            }
         }
     }
 
     fun loadToc(book: Book) {
-        if (isAutomationActive || batchCaching.value == true) return
+        if (isAutomationActive || _chapterUiState.value.batchCaching) return
         cancelContent()
         tocTask?.cancel()
-        tocState.value = ChapterTocState.Loading(book)
+        _chapterUiState.update { it.copy(tocState = ChapterTocState.Loading(book)) }
         tocTask = getToc(book, { toc, source ->
             tocTask = null
-            tocState.value = ChapterTocState.Success(book, toc, source)
+            _chapterUiState.update {
+                it.copy(tocState = ChapterTocState.Success(book, toc, source))
+            }
         }, { throwable ->
             tocTask = null
-            tocState.value = ChapterTocState.Error(throwable)
+            _chapterUiState.update { it.copy(tocState = ChapterTocState.Error(throwable)) }
         })
     }
 
@@ -286,13 +311,27 @@ class ChangeChapterSourceViewModel(application: Application) :
         cancelContent()
         tocTask?.cancel()
         tocTask = null
-        tocState.value = ChapterTocState.Idle
+        _chapterUiState.update { it.copy(tocState = ChapterTocState.Idle) }
     }
 
     private fun cancelContent() {
         contentTask?.cancel()
         contentTask = null
-        contentLoading.value = false
+        _chapterUiState.update { it.copy(contentLoading = false) }
+    }
+
+    @Synchronized
+    internal fun consumeContentResult(revision: Long): ChapterContentResult? {
+        if (revision <= consumedContentResultRevision) return null
+        consumedContentResultRevision = revision
+        return _chapterUiState.value.contentResult
+    }
+
+    @Synchronized
+    internal fun consumeBatchCacheResult(revision: Long): ChapterCacheResult? {
+        if (revision <= consumedBatchCacheResultRevision) return null
+        consumedBatchCacheResultRevision = revision
+        return _chapterUiState.value.batchCacheResult
     }
 
     fun cacheContents(
@@ -322,9 +361,9 @@ class ChangeChapterSourceViewModel(application: Application) :
         automationSessionId: Long?,
         automationTargetPositions: List<Int>,
     ) {
-        if (batchCaching.value == true) return
+        if (_chapterUiState.value.batchCaching) return
         cacheCommitStarted = false
-        batchCaching.value = true
+        _chapterUiState.update { it.copy(batchCaching = true) }
         cacheTask = execute(context = IO + SuppressSourceNavigation) {
             val bookSource = appDb.bookSourceDao.getBookSource(sourceBook.origin)
                 ?: throw NoStackTraceException("书源不存在")
@@ -353,9 +392,11 @@ class ChangeChapterSourceViewModel(application: Application) :
                 withContext(Main) {
                     cacheTask = null
                     cacheCommitStarted = false
-                    batchCaching.value = false
-                    batchCacheResult.value = PendingEvent(
-                        ChapterCacheResult.Success(
+                    _chapterUiState.update { state ->
+                        state.copy(
+                            batchCaching = false,
+                            batchCacheResultRevision = state.batchCacheResultRevision + 1,
+                            batchCacheResult = ChapterCacheResult.Success(
                             cachedChapterIndex = originalChapter.index,
                             nextChapter = if (automationSessionId == null) {
                                 advanceOriginalChapter(originalChapter)
@@ -364,14 +405,15 @@ class ChangeChapterSourceViewModel(application: Application) :
                             },
                             targetPosition = targetPosition,
                             automationSessionId = automationSessionId,
+                            ),
                         )
-                    )
+                    }
                 }
             }
         }.onError { throwable ->
             cacheTask = null
             cacheCommitStarted = false
-            batchCaching.value = false
+            _chapterUiState.update { it.copy(batchCaching = false) }
             val message = throwable.localizedMessage ?: "获取正文出错"
             if (automationSessionId == null || pauseAutomationAfterError(
                     automationSessionId,
@@ -380,9 +422,12 @@ class ChangeChapterSourceViewModel(application: Application) :
                     message,
                 )
             ) {
-                batchCacheResult.value = PendingEvent(
-                    ChapterCacheResult.Error(message)
-                )
+                _chapterUiState.update { state ->
+                    state.copy(
+                        batchCacheResultRevision = state.batchCacheResultRevision + 1,
+                        batchCacheResult = ChapterCacheResult.Error(message),
+                    )
+                }
             }
         }
     }
@@ -401,7 +446,7 @@ class ChangeChapterSourceViewModel(application: Application) :
         start: Int,
         endInclusive: Int,
     ): Boolean {
-        if (isAutomationActive || batchCaching.value == true) return false
+        if (isAutomationActive || _chapterUiState.value.batchCaching) return false
         val chapters = chapterSourceAutomationRange(originalChapters, start, endInclusive)
         if (chapters.isEmpty()) return false
         val session = ChapterSourceAutomationSession(
@@ -413,12 +458,13 @@ class ChangeChapterSourceViewModel(application: Application) :
         )
         automationSession = session
         progress.moveTo(requireNotNull(session.currentChapter))
-        automationState.value = readyAutomationState(session)
+        setAutomationState(readyAutomationState(session))
         return true
     }
 
     fun runNextAutomationIfReady() {
-        val state = automationState.value as? ChapterSourceAutomationState.Ready ?: return
+        val state = _chapterUiState.value.automationState as? ChapterSourceAutomationState.Ready
+            ?: return
         val session = automationSession?.takeIf { it.id == state.sessionId } ?: return
         val chapter = session.currentChapter?.takeIf { it.index == state.chapter.index } ?: return
         when (val match = matchChapterSource(chapter, session.targetToc)) {
@@ -445,7 +491,8 @@ class ChangeChapterSourceViewModel(application: Application) :
     }
 
     fun cacheAutomationSelection(targetPositions: List<Int>) {
-        val state = automationState.value as? ChapterSourceAutomationState.Paused ?: return
+        val state = _chapterUiState.value.automationState as? ChapterSourceAutomationState.Paused
+            ?: return
         val session = automationSession?.takeIf { it.id == state.sessionId } ?: return
         val chapter = session.currentChapter?.takeIf { it.index == state.chapter.index } ?: return
         val positions = targetPositions.distinct().sorted().filter { position ->
@@ -456,13 +503,14 @@ class ChangeChapterSourceViewModel(application: Application) :
     }
 
     fun acknowledgeAutomationCache(sessionId: Long, chapterIndex: Int): Boolean {
-        val state = automationState.value as? ChapterSourceAutomationState.Caching ?: return false
+        val state = _chapterUiState.value.automationState as? ChapterSourceAutomationState.Caching
+            ?: return false
         val session = automationSession?.takeIf { it.id == sessionId } ?: return false
         return state.sessionId == sessionId && advanceAutomation(session, chapterIndex)
     }
 
     fun skipAutomationChapter(): Boolean {
-        val state = automationState.value
+        val state = _chapterUiState.value.automationState
         val sessionId = when (state) {
             is ChapterSourceAutomationState.Ready -> state.sessionId
             is ChapterSourceAutomationState.Paused -> state.sessionId
@@ -482,14 +530,14 @@ class ChangeChapterSourceViewModel(application: Application) :
         if (nextChapter == null) {
             progress.finish()
             automationSession = null
-            automationState.value = ChapterSourceAutomationState.Finished(session.total)
+            setAutomationState(ChapterSourceAutomationState.Finished(session.total))
         } else if (session.stopAfterCurrent) {
             progress.moveTo(nextChapter)
             automationSession = null
-            automationState.value = ChapterSourceAutomationState.Idle
+            setAutomationState(ChapterSourceAutomationState.Idle)
         } else {
             progress.moveTo(nextChapter)
-            automationState.value = readyAutomationState(session)
+            setAutomationState(readyAutomationState(session))
         }
         return true
     }
@@ -501,7 +549,7 @@ class ChangeChapterSourceViewModel(application: Application) :
         }
         automationGeneration++
         automationSession = null
-        automationState.value = ChapterSourceAutomationState.Idle
+        setAutomationState(ChapterSourceAutomationState.Idle)
         cancelCacheContents()
     }
 
@@ -510,20 +558,20 @@ class ChangeChapterSourceViewModel(application: Application) :
         chapter: BookChapter,
         targetPositions: List<Int>,
     ) {
-        if (batchCaching.value == true) return
+        if (_chapterUiState.value.batchCaching) return
         val sourceChapters = targetPositions.mapNotNull { position ->
             session.targetToc.getOrNull(position)?.takeUnless { it.isVolume }?.let {
                 it to session.targetToc.getOrNull(position + 1)?.url
             }
         }
         if (sourceChapters.size != targetPositions.size) return
-        automationState.value = ChapterSourceAutomationState.Caching(
+        setAutomationState(ChapterSourceAutomationState.Caching(
             session.id,
             chapter,
             session.position,
             session.total,
             targetPositions,
-        )
+        ))
         cacheContents(
             sourceBook = session.targetBook,
             sourceChapters = sourceChapters,
@@ -541,14 +589,14 @@ class ChangeChapterSourceViewModel(application: Application) :
         reason: ChapterSourceAutomationPause,
         targetPositions: List<Int>,
     ) {
-        automationState.value = ChapterSourceAutomationState.Paused(
+        setAutomationState(ChapterSourceAutomationState.Paused(
             session.id,
             chapter,
             session.position,
             session.total,
             reason,
             targetPositions,
-        )
+        ))
     }
 
     private fun pauseAutomationAfterError(
@@ -580,11 +628,15 @@ class ChangeChapterSourceViewModel(application: Application) :
         )
     }
 
+    private fun setAutomationState(state: ChapterSourceAutomationState) {
+        _chapterUiState.update { it.copy(automationState = state) }
+    }
+
     fun cancelCacheContents() {
         if (cacheCommitStarted) return
         cacheTask?.cancel()
         cacheTask = null
-        batchCaching.value = false
+        _chapterUiState.update { it.copy(batchCaching = false) }
     }
 
     fun advanceOriginalChapter(chapter: BookChapter): BookChapter? {

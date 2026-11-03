@@ -1,170 +1,108 @@
 package io.legado.app.ui.book.info
 
+import io.legado.app.data.repository.infoSnapshot
+
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
+import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.rule.BookInfoRule
+import io.legado.app.utils.GSON
+import org.junit.Assert.*
 import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class BookInfoLoadingIndicatorTest {
-
-    @Test
-    fun `read progress appears only for read multi chapter books`() {
-        assertNull(resolveBookInfoReadProgress(Book(totalChapterNum = 20)))
-        assertNull(
-            resolveBookInfoReadProgress(
-                Book(totalChapterNum = 1, durChapterPos = 1),
-            ),
-        )
-        assertEquals(
-            50,
-            resolveBookInfoReadProgress(
-                Book(totalChapterNum = 11, durChapterIndex = 5),
-            ),
-        )
+    @Test fun `details have one injected state owner`() {
+        val model = projectFile("src/main/java/io/legado/app/ui/book/info/BookInfoViewModel.kt").readText()
+        val activity = projectFile("src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt").readText()
+        assertTrue(model.contains("@HiltViewModel"))
+        assertTrue(model.contains("private val repository: BookInfoRepository"))
+        assertTrue(model.contains("private val savedState: SavedStateHandle"))
+        assertEquals(1, Regex("MutableStateFlow\\(").findAll(model).count())
+        assertTrue(activity.contains("viewModel.uiState.collectAsStateWithLifecycle()"))
+        assertFalse(model.contains("appDb."))
+        assertFalse(model.contains("MutableLiveData"))
+        assertFalse(model.contains("android.content.Intent"))
+        assertFalse(model.contains("AppCompatActivity"))
+        assertFalse(model.contains("SourceLoginJsExtensions"))
     }
 
-    @Test
-    fun `empty stored toc title follows the current chapter index`() {
-        val chapters = listOf(
-            BookChapter(title = "卷一", isVolume = true),
-            BookChapter(title = "第一章"),
-            BookChapter(title = "第二章"),
-        )
+    @Test fun `read progress appears only for read multi chapter books`() {
+        assertNull(resolveBookInfoReadProgress(Book(totalChapterNum = 20)))
+        assertNull(resolveBookInfoReadProgress(Book(totalChapterNum = 1, durChapterPos = 1)))
+        assertEquals(50, resolveBookInfoReadProgress(Book(totalChapterNum = 11, durChapterIndex = 5)))
+    }
 
-        assertEquals(
-            "已保存章节",
-            resolveBookInfoTocTitle("已保存章节", 2, chapters),
-        )
+    @Test fun `empty stored toc title follows the current chapter index`() {
+        val chapters = listOf(BookChapter(title = "卷一", isVolume = true), BookChapter(title = "第一章"), BookChapter(title = "第二章"))
+        assertEquals("已保存章节", resolveBookInfoTocTitle("已保存章节", 2, chapters))
         assertEquals("卷一", resolveBookInfoTocTitle(null, 0, chapters))
         assertEquals("第二章", resolveBookInfoTocTitle(null, 99, chapters))
     }
 
-    @Test
-    fun `overlapping network loads stay active until the last one finishes`() {
+    @Test fun `overlapping network loads stay active until the last one finishes`() {
         val changes = mutableListOf<Boolean>()
         val counter = BookInfoNetworkLoadingCounter(changes::add)
-
-        counter.begin()
-        counter.begin()
+        counter.begin(); counter.begin()
         assertEquals(listOf(true), changes)
-
         counter.end()
         assertEquals(listOf(true), changes)
-
         counter.end()
         assertEquals(listOf(true, false), changes)
     }
 
-    @Test
-    fun `loading indicator overlays the content in both orientations`() {
-        val activity = projectFile(ACTIVITY_PATH).readText()
-        assertTrue(activity.contains("if (isLoadingState)"))
-        assertTrue(activity.contains("LinearProgressIndicator("))
-        assertTrue(activity.contains(".height(2.dp)"))
-        assertTrue(activity.contains(".align(Alignment.TopCenter)"))
+    @Test(expected = IllegalStateException::class)
+    fun `network loading cannot finish without an active request`() {
+        BookInfoNetworkLoadingCounter {}.end()
     }
 
-    @Test
-    fun `activity uses the auto loading color and both web requests are tracked`() {
-        val activity = projectFile(ACTIVITY_PATH).readText()
-        val viewModel = projectFile(VIEW_MODEL_PATH).readText()
-
-        assertTrue(activity.contains("isLoadingState = isLoading"))
-        assertTrue(activity.contains("upLoading(viewModel.loadingData.value == true, it)"))
-        assertTrue(
-            activity.contains(
-                "viewModel.chapterListData.value?.let { upLoading(false, it) }",
-            ),
-        )
-        assertEquals(
-            2,
-            viewModel.lineSequence().count { it.trim() == ".trackNetworkLoading()" },
-        )
+    @Test fun `book snapshots retain transient parser inputs and detach mutable configuration`() {
+        val book = Book(bookUrl = "book", name = "Before", variable = "{\"one\":\"before\"}",
+            readConfig = Book.ReadConfig(manualReplaceRuleIds = mutableListOf(1L)))
+        book.infoHtml = "<h1>Cached info</h1>"
+        book.tocHtml = "<a>Cached TOC</a>"
+        book.downloadUrls = mutableListOf("https://example.com/book.epub")
+        val snapshot = book.infoSnapshot()
+        book.name = "After"
+        book.readConfig!!.splitLongChapter = false
+        book.variableMap["one"] = "after"
+        (book.downloadUrls as MutableList<String>).clear()
+        assertEquals("Before", snapshot.name)
+        assertTrue(snapshot.readConfig!!.splitLongChapter)
+        assertEquals(listOf(1L), snapshot.readConfig!!.manualReplaceRuleIds)
+        assertEquals("before", snapshot.variableMap["one"])
+        assertEquals("<h1>Cached info</h1>", snapshot.infoHtml)
+        assertEquals("<a>Cached TOC</a>", snapshot.tocHtml)
+        assertEquals(listOf("https://example.com/book.epub"), snapshot.downloadUrls)
     }
 
-    @Test
-    fun `refresh failures preserve the last successful chapter list`() {
-        val viewModel = projectFile(VIEW_MODEL_PATH).readText()
-        val refreshSection = viewModel.substringBefore("private fun loadWebFile")
-        val webFileSection = viewModel
-            .substringAfter("private fun loadWebFile")
-            .substringBefore("fun <T> importOrDownloadWebFile")
-        val preserveCurrent =
-            "chapterListData.postValue(chapterListData.value.orEmpty())"
-        val clearChapters = "chapterListData.postValue(emptyList())"
-
-        assertEquals(
-            5,
-            refreshSection.lineSequence().count { it.trim() == preserveCurrent },
-        )
-        assertFalse(refreshSection.contains(clearChapters))
-        assertEquals(
-            2,
-            webFileSection.lineSequence().count { it.trim() == clearChapters },
-        )
+    @Test fun `chapter snapshots detach script variables and metadata`() {
+        val chapter = BookChapter(url = "one", title = "Before", variable = "{\"one\":\"before\"}").apply { titleMD5 = "cached" }
+        val snapshot = chapter.infoSnapshot()
+        chapter.title = "After"
+        chapter.variableMap["one"] = "after"
+        assertEquals("Before", snapshot.title)
+        assertEquals("before", snapshot.variableMap["one"])
+        assertEquals("cached", snapshot.titleMD5)
     }
 
-    @Test
-    fun `refresh failures preserve the persisted book metadata`() {
-        val bookInfoViewModel = projectFile(VIEW_MODEL_PATH).readText()
-        val loadBookInfo = bookInfoViewModel
-            .substringAfter("fun loadBookInfo(")
-            .substringBefore("fun loadChapter(")
-        val loadChapter = bookInfoViewModel
-            .substringAfter("fun loadChapter(")
-            .substringBefore("fun loadGroup(")
-        val mainViewModel = projectFile(MAIN_VIEW_MODEL_PATH).readText()
-        val normalBookRefresh = loadBookInfo
-            .substringAfter("if (it.isWebFile) {")
-            .substringAfter("} else {")
-            .substringBefore("}.onError")
-
-        assertTrue(loadBookInfo.contains("val oldBook = book.copy()"))
-        assertTrue(loadBookInfo.contains("bookData.postValue(oldBook)"))
-        assertFalse(normalBookRefresh.contains("it.save()"))
-        assertTrue(normalBookRefresh.contains("oldBook = persistedBook"))
-        assertTrue(loadChapter.contains("appDb.bookDao.replace(oldBook, book)"))
-        assertTrue(loadChapter.contains("bookData.postValue(oldBook)"))
-        assertTrue(
-            mainViewModel.contains(
-                "WebBook.runPreUpdateJs(source, book).getOrThrow()",
-            ),
-        )
+    @Test fun `source snapshots detach mutable nested rules`() {
+        val source = BookSource("https://example.com", "Before", ruleBookInfo = BookInfoRule(name = "h1@text"))
+        val snapshot = source.infoSnapshot()
+        source.bookSourceName = "After"
+        source.ruleBookInfo!!.name = "h2@text"
+        assertEquals("Before", snapshot.bookSourceName)
+        assertEquals("h1@text", snapshot.ruleBookInfo!!.name)
     }
 
-    private fun Element.androidAttribute(name: String): String = getAttributeNS(ANDROID_NS, name)
-
-    private fun Element.elementChildren(): List<Element> {
-        return (0 until childNodes.length)
-            .mapNotNull { childNodes.item(it) as? Element }
+    @Test fun `legacy and null rule selections normalize to an empty detached list`() {
+        for (json in listOf("{}", "{\"manualReplaceRuleIds\":null}")) {
+            val config = GSON.fromJson(json, Book.ReadConfig::class.java)
+            val snapshot = Book(readConfig = config).infoSnapshot()
+            assertTrue(snapshot.readConfig!!.manualReplaceRuleIds.isEmpty())
+        }
     }
 
-    private fun projectFile(pathInApp: String): File {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?: error("Project file not found: $pathInApp")
-    }
-
-    companion object {
-        private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
-        private const val PROGRESS_TAG =
-            "io.legado.app.ui.widget.anima.RefreshProgressBar"
-        private const val ACTIVITY_PATH =
-            "src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
-        private const val VIEW_MODEL_PATH =
-            "src/main/java/io/legado/app/ui/book/info/BookInfoViewModel.kt"
-        private const val MAIN_VIEW_MODEL_PATH =
-            "src/main/java/io/legado/app/ui/main/MainViewModel.kt"
-        private val LAYOUTS = listOf(
-            "src/main/res/layout/activity_book_info.xml",
-            "src/main/res/layout-land/activity_book_info.xml",
-        )
-    }
+    private fun projectFile(path: String): File = sequenceOf(File(path), File("app/$path"))
+        .firstOrNull(File::isFile) ?: error("Missing project file: $path")
 }

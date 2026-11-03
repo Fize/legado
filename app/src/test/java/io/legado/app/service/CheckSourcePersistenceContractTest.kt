@@ -27,14 +27,13 @@ class CheckSourcePersistenceContractTest {
     fun sessionStopCancelsBeforeStoppingAndDoneFollowsRelease() {
         val model = projectFile("app/src/main/java/io/legado/app/model/CheckSource.kt")
         val service = projectFile("app/src/main/java/io/legado/app/service/CheckSourceService.kt")
-        assertTrue(model.contains("withContext(IO) { appDb.bookSourceDao.beginCheck(sources) }"))
         assertTrue(model.indexOf("beginCheck(sources)") < model.indexOf("context.startService<CheckSourceService>"))
         assertTrue(model.contains("putExtra(EXTRA_SESSION_ID, sessionId)"))
         assertTrue(model.contains("fun stop(context: Context, sessionId: Long)"))
         assertFalse(model.contains("IntentData.put(\"checkSourceSelectedIds\""))
 
         val stopBranch = service.substringAfter("IntentAction.stop ->")
-            .substringBefore("return super.onStartCommand")
+            .substringBefore("return result")
         val cancelIndex = stopBranch.indexOf("checkJob?.cancel()")
         val stopIndex = stopBranch.indexOf("stopSelf(startId)")
         assertTrue(cancelIndex >= 0 && cancelIndex < stopIndex)

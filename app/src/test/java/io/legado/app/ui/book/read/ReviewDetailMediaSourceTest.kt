@@ -32,7 +32,7 @@ class ReviewDetailMediaSourceTest {
                     """\.apply\(sourceImageOptions\)"""
             ).containsMatchIn(source)
         )
-        assertTrue(source.contains("PhotoDialog(imageUrl, sourceKey)"))
+        assertTrue(source.contains("requireActivity().openPhoto(imageUrl, sourceKey)"))
     }
 
     @Test

@@ -1,104 +1,26 @@
 package io.legado.app.ui.book.info
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import io.legado.app.ui.book.info.intro.introCanCollapse
+import io.legado.app.ui.book.info.intro.introDisplayHeight
+import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 
 class BookIntroCollapseTest {
-
-    @Test
-    fun `new introductions are expanded by default and remain manually collapsible`() {
-        val activity = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
-        )
-        val newIntroState = activity
-            .substringAfter("if (intro != introContent) {")
-            .substringBefore("}")
-
-        assertTrue(newIntroState.contains("introExpanded = true"))
-        assertTrue(activity.contains("introExpanded = !introExpanded"))
+    @Test fun newIntroductionsExpandButRestoredOnesKeepTheirChoice() {
+        val old = BookInfoIntroUiState(visible = true, expanded = false, canCollapse = true, toggleVisible = true)
+        assertTrue(restoreBookInfoIntro(old, true, true, false).expanded)
+        assertFalse(restoreBookInfoIntro(old, true, false, false).expanded)
+        assertFalse(restoreBookInfoIntro(old, false, true, true).toggleVisible)
     }
-
-    @Test
-    fun `short and exact four line introductions stay expanded`() {
-        assertFalse(hasOverflow(lineCount = 3, lastLineEnd = 30, textLength = 30))
-        assertFalse(hasOverflow(lineCount = 4, lastLineEnd = 40, textLength = 40))
+    @Test fun shortAndExactFourLineDescriptionsDoNotCollapse() {
+        assertFalse(introCanCollapse(60, 88)); assertFalse(introCanCollapse(88, 88))
     }
-
-    @Test
-    fun `ellipsis and hidden text expose the toggle`() {
-        assertTrue(
-            hasOverflow(
-                lineCount = 4,
-                lastLineEllipsisCount = 2,
-                lastLineEnd = 38,
-                textLength = 40,
-            )
-        )
-        assertTrue(hasOverflow(lineCount = 4, lastLineEnd = 36, textLength = 40))
+    @Test fun contentBeyondTheMeasuredLimitOffersExpansion() { assertTrue(introCanCollapse(89, 88)) }
+    @Test fun expansionPreservesTheFullContentHeight() { assertEquals(500, introDisplayHeight(true, 500, 88)) }
+    @Test fun largeInlineImagesAndTablesUseTheSameBound() {
+        assertTrue(introCanCollapse(300, 88)); assertEquals(88, introDisplayHeight(false, 300, 88))
     }
-
-    @Test
-    fun `expanded content remains collapsible only when it exceeds the limit`() {
-        assertTrue(hasOverflow(expanded = true, lineCount = 5, lastLineEnd = 50, textLength = 50))
-        assertFalse(hasOverflow(expanded = true, lineCount = 4, lastLineEnd = 40, textLength = 40))
-    }
-
-    @Test
-    fun `large inline content is detected by rendered height`() {
-        assertTrue(
-            hasOverflow(
-                expanded = true,
-                lineCount = 1,
-                lastLineEnd = 1,
-                textLength = 1,
-                contentHeight = 240,
-                collapsedContentHeight = 80,
-            )
-        )
-    }
-
-    @Test
-    fun `height limiting preserves TextView maxLines mode and touch target`() {
-        val activity = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
-        )
-        val scrollTextView = readProjectFile(
-            "src/main/java/io/legado/app/ui/widget/text/ScrollTextView.kt"
-        )
-
-        assertTrue(activity.contains("tvIntro.maxLines ="))
-        assertTrue(activity.contains("tvIntro.maxMeasuredHeight ="))
-        assertFalse(activity.contains("tvIntro.maxHeight ="))
-        assertTrue(scrollTextView.contains("var maxMeasuredHeight: Int? = null"))
-        assertTrue(scrollTextView.contains("var isMeasuredHeightLimited = false"))
-        assertTrue(scrollTextView.contains("setMeasuredDimension(measuredWidth, heightLimit)"))
-        assertTrue(scrollTextView.contains("if (internalScrollEnabled) min(y, mOffsetHeight) else 0"))
-
-        assertTrue(activity.contains("defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)"))
-    }
-
-    private fun hasOverflow(
-        expanded: Boolean = false,
-        lineCount: Int,
-        lastLineEllipsisCount: Int = 0,
-        lastLineEnd: Int,
-        textLength: Int,
-        contentHeight: Int = 80,
-        collapsedContentHeight: Int = 80,
-    ) = BookIntroCollapse.hasOverflow(
-        expanded = expanded,
-        lineCount = lineCount,
-        lastLineEllipsisCount = lastLineEllipsisCount,
-        lastLineEnd = lastLineEnd,
-        textLength = textLength,
-        contentHeight = contentHeight,
-        collapsedContentHeight = collapsedContentHeight,
-    )
-
-    private fun readProjectFile(pathInApp: String): String {
-        val candidates = listOf(File(pathInApp), File("app/$pathInApp"))
-        return candidates.first { it.isFile }.readText()
+    @Test fun missingMeasurementsNeverInventNegativeLayoutSizes() {
+        assertFalse(introCanCollapse(0, 0)); assertEquals(0, introDisplayHeight(false, -1, 88)); assertEquals(60, introDisplayHeight(false, 60, 88))
     }
 }

@@ -24,12 +24,12 @@ class ManualHighlightActivityTest {
     @Test
     fun `book metadata edits keep highlight labels synchronized`() {
         val content = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/info/edit/BookInfoEditViewModel.kt"
+            "src/main/java/io/legado/app/data/repository/BookInfoEditRepository.kt"
         )
 
-        assertTrue(content.contains("appDb.runInTransaction"))
-        assertTrue(content.contains("appDb.bookHighlightDao.updateBookMetadata("))
-        assertTrue(content.contains("ReadBook.loadHighlights(book)"))
+        assertTrue(content.contains("database.withTransaction"))
+        assertTrue(content.contains("database.bookHighlightDao.updateBookMetadata("))
+        assertTrue(content.contains("?.let(ReadBook::loadHighlights)"))
     }
 
     @Test

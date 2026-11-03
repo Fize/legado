@@ -10,13 +10,24 @@ import splitties.init.appCtx
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CopyOnWriteArrayList
 
 object AppLog {
 
     private val mLogs = arrayListOf<Triple<Long, String, Throwable?>>()
+    private val listeners = CopyOnWriteArrayList<(List<Triple<Long, String, Throwable?>>) -> Unit>()
 
     val logs
         @Synchronized get() = mLogs.toList()
+
+    fun addListener(listener: (List<Triple<Long, String, Throwable?>>) -> Unit) {
+        listeners += listener
+        listener(logs)
+    }
+
+    fun removeListener(listener: (List<Triple<Long, String, Throwable?>>) -> Unit) {
+        listeners -= listener
+    }
 
     @Synchronized
     fun put(message: String?, throwable: Throwable? = null, toast: Boolean = false) {
@@ -33,6 +44,7 @@ object AppLog {
             LogUtils.d("AppLog", "$message\n${throwable.stackTraceToString()}")
         }
         mLogs.add(0, Triple(System.currentTimeMillis(), message, throwable))
+        notifyListeners()
         runCatching { postEvent(EventBus.APP_LOG_UPDATED, true) }
         if (BuildConfig.DEBUG) {
             runCatching {
@@ -52,6 +64,7 @@ object AppLog {
             mLogs.removeLastOrNull()
         }
         mLogs.add(0, Triple(System.currentTimeMillis(), message, throwable))
+        notifyListeners()
         runCatching { postEvent(EventBus.APP_LOG_UPDATED, true) }
         if (BuildConfig.DEBUG) {
             runCatching {
@@ -64,6 +77,12 @@ object AppLog {
     @Synchronized
     fun clear() {
         mLogs.clear()
+        notifyListeners()
+    }
+
+    private fun notifyListeners() {
+        val snapshot = logs
+        listeners.forEach { listener -> runCatching { listener(snapshot) } }
     }
 
     fun exportText(entries: List<Triple<Long, String, Throwable?>>): String {

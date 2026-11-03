@@ -140,7 +140,7 @@ class AudioPlayBookResolverTest {
         assertTrue(upData.contains("book.durChapterIndex = durChapterIndex"))
         assertTrue(upData.contains("book.durChapterPos = durChapterPos"))
         assertTrue(upData.contains("AudioPlay.book = book"))
-        assertTrue(viewModel.contains("AudioPlay.upData(book, preserveProgress = true)"))
+        assertTrue(viewModel.contains("AudioPlay.upData(book, preserveProgress = !positionApplied)"))
         assertTrue(viewModel.contains("AudioPlay.upData(book, preserveProgress = false)"))
     }
 
@@ -169,7 +169,7 @@ class AudioPlayBookResolverTest {
             "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"
         ).readText()
 
-        assertTrue(viewModel.contains("private suspend fun initBook(book: Book): Boolean"))
+        assertTrue(viewModel.contains("private suspend fun initBook(book: Book, positionApplied: Boolean): Boolean"))
         assertTrue(
             viewModel.contains(
                 "if (AudioPlay.chapterSize == 0 && book.tocUrl.isEmpty() && !loadBookInfo(book))"

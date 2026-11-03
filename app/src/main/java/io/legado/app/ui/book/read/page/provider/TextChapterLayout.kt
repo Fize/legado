@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.read.page.provider
 
+import io.legado.app.model.ChapterTitleParser
+
 import android.graphics.Paint
 import android.text.Layout
 import android.text.Spanned

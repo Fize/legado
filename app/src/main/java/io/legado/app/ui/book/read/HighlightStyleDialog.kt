@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -395,6 +396,9 @@ class HighlightStyleDialog : BottomSheetDialogFragment(),
                             modifier = Modifier
                                 .heightIn(min = 40.dp)
                                 .widthIn(min = 48.dp)
+                                .then(
+                                    if (pill) Modifier.testTag("highlightStylePillPadding") else Modifier
+                                )
                                 .clickable {
                                     if (channel.labelRes == R.string.highlight_underline) {
                                         currentStyle().underline?.let {
@@ -497,6 +501,7 @@ class HighlightStyleDialog : BottomSheetDialogFragment(),
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("highlightStyleFontSize")
                     .heightIn(min = 48.dp)
                     .clickable {
                         NumberPickerDialog(requireContext()).setTitle(getString(R.string.text_size))
@@ -521,6 +526,7 @@ class HighlightStyleDialog : BottomSheetDialogFragment(),
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("highlightStyleLetterSpacing")
                     .heightIn(min = 48.dp)
                     .clickable {
                         NumberPickerDialog(requireContext()).setTitle(getString(R.string.text_letter_spacing))

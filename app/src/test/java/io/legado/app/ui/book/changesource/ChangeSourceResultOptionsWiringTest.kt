@@ -13,12 +13,15 @@ class ChangeSourceResultOptionsWiringTest {
         assertTrue(components.contains("R.string.change_source_sort_respond_time"))
         assertTrue(components.contains("R.string.change_source_word_count_filter"))
 
-        DIALOGS.forEach { path ->
-            val source = projectFile(path).readText()
-            assertTrue(path, source.contains("AppConfig.changeSourceSortRespondTime"))
-            assertTrue(path, source.contains("ChangeSourceWordCountFilterDialog"))
-            assertTrue(path, source.contains("syncChangeSourceResultOptions()"))
-        }
+        val bookDialog = projectFile(BOOK_SCREEN).readText()
+        val chapterDialog = projectFile(DIALOGS[1]).readText()
+        val viewModel = projectFile(VIEW_MODEL).readText()
+        assertTrue(bookDialog.contains("ChangeSourceWordCountFilterDialog"))
+        assertTrue(bookDialog.contains("onSortRespondTimeChange = viewModel::setSortRespondTime"))
+        assertTrue(viewModel.contains("fun syncResultOptions()"))
+        assertTrue(chapterDialog.contains("AppConfig.changeSourceSortRespondTime"))
+        assertTrue(chapterDialog.contains("ChangeSourceWordCountFilterDialog"))
+        assertTrue(chapterDialog.contains("syncChangeSourceResultOptions()"))
     }
 
     @Test
@@ -81,6 +84,8 @@ class ChangeSourceResultOptionsWiringTest {
             "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceViewModel.kt"
         private const val COMPONENTS =
             "src/main/java/io/legado/app/ui/book/changesource/ChangeSourceComposeComponents.kt"
+        private const val BOOK_SCREEN =
+            "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceScreen.kt"
         private const val APP_CONFIG = "src/main/java/io/legado/app/help/config/AppConfig.kt"
         private val DIALOGS = listOf(
             "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",

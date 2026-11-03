@@ -3,15 +3,22 @@ package io.legado.app.help.storage
 import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
-import android.graphics.Typeface
 import androidx.documentfile.provider.DocumentFile
 import com.google.gson.JsonElement
+import dagger.hilt.android.EntryPointAccessors
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.constant.AppConst.androidId
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import io.legado.app.data.preferences.CacheExportOptions
+import io.legado.app.data.preferences.CacheExportPreferencesEntryPoint
+import io.legado.app.data.preferences.CACHE_EXPORT_KEYS
+import io.legado.app.data.preferences.restoreLegacyPreferenceMap
+import io.legado.app.data.repository.MangaReaderPreferencesEntryPoint
+import io.legado.app.data.repository.MANGA_READER_LEGACY_KEYS
+import io.legado.app.data.repository.restoreLegacyPreferenceMap
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookHighlight
@@ -33,7 +40,7 @@ import io.legado.app.data.entities.Server
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppCacheManager
-import io.legado.app.help.DirectLinkUpload
+import io.legado.app.help.CacheManager
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.book.isLocal
@@ -46,11 +53,8 @@ import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.http.CookieStore
 import io.legado.app.lib.theme.WallpaperTheme
-import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
 import io.legado.app.model.localBook.LocalBook
-import io.legado.app.ui.font.installFontFile
-import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -154,6 +158,7 @@ object Restore {
         kotlin.runCatching {
             restoreUnpacked(Backup.backupPath)
         }.onFailure {
+            RestoreRecoveryGate.recordRestoreFailure(context)
             appCtx.toastOnUi("恢复备份出错\n${it.localizedMessage}")
             AppLog.put("恢复备份出错\n${it.localizedMessage}", it)
         }
@@ -180,6 +185,9 @@ object Restore {
                 )
             }
             restoreUnpacked(restorePath, lanTransfer)
+        } catch (failure: Throwable) {
+            RestoreRecoveryGate.recordRestoreFailure(context)
+            throw failure
         } finally {
             if (lanTransfer) FileUtils.delete(restorePath)
         }
@@ -215,15 +223,31 @@ object Restore {
         } else {
             restore(path)
         }
-        LocalConfig.lastBackup = System.currentTimeMillis()
     }
 
     private suspend fun restore(path: String, lanTransfer: Boolean = false) {
         val password = LocalConfig.password
         val aes = BackupAES(password)
         val backupRoot = File(path)
+        validateRestorePayloads(backupRoot)
         val restoredPreferences = readPreferenceSnapshot(appCtx, path, "config")
+        val effectivePreferences = restoredPreferences?.filterKeys { key ->
+            BackupConfig.keyIsNotIgnore(key) && (!lanTransfer || key !in lanTransferIgnoredPrefKeys)
+        }
+        validateEagerRestorePreferenceTypes(effectivePreferences.orEmpty())
+        // DataStore enforces these limits on update. Reject invalid backup values
+        // before any business data or SharedPreferences have been written.
+        effectivePreferences?.takeIf { values -> values.keys.any { it in CACHE_EXPORT_KEYS } }?.let { values ->
+            try {
+                CacheExportOptions().restoreLegacyPreferenceMap(values).validate()
+            } catch (e: Exception) {
+                throw IllegalArgumentException("config.xml 导出设置无效", e)
+            }
+        }
         val restoredVideoPreferences = readPreferenceSnapshot(appCtx, path, "videoConfig")
+        val readerConfiguration = readRestoredReaderConfiguration(
+            backupRoot, includeStyles = !BackupConfig.ignoreReadConfig,
+        )
         val restoredCookies = if (!lanTransfer && !BackupConfig.ignoreCookies) {
             File(path, BackupConfig.cookieFileName).takeIf { it.exists() }?.let { file ->
                 val raw = file.readText()
@@ -262,331 +286,348 @@ object Restore {
         } else {
             null
         }
-        val restoredBookUrls = hashSetOf<String>()
-        fileToListT<Book>(path, "bookshelf.json")?.let {
-            it.forEach { book ->
-                if (lanTransfer) book.variable = null
-                book.upType()
-                book.normalizeLegacyPersistedCover()
-                book.customCoverUrl = book.customCoverUrl?.let { coverPath ->
-                    remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
+        val restoredServers = File(path, "servers.json").takeIf {
+            !lanTransfer && it.isFile
+        }?.let { file ->
+            try {
+                val raw = file.readText()
+                parseServerBackup(if (raw.isJsonArray()) raw else aes.decryptStr(raw))
+            } catch (e: Exception) {
+                throw IllegalArgumentException("servers.json 备份数据无法解析或口令错误", e)
+            }
+        }
+        var restoredFontPath: String? = null
+        val fontPreference = effectivePreferences?.get(PreferKey.coverFont) as? String
+        val restoreFont = !fontPreference.isNullOrBlank() && File(backupRoot, BookCover.fontBackupFileName).isFile
+        val restoreContext = currentCoroutineContext()
+        restoreContext.ensureActive()
+        // Preflight failures leave current work valid. Once mutation starts, old responses
+        // must stay invalid even if this restore later rolls back.
+        restoreWriteGeneration.advance()
+        val preparedFiles = RestoreFileRecovery.prepare(appCtx, backupRoot, readerConfiguration,
+            includeBackgrounds = !BackupConfig.ignoreReadConfig, restoreFont = restoreFont,
+            onFontPrepared = { restoredFontPath = it }, checkActive = { restoreContext.ensureActive() })
+        val committedCookieMemory = linkedMapOf<String, String>()
+        var committedSamples: Pair<List<ReplaceRule>, List<Long>>? = null
+        RestoreFileRecovery.withTransaction(appCtx, preparedFiles,
+            includeDataStores = restoredPreferences != null,
+            beforeCommit = { settings ->
+                committedSamples?.let { (rules, ids) ->
+                    ReplacePreviewConfig.saveImportedSamples(rules, ids, clearMissing = true,
+                        editor = settings.editSamples())
                 }
-                book.persistedCoverUrl = book.persistedCoverUrl?.let { coverPath ->
-                    remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
-                }
-            }
-            it.filter { book -> book.isLocal }
-                .forEach { book ->
-                    book.coverUrl = LocalBook.getCoverPath(book)
-                }
-            val newBooks = arrayListOf<Book>()
-            val ignoreLocalBook = BackupConfig.ignoreLocalBook
-            it.forEach { book ->
-                if (ignoreLocalBook && book.isLocal) {
-                    return@forEach
-                }
-                restoredBookUrls.add(book.bookUrl)
-                if (lanTransfer) {
-                    appDb.bookDao.upsertPreservingVariable(book)
-                    return@forEach
-                }
-                if (appDb.bookDao.has(book.bookUrl)) {
-                    try {
-                        appDb.bookDao.update(book)
-                    } catch (_: SQLiteConstraintException) {
-                        appDb.bookDao.insert(book)
-                    }
-                } else {
-                    newBooks.add(book)
-                }
-            }
-            appDb.bookDao.insert(*newBooks.toTypedArray())
-        }
-        fileToListT<BookMemo>(path, "bookMemo.json")?.let { memos ->
-            appDb.bookMemoDao.restore(memos.filter { it.bookUrl in restoredBookUrls })
-        }
-        fileToListT<Bookmark>(path, "bookmark.json")?.let {
-            appDb.bookmarkDao.insert(*it.toTypedArray())
-        }
-        fileToListT<BookHighlight>(path, "highlight.json")?.let { highlights ->
-            kotlin.runCatching {
-                applyLegacyHighlightStyles(File(path, "highlight.json").readText(), highlights)
-                applyLegacyHighlightOwners(highlights)
-                appDb.bookHighlightDao.insert(*highlights.toTypedArray())
-            }.onFailure {
-                AppLog.put("恢复高亮出错\n${it.localizedMessage}", it)
-            }
-        }
-        fileToListT<HighlightRule>(path, "highlightRule.json")?.let { rules ->
-            kotlin.runCatching {
-                appDb.highlightRuleDao.replaceAll(rules.map(HighlightRule::normalizeForRestore))
-            }.onFailure {
-                AppLog.put("恢复高亮规则出错\n${it.localizedMessage}", it)
-            }
-        }
-        fileToListT<BookGroup>(path, "bookGroup.json")?.let { groups ->
-            groups.forEach { group ->
-                group.cover = group.cover?.let { coverPath ->
-                    remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
-                }
-            }
-            appDb.bookGroupDao.insert(*groups.toTypedArray())
-        }
-        fileToListT<BookSource>(path, "bookSource.json")?.let {
-            appDb.bookSourceDao.insert(*it.toTypedArray())
-        } ?: run {
-            val bookSourceFile = File(path, "bookSource.json")
-            if (bookSourceFile.exists()) {
-                val json = bookSourceFile.readText()
-                ImportOldData.importOldSource(json)
-            }
-        }
-        fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
-            val insertedIds = appDb.replaceRuleDao.insert(*it.toTypedArray())
-            ReplacePreviewConfig.saveImportedSamples(it, insertedIds, clearMissing = true)
-        }
-        fileToListT<SearchKeyword>(path, "searchHistory.json")?.let {
-            appDb.searchKeywordDao.insert(*it.toTypedArray())
-        }
-        fileToListT<RuleSub>(path, "sourceSub.json")?.let {
-            appDb.ruleSubDao.insert(*it.toTypedArray())
-        }
-        fileToListT<TxtTocRule>(path, "txtTocRule.json")?.let {
-            appDb.txtTocRuleDao.insert(*it.toTypedArray())
-        }
-        fileToListT<HttpTTS>(path, "httpTTS.json")?.let {
-            appDb.httpTTSDao.insert(*it.toTypedArray())
-        }
-        fileToListT<DictRule>(path, "dictRule.json")?.let {
-            appDb.dictRuleDao.insert(*it.toTypedArray())
-        }
-        fileToListT<KeyboardAssist>(path, "keyboardAssists.json")?.let {
-            appDb.keyboardAssistsDao.deleteAll() //先删除所有,保证和备份数据一样
-            appDb.keyboardAssistsDao.insert(*it.toTypedArray())
-        }
-        fileToListT<ReadRecord>(path, "readRecord.json")?.let {
-            it.forEach { readRecord ->
-                // Older backups omitted the device id; treat them as local records.
-                val normalizedRecord = if (readRecord.deviceId.isBlank()) {
-                    readRecord.copy(deviceId = androidId)
-                } else {
-                    readRecord
-                }
-                val restoredRecord = normalizedRecord.copy(coverUrl = remapReadRecordCover(
-                    normalizedRecord.coverUrl?.let { remapRestoredCoverPath(it, File(path), appCtx.externalFiles) },
-                    File(path), appCtx.externalFiles,
-                ))
-                appDb.runInTransaction {
-                    val current = appDb.readRecordDao.getRecord(restoredRecord.deviceId, restoredRecord.bookName, restoredRecord.author)
-                    appDb.readRecordDao.insert(mergeRestoredReadRecord(
-                        current, restoredRecord, restoredRecord.deviceId == androidId,
-                    ))
-                }
-            }
-        }
-        File(path, "servers.json").takeIf {
-            !lanTransfer && it.exists()
-        }?.runCatching {
-            var json = readText()
-            if (!json.isJsonArray()) {
-                json = aes.decryptStr(json)
-            }
-            GSON.fromJsonArray<Server>(json).getOrNull()?.let {
-                appDb.serverDao.insert(*it.toTypedArray())
-            }
-        }?.onFailure {
-            AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
-        }
-        restoredCookies?.filter { cookie -> cookie.url.isNotBlank() }?.forEach { cookie ->
-            if ('|' in cookie.url) {
-                appDb.cookieDao.insert(cookie)
-            } else {
-                CookieStore.restoreCookie(cookie.url, cookie.cookie)
-            }
-        }
-        restoredRuntimeSourceCaches?.takeIf { it.isNotEmpty() }?.let { caches ->
-            // REPLACE updates matching keys while leaving local-only runtime entries intact.
-            appDb.cacheDao.insert(*caches.toTypedArray())
-            AppCacheManager.clearSourceVariables()
-        }
-        File(path, DirectLinkUpload.ruleFileName).takeIf {
-            !lanTransfer && it.exists()
-        }?.runCatching {
-            val json = readText()
-            ACache.get(cacheDir = false).put(DirectLinkUpload.ruleFileName, json)
-        }?.onFailure {
-            AppLog.put("恢复直链上传出错\n${it.localizedMessage}", it)
-        }
-        File(path, BookCover.configFileName).takeIf {
-            it.exists()
-        }?.runCatching {
-            val json = readText()
-            BookCover.saveCoverRule(json)
-        }?.onFailure {
-            AppLog.put("恢复封面规则出错\n${it.localizedMessage}", it)
-        }
-        if (!BackupConfig.ignoreReadConfig) {
-            //恢复阅读界面配置
-            File(path, ReadBookConfig.configFileName).takeIf {
-                it.exists()
-            }?.runCatching {
-                FileUtils.delete(ReadBookConfig.configFilePath)
-                copyTo(File(ReadBookConfig.configFilePath))
-                ReadBookConfig.initConfigs()
-            }?.onFailure {
-                AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
-            }
-            File(path, ReadBookConfig.shareConfigFileName).takeIf {
-                it.exists()
-            }?.runCatching {
-                FileUtils.delete(ReadBookConfig.shareConfigFilePath)
-                copyTo(File(ReadBookConfig.shareConfigFilePath))
-                ReadBookConfig.initShareConfig()
-            }?.onFailure {
-                AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
-            }
-        }
-        //AppWebDav.downBgs()
-        restoredPreferences?.let { map ->
-            val edit = appCtx.defaultSharedPreferences.edit()
+                restoredPreferences?.let { map ->
+                    val edit = settings.editDefault()
 
-            map.forEach { (key, value) ->
-                if (BackupConfig.keyIsNotIgnore(key) &&
-                    (!lanTransfer || key !in lanTransferIgnoredPrefKeys)
-                ) {
-                    when (key) {
-                        "readRecordSort" -> (value as? Int)?.let {
-                            LocalConfig.edit().putInt(key, it.coerceIn(0, 2)).apply()
-                        }
-                        PreferKey.readRecordCover,
-                        PreferKey.readRecordCoverDark -> {
-                            val coverPath = (value as? String)?.let {
-                                remapRestoredCoverPath(it, File(path), appCtx.externalFiles)
-                            }
-                            if (coverPath == null) edit.remove(key) else edit.putString(key, coverPath)
-                        }
-                        PreferKey.coverFont -> {
-                            val fontBackup = File(path, BookCover.fontBackupFileName)
-                            val fontPath = if (value is String && value.isNotBlank() && fontBackup.isFile) {
-                                fontBackup.inputStream().use { input ->
-                                    installFontFile(input, BookCover.fontBackupFileName,
-                                        File(appCtx.externalFiles, "font")) {
-                                        runCatching { Typeface.createFromFile(it) }.isSuccess
-                                    }.absolutePath
+                    map.forEach { (key, value) ->
+                        if (BackupConfig.keyIsNotIgnore(key) &&
+                            (!lanTransfer || key !in lanTransferIgnoredPrefKeys)
+                        ) {
+                            when (key) {
+                                "readRecordSort" -> (value as? Int)?.let {
+                                    settings.editLocal().putInt(key, it.coerceIn(0, 2)).apply()
                                 }
-                            } else (value as? String).orEmpty().takeIf { File(it).isFile }.orEmpty()
-                            edit.putString(key, fontPath)
-                        }
-                        PreferKey.webDavPassword -> {
-                            val raw = value.toString()
-                            val decrypted = if (!password.isNullOrBlank()) {
-                                kotlin.runCatching { aes.decryptStr(raw) }.getOrNull()
-                            } else {
-                                null
-                            }
-                            if (decrypted != null) {
-                                edit.putString(key, decrypted)
-                            } else if (raw.isNotBlank() ||
-                                appCtx.getPrefString(PreferKey.webDavPassword).isNullOrBlank()
-                            ) {
-                                edit.putString(key, raw)
-                            }
-                        }
+                                PreferKey.readRecordCover,
+                                PreferKey.readRecordCoverDark -> {
+                                    val coverPath = (value as? String)?.let {
+                                        remapRestoredCoverPath(it, File(path), appCtx.externalFiles)
+                                    }
+                                    if (coverPath == null) edit.remove(key) else edit.putString(key, coverPath)
+                                }
+                                PreferKey.coverFont -> {
+                                    val fontPath = if (restoreFont) checkNotNull(restoredFontPath)
+                                    else (value as? String).orEmpty().takeIf { File(it).isFile }.orEmpty()
+                                    edit.putString(key, fontPath)
+                                }
+                                PreferKey.webDavPassword -> {
+                                    val raw = value.toString()
+                                    val decrypted = if (!password.isNullOrBlank()) {
+                                        kotlin.runCatching { aes.decryptStr(raw) }.getOrNull()
+                                    } else {
+                                        null
+                                    }
+                                    if (decrypted != null) {
+                                        edit.putString(key, decrypted)
+                                    } else if (raw.isNotBlank() ||
+                                        appCtx.getPrefString(PreferKey.webDavPassword).isNullOrBlank()
+                                    ) {
+                                        edit.putString(key, raw)
+                                    }
+                                }
 
-                        PreferKey.doublePageHorizontal -> {
-                            val raw = value.toString()
-                            edit.putString(key, if (raw == "0") "2" else raw)
-                            edit.putBoolean("doublePageHorizontalMigrated_v310", true)
-                        }
+                                PreferKey.doublePageHorizontal -> {
+                                    val raw = value.toString()
+                                    edit.putString(key, if (raw == "0") "2" else raw)
+                                    edit.putBoolean("doublePageHorizontalMigrated_v310", true)
+                                }
 
-                        else -> when (value) {
-                            is Int -> edit.putInt(key, value)
-                            is Boolean -> edit.putBoolean(key, value)
-                            is Long -> edit.putLong(key, value)
-                            is Float -> edit.putFloat(key, value)
-                            is String -> edit.putString(key, value)
-                            is Set<*> -> {
-                                @Suppress("UNCHECKED_CAST")
-                                edit.putStringSet(key, value as Set<String>)
+                                else -> when (value) {
+                                    is Int -> edit.putInt(key, value)
+                                    is Boolean -> edit.putBoolean(key, value)
+                                    is Long -> edit.putLong(key, value)
+                                    is Float -> edit.putFloat(key, value)
+                                    is String -> edit.putString(key, value)
+                                    is Set<*> -> {
+                                        @Suppress("UNCHECKED_CAST")
+                                        edit.putStringSet(key, value as Set<String>)
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-            if (PreferKey.bookshelfReadProgressMode !in map &&
-                PreferKey.showBookshelfReadProgress in map
-            ) {
-                val legacyEnabled = when (val value = map[PreferKey.showBookshelfReadProgress]) {
-                    is Boolean -> value
-                    is String -> value.toBooleanStrictOrNull()
-                    else -> null
-                }
-                legacyEnabled?.let { enabled ->
-                    edit.putInt(
-                        PreferKey.bookshelfReadProgressMode,
-                        if (enabled) {
-                            BookshelfReadProgressMode.STANDARD
-                        } else {
-                            BookshelfReadProgressMode.HIDDEN
-                        },
-                    )
-                }
-            }
-            if (!BackupConfig.ignoreReadConfig &&
-                PreferKey.showReadTitleChapterNameOnly !in map
-            ) {
-                edit.putBoolean(PreferKey.showReadTitleChapterNameOnly, false)
-            }
-            if (PreferKey.showExploreCategories !in map) {
-                edit.putBoolean(PreferKey.showExploreCategories, false)
-            }
-            if (BackupConfig.keyIsNotIgnore(PreferKey.coverTitleAdaptive) &&
-                PreferKey.coverTitleAdaptive !in map
-            ) {
-                edit.putBoolean(PreferKey.coverTitleAdaptive, true)
-            }
-            if (BackupConfig.keyIsNotIgnore(PreferKey.coverCustomFontSize) &&
-                PreferKey.coverCustomFontSize !in map
-            ) {
-                edit.putBoolean(PreferKey.coverCustomFontSize, false)
-            }
-            if (BackupConfig.keyIsNotIgnore(PreferKey.coverFont) && PreferKey.coverFont !in map) {
-                edit.remove(PreferKey.coverFont)
-            }
-            if (PreferKey.myMoreItems !in map) edit.remove(PreferKey.myMoreItems)
-            if (PreferKey.autoBackup !in map) edit.putBoolean(PreferKey.autoBackup, true)
-            if (PreferKey.autoBackupWebDav !in map) edit.putBoolean(PreferKey.autoBackupWebDav, true)
-            if (PreferKey.autoBackupIntervalDays !in map) edit.putInt(PreferKey.autoBackupIntervalDays, 1)
-            if ("readRecordSimpleLayout" !in map) edit.putBoolean("readRecordSimpleLayout", true)
-            if ("readRecordUseDays" !in map) edit.putBoolean("readRecordUseDays", false)
-            if ("readRecordShowSeconds" !in map) edit.putBoolean("readRecordShowSeconds", true)
-            if ("readRecordFixedCard" !in map) edit.putBoolean("readRecordFixedCard", true)
-            for (key in listOf(PreferKey.readRecordCover, PreferKey.readRecordCoverDark)) {
-                if (key !in map && BackupConfig.keyIsNotIgnore(key)) edit.remove(key)
-            }
-            if (!BackupConfig.ignoreReadConfig && PreferKey.mangaRightToLeft !in map) {
-                edit.putBoolean(PreferKey.mangaRightToLeft, false)
-            }
-            edit.apply()
-        }
-        restoredVideoPreferences?.let { map ->
-            appCtx.getSharedPreferences(VIDEO_PREF_NAME, Context.MODE_PRIVATE).edit().apply {
-                map.forEach { (key, value) ->
-                    when (value) {
-                        is Int -> putInt(key, value)
-                        is Boolean -> putBoolean(key, value)
-                        is Long -> putLong(key, value)
-                        is Float -> putFloat(key, value)
-                        is String -> putString(key, value)
-                        is Set<*> -> {
-                            @Suppress("UNCHECKED_CAST")
-                            putStringSet(key, value as Set<String>)
+                    if (PreferKey.bookshelfReadProgressMode !in map &&
+                        PreferKey.showBookshelfReadProgress in map
+                    ) {
+                        val legacyEnabled = when (val value = map[PreferKey.showBookshelfReadProgress]) {
+                            is Boolean -> value
+                            is String -> value.toBooleanStrictOrNull()
+                            else -> null
+                        }
+                        legacyEnabled?.let { enabled ->
+                            edit.putInt(
+                                PreferKey.bookshelfReadProgressMode,
+                                if (enabled) {
+                                    BookshelfReadProgressMode.STANDARD
+                                } else {
+                                    BookshelfReadProgressMode.HIDDEN
+                                },
+                            )
                         }
                     }
+                    if (!BackupConfig.ignoreReadConfig &&
+                        PreferKey.showReadTitleChapterNameOnly !in map
+                    ) {
+                        edit.putBoolean(PreferKey.showReadTitleChapterNameOnly, false)
+                    }
+                    if (PreferKey.showExploreCategories !in map) {
+                        edit.putBoolean(PreferKey.showExploreCategories, false)
+                    }
+                    if (BackupConfig.keyIsNotIgnore(PreferKey.coverTitleAdaptive) &&
+                        PreferKey.coverTitleAdaptive !in map
+                    ) {
+                        edit.putBoolean(PreferKey.coverTitleAdaptive, true)
+                    }
+                    if (BackupConfig.keyIsNotIgnore(PreferKey.coverCustomFontSize) &&
+                        PreferKey.coverCustomFontSize !in map
+                    ) {
+                        edit.putBoolean(PreferKey.coverCustomFontSize, false)
+                    }
+                    if (BackupConfig.keyIsNotIgnore(PreferKey.coverFont) && PreferKey.coverFont !in map) {
+                        edit.remove(PreferKey.coverFont)
+                    }
+                    if (PreferKey.myMoreItems !in map) edit.remove(PreferKey.myMoreItems)
+                    if (PreferKey.autoBackup !in map) edit.putBoolean(PreferKey.autoBackup, true)
+                    if (PreferKey.autoBackupWebDav !in map) edit.putBoolean(PreferKey.autoBackupWebDav, true)
+                    if (PreferKey.autoBackupIntervalDays !in map) edit.putInt(PreferKey.autoBackupIntervalDays, 1)
+                    if ("readRecordSimpleLayout" !in map) edit.putBoolean("readRecordSimpleLayout", true)
+                    if ("readRecordUseDays" !in map) edit.putBoolean("readRecordUseDays", false)
+                    if ("readRecordShowSeconds" !in map) edit.putBoolean("readRecordShowSeconds", true)
+                    if ("readRecordFixedCard" !in map) edit.putBoolean("readRecordFixedCard", true)
+                    for (key in listOf(PreferKey.readRecordCover, PreferKey.readRecordCoverDark)) {
+                        if (key !in map && BackupConfig.keyIsNotIgnore(key)) edit.remove(key)
+                    }
+                    if (!BackupConfig.ignoreReadConfig && PreferKey.mangaRightToLeft !in map) {
+                        edit.putBoolean(PreferKey.mangaRightToLeft, false)
+                    }
+                    edit.apply()
+                    settings.markStoresTouched()
+                    EntryPointAccessors.fromApplication(
+                        appCtx,
+                        MangaReaderPreferencesEntryPoint::class.java,
+                    ).mangaReaderPreferencesStore().update { current ->
+                        current.restoreLegacyPreferenceMap(effectivePreferences.orEmpty())
+                    }
+                    EntryPointAccessors.fromApplication(appCtx,CacheExportPreferencesEntryPoint::class.java).cacheExportPreferences()
+                        .update { it.restoreLegacyPreferenceMap(effectivePreferences.orEmpty()) }
+                    settings.editDefault().apply {
+                        CACHE_EXPORT_KEYS.forEach(::remove)
+                        MANGA_READER_LEGACY_KEYS.forEach(::remove)
+                    }.apply()
                 }
-                apply()
+                restoredVideoPreferences?.let { map ->
+                    settings.editVideo().apply {
+                        map.forEach { (key, value) ->
+                            when (value) {
+                                is Int -> putInt(key, value)
+                                is Boolean -> putBoolean(key, value)
+                                is Long -> putLong(key, value)
+                                is Float -> putFloat(key, value)
+                                is String -> putString(key, value)
+                                is Set<*> -> {
+                                    @Suppress("UNCHECKED_CAST")
+                                    putStringSet(key, value as Set<String>)
+                                }
+                            }
+                        }
+                        apply()
+                    }
+                }
+                // These are the defaults published by the post-commit reader refresh.
+                // Persist absent values before commit so a cold start observes the same state.
+                val defaults = settings.editDefault()
+                if (!appCtx.defaultSharedPreferences.contains(PreferKey.autoReadSpeed)) defaults.putInt(PreferKey.autoReadSpeed, 46)
+                if (!appCtx.defaultSharedPreferences.contains(PreferKey.comicStyleSelect)) defaults.putInt(PreferKey.comicStyleSelect, 0)
+                defaults.apply()
+            },
+        ) {
+            currentCoroutineContext().ensureActive()
+            retireBookTransfersForRestore(appDb)
+            val restoredBookUrls = hashSetOf<String>()
+            fileToListT<Book>(path, "bookshelf.json")?.let {
+                it.forEach { book ->
+                    if (lanTransfer) book.variable = null
+                    book.upType()
+                    book.normalizeLegacyPersistedCover()
+                    book.customCoverUrl = book.customCoverUrl?.let { coverPath ->
+                        remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
+                    }
+                    book.persistedCoverUrl = book.persistedCoverUrl?.let { coverPath ->
+                        remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
+                    }
+                }
+                it.filter { book -> book.isLocal }
+                    .forEach { book ->
+                        book.coverUrl = LocalBook.getCoverPath(book)
+                    }
+                val newBooks = arrayListOf<Book>()
+                val ignoreLocalBook = BackupConfig.ignoreLocalBook
+                it.forEach { book ->
+                    if (ignoreLocalBook && book.isLocal) {
+                        return@forEach
+                    }
+                    restoredBookUrls.add(book.bookUrl)
+                    if (lanTransfer) {
+                        appDb.bookDao.upsertPreservingVariable(book)
+                        return@forEach
+                    }
+                    if (appDb.bookDao.has(book.bookUrl)) {
+                        try {
+                            appDb.bookDao.update(book)
+                        } catch (_: SQLiteConstraintException) {
+                            appDb.bookDao.insert(book)
+                        }
+                    } else {
+                        newBooks.add(book)
+                    }
+                }
+                appDb.bookDao.insert(*newBooks.toTypedArray())
             }
+            fileToListT<BookMemo>(path, "bookMemo.json")?.let { memos ->
+                appDb.bookMemoDao.restore(memos.filter { it.bookUrl in restoredBookUrls })
+            }
+            fileToListT<Bookmark>(path, "bookmark.json")?.let {
+                appDb.bookmarkDao.insert(*it.toTypedArray())
+            }
+            fileToListT<BookHighlight>(path, "highlight.json")?.let { highlights ->
+                try {
+                    applyLegacyHighlightStyles(File(path, "highlight.json").readText(), highlights)
+                    applyLegacyHighlightOwners(highlights)
+                    appDb.bookHighlightDao.insert(*highlights.toTypedArray())
+                } catch (e: Exception) {
+                    throw IllegalArgumentException("highlight.json 恢复失败", e)
+                }
+            }
+            fileToListT<HighlightRule>(path, "highlightRule.json")?.let { rules ->
+                try {
+                    appDb.highlightRuleDao.replaceAll(rules.map(HighlightRule::normalizeForRestore))
+                } catch (e: Exception) {
+                    throw IllegalArgumentException("highlightRule.json 恢复失败", e)
+                }
+            }
+            fileToListT<BookGroup>(path, "bookGroup.json")?.let { groups ->
+                groups.forEach { group ->
+                    group.cover = group.cover?.let { coverPath ->
+                        remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
+                    }
+                }
+                appDb.bookGroupDao.insert(*groups.toTypedArray())
+            }
+            File(path, "bookSource.json").takeIf { it.isFile }?.let { file ->
+                appDb.bookSourceDao.insert(*parseRestoredBookSources(file.readText()).toTypedArray())
+            }
+            fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
+                val insertedIds = appDb.replaceRuleDao.insert(*it.toTypedArray())
+                committedSamples = it to insertedIds
+            }
+            fileToListT<SearchKeyword>(path, "searchHistory.json")?.let {
+                appDb.searchKeywordDao.insert(*it.toTypedArray())
+            }
+            fileToListT<RuleSub>(path, "sourceSub.json")?.let {
+                appDb.ruleSubDao.insert(*it.toTypedArray())
+            }
+            fileToListT<TxtTocRule>(path, "txtTocRule.json")?.let {
+                appDb.txtTocRuleDao.insert(*it.toTypedArray())
+            }
+            fileToListT<HttpTTS>(path, "httpTTS.json")?.let {
+                appDb.httpTTSDao.insert(*it.toTypedArray())
+            }
+            fileToListT<DictRule>(path, "dictRule.json")?.let {
+                appDb.dictRuleDao.insert(*it.toTypedArray())
+            }
+            fileToListT<KeyboardAssist>(path, "keyboardAssists.json")?.let {
+                appDb.keyboardAssistsDao.deleteAll() //先删除所有,保证和备份数据一样
+                appDb.keyboardAssistsDao.insert(*it.toTypedArray())
+            }
+            fileToListT<ReadRecord>(path, "readRecord.json")?.let {
+                it.forEach { readRecord ->
+                    // Older backups omitted the device id; treat them as local records.
+                    val normalizedRecord = if (readRecord.deviceId.isBlank()) {
+                        readRecord.copy(deviceId = androidId)
+                    } else {
+                        readRecord
+                    }
+                    val restoredRecord = normalizedRecord.copy(coverUrl = remapReadRecordCover(
+                        normalizedRecord.coverUrl?.let { remapRestoredCoverPath(it, File(path), appCtx.externalFiles) },
+                        File(path), appCtx.externalFiles,
+                    ))
+                    appDb.runInTransaction {
+                        val current = appDb.readRecordDao.getRecord(restoredRecord.deviceId, restoredRecord.bookName, restoredRecord.author)
+                        appDb.readRecordDao.insert(mergeRestoredReadRecord(
+                            current, restoredRecord, restoredRecord.deviceId == androidId,
+                        ))
+                    }
+                }
+            }
+            restoredServers?.let { servers ->
+                appDb.serverDao.insert(*servers.toTypedArray())
+            }
+            restoredCookies?.filter { cookie -> cookie.url.isNotBlank() }?.forEach { cookie ->
+                if ('|' in cookie.url) {
+                    appDb.cookieDao.insert(cookie)
+                } else {
+                    CookieStore.restoreCookie(cookie.url, cookie.cookie, publishMemory = false)?.let { saved ->
+                        committedCookieMemory[saved.url] = saved.cookie
+                    }
+                }
+            }
+            restoredRuntimeSourceCaches?.takeIf { it.isNotEmpty() }?.let { caches ->
+                // REPLACE updates matching keys while leaving local-only runtime entries intact.
+                appDb.cacheDao.insert(*caches.toTypedArray())
+            }
+            readerConfiguration.coverRule?.let(BookCover::persistRestoredCoverRule)
+            // Reject deferred violations inside the block: older framework drivers can
+            // retain a native transaction when COMMIT itself fails on a deferred FK.
+            appDb.openHelper.writableDatabase.query("PRAGMA foreign_key_check").use { violations ->
+                if (violations.moveToFirst()) {
+                    throw SQLiteConstraintException("关联数据不完整，已取消恢复以保留原数据。").apply {
+                        initCause(IllegalStateException("foreign_key_check: ${violations.getString(0)}"))
+                    }
+                }
+            }
+            currentCoroutineContext().ensureActive()
         }
+        // Publish non-database state only after the entire Room transaction commits.
+        committedCookieMemory.forEach { (domain, cookie) ->
+            CacheManager.putMemory("${domain}_cookie", cookie)
+        }
+        if (!restoredRuntimeSourceCaches.isNullOrEmpty()) AppCacheManager.clearSourceVariables()
+        // DirectLinkUpload was removed; obsolete backup entries must not revive its cache.
+        readerConfiguration.coverRule?.let { json ->
+            BookCover.publishRestoredCoverRule(json)
+        }
+        if (readerConfiguration.styles != null) ReadBookConfig.initConfigs()
+        if (readerConfiguration.shareStyle != null) ReadBookConfig.initShareConfig()
+        //AppWebDav.downBgs()
         ReadBookConfig.apply {
             comicStyleSelect = appCtx.getPrefInt(PreferKey.comicStyleSelect)
             readStyleSelect = appCtx.getPrefInt(PreferKey.readStyleSelect)
@@ -595,22 +636,6 @@ object Restore {
             hideNavigationBar = appCtx.getPrefBoolean(PreferKey.hideNavigationBar)
             autoReadSpeed = appCtx.getPrefInt(PreferKey.autoReadSpeed, 46)
         }
-        val coverRestoreResult =
-            restoreBackupMediaDirectory(File(path), appCtx.externalFiles, "covers")
-            .onFailure {
-                AppLog.put("恢复封面图片出错\n${it.localizedMessage}", it)
-            }
-        val backgroundRestoreResult = if (!BackupConfig.ignoreReadConfig) {
-            restoreBackupMediaDirectory(File(path), appCtx.externalFiles, "bg")
-                .onFailure {
-                    AppLog.put("恢复阅读背景图片出错\n${it.localizedMessage}", it)
-                }
-        } else {
-            null
-        }
-        coverRestoreResult.getOrThrow()
-        restoreBackupMediaDirectory(File(path), appCtx.externalFiles, readRecordCoverDirectory).getOrThrow()
-        backgroundRestoreResult?.getOrThrow()
         appCtx.toastOnUi(R.string.restore_success)
         withContext(Main) {
             delay(100)
@@ -637,7 +662,7 @@ object Restore {
             }
         } catch (e: Exception) {
             AppLog.put("$fileName\n读取解析出错\n${e.localizedMessage}", e)
-            appCtx.toastOnUi("$fileName\n读取文件出错\n${e.localizedMessage}")
+            throw IllegalArgumentException("$fileName 备份数据无法解析", e)
         }
         return null
     }

@@ -267,6 +267,7 @@ fun FileDoc.createFileIfNotExist(
     fileName: String,
     vararg subDirs: String
 ): FileDoc {
+    FileDocWriteContext.create(this, fileName, subDirs)?.let { return it }
     return if (uri.isContentScheme()) {
         val documentFile = asDocumentFile()!!
         val tmp = DocumentUtils.createFileIfNotExist(documentFile, fileName, *subDirs)!!
@@ -337,6 +338,7 @@ fun FileDoc.writeText(text: String) {
 }
 
 fun FileDoc.writeFile(file: File) {
+    if (FileDocWriteContext.write(this, file)) return
     openOutputStream().getOrThrow().use { out ->
         file.inputStream().use {
             it.copyTo(out)

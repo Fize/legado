@@ -8,6 +8,7 @@ import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
 import io.legado.app.help.book.isPdf
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import kotlin.math.abs
 
 /** One camera for the reader's current/previous/next page, including a two-page spread. */
@@ -36,7 +37,11 @@ internal class PdfZoom(private val view: ReadView) {
                 val next = (scale * detector.scaleFactor).coerceIn(1f, 5f)
                 val ratio = next / scale
                 val focusY = detector.focusY - view.curPage.contentViewTop
-                offsetX = detector.focusX - (detector.focusX - offsetX) * ratio
+                val focusX = resolvePdfSpreadFocusX(detector.focusX, scale, offsetX,
+                    view.curPage.textPage.lines.flatMap { line ->
+                        line.columns.filterIsInstance<ImageColumn>().map { it.start..it.end }
+                    })
+                offsetX = focusX - (focusX - offsetX) * ratio
                 offsetY = focusY - (focusY - offsetY) * ratio
                 scale = next
                 clamp()

@@ -22,7 +22,6 @@ import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.video.VideoPlayerActivity
-import io.legado.app.ui.book.manga.ReadMangaActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.widget.dialog.TextDialog
 
@@ -91,21 +90,8 @@ inline fun <reified T : Activity> Fragment.startActivity(
     startActivity(Intent(requireContext(), T::class.java).apply(configIntent))
 }
 
-fun Fragment.startActivityForBook(
-    book: Book,
-    configIntent: Intent.() -> Unit = {},
-) {
-    val cls = when {
-        book.isVideo -> VideoPlayerActivity::class.java
-        book.isAudio -> AudioPlayActivity::class.java
-        !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
-        else -> ReadBookActivity::class.java
-    }
-    val intent = Intent(requireActivity(), cls)
-    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    intent.putExtra("bookUrl", book.bookUrl)
-    intent.apply(configIntent)
-    startActivity(intent)
+fun Fragment.startActivityForBook(book: Book, configIntent: Intent.() -> Unit = {}) {
+    requireContext().startActivityForBook(book, configIntent)
 }
 
 val Fragment.isCreated

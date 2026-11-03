@@ -7,19 +7,23 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
@@ -37,16 +41,16 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.storage.BackupConfig
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.association.OpenUrlConfirmActivity
 import io.legado.app.ui.book.read.config.MoreConfigDialog
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.entities.column.BaseColumn
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.page.entities.column.TextBaseColumn
 import io.legado.app.ui.book.read.page.entities.column.TextHtmlColumn
-import io.legado.app.ui.highlight.HighlightRuleActivity
+import io.legado.app.ui.AppActivity
 import io.legado.app.utils.defaultSharedPreferences
 import org.hamcrest.Matcher
+import org.junit.Rule
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -58,6 +62,7 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class HighlightTriggerUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -132,16 +137,18 @@ class HighlightTriggerUiTest {
     }
 
     @Test fun doubleTapNeedsTheSameTargetAndOpensTheExistingRuleManager() {
-        // Use the actual preference dialog and persisted key, rather than a test-only trigger.
+        // Start from a different value so selecting the option must change the persisted setting.
+        prefs.edit().putString(PreferKey.highlightActionTrigger, "click").commit()
+        assertEquals("click", AppConfig.highlightActionTrigger)
         scenario!!.onActivity { MoreConfigDialog().showNow(it.supportFragmentManager, "highlight-settings") }
         instrumentation.waitForIdleSync()
-        scenario!!.onActivity {
-            val dialog = it.supportFragmentManager.findFragmentByTag("highlight-settings") as MoreConfigDialog
-            (dialog.childFragmentManager.fragments.single() as MoreConfigDialog.ReadPreferenceFragment)
-                .scrollToPreference(PreferKey.highlightActionTrigger)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(label(R.string.highlight_action_trigger)))
+        node(R.string.highlight_action_trigger).performScrollTo().performClick()
+        compose.onNode(hasText(label(R.string.highlight_action_trigger_double_tap)) and
+            hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
+        compose.waitUntil(15_000) {
+            AppConfig.highlightActionTrigger == "doubleTap" && compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty()
         }
-        onView(withText(R.string.highlight_action_trigger)).inRoot(isDialog()).perform(click())
-        onView(withText(R.string.highlight_action_trigger_double_tap)).inRoot(isDialog()).perform(click())
         assertEquals("doubleTap", AppConfig.highlightActionTrigger)
         assertTrue("The existing preference remains included in backup", BackupConfig.keyIsNotIgnore(PreferKey.highlightActionTrigger))
         screenshot("highlight-trigger-setting")
@@ -182,22 +189,19 @@ class HighlightTriggerUiTest {
         val firstCharacter = point { it is TextBaseColumn && it.charData == "然" }
         val nextCharacter = point { it is TextBaseColumn && it.charData == "高" }
         taps(firstCharacter, nextCharacter)
-        onView(withText(R.string.highlight_rule_disable)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+        node(R.string.highlight_rule_disable).assertIsDisplayed()
         pressBack()
         SystemClock.sleep(ViewConfiguration.getDoubleTapTimeout().toLong() + 50)
         taps(alpha, alpha)
-        onView(withText(R.string.highlight_rule_disable)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-        var editY = 0
-        var manageY = 0
-        var disableY = 0
-        onView(withText(R.string.edit)).inRoot(isPlatformPopup()).check { view, _ -> editY = screenY(view) }
-        onView(withText(R.string.highlight_rule)).inRoot(isPlatformPopup()).check { view, _ -> manageY = screenY(view) }
-        onView(withText(R.string.highlight_rule_disable)).inRoot(isPlatformPopup()).check { view, _ -> disableY = screenY(view) }
+        node(R.string.highlight_rule_disable).assertIsDisplayed()
+        val editY = node(R.string.edit).fetchSemanticsNode().boundsInWindow.top
+        val manageY = node(R.string.highlight_rule).fetchSemanticsNode().boundsInWindow.top
+        val disableY = node(R.string.highlight_rule_disable).fetchSemanticsNode().boundsInWindow.top
         assertTrue("Manage rules belongs between edit and disable", editY < manageY && manageY < disableY)
         screenshot("highlight-trigger-rule-popup")
-        val monitor = instrumentation.addMonitor(HighlightRuleActivity::class.java.name, null, false)
+        val monitor = instrumentation.addMonitor(AppActivity::class.java.name, null, false)
         try {
-            onView(withText(R.string.highlight_rule)).inRoot(isPlatformPopup()).perform(click())
+            node(R.string.highlight_rule).performClick()
             val manager = instrumentation.waitForMonitorWithTimeout(monitor, 5000)
             assertNotNull("The existing rule manager must actually open", manager)
             screenshot("highlight-trigger-rule-manager")
@@ -221,14 +225,14 @@ class HighlightTriggerUiTest {
         clearSelection()
         val html = point { it is TextHtmlColumn && it.charData.contains("H") && it.linkUrl == null }
         taps(html, html)
-        onView(withText(R.string.highlight_rule_disable)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+        node(R.string.highlight_rule_disable).assertIsDisplayed()
         pressBack()
         val link = point { it is TextHtmlColumn && it.linkUrl != null }
         hold(link)
         scenario!!.onActivity { assertTrue(it.findViewById<ReadView>(R.id.read_view).isTextSelected) }
         noRulePopup()
         clearSelection()
-        val monitor = instrumentation.addMonitor(OpenUrlConfirmActivity::class.java.name, null, true)
+        val monitor = instrumentation.addMonitor(AppActivity::class.java.name, null, true)
         try {
             taps(link)
             assertEquals("HTML links keep single-tap priority", 1, monitor.hits)
@@ -249,14 +253,14 @@ class HighlightTriggerUiTest {
         awaitReader { ReadBook.book?.getVariable("imageDoubleTap") == "done" }
         prefs.edit().putString(PreferKey.highlightActionTrigger, "click").commit()
         taps(alpha)
-        onView(withText(R.string.highlight_rule_disable)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+        node(R.string.highlight_rule_disable).assertIsDisplayed()
         pressBack()
         prefs.edit().putString(PreferKey.highlightActionTrigger, "longPress")
             .apply { clickKeys.forEach { putInt(it, -1) } }.commit()
         taps(alpha)
         noRulePopup()
         hold(alpha)
-        onView(withText(R.string.highlight_rule_disable)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+        node(R.string.highlight_rule_disable).assertIsDisplayed()
         pressBack()
         prefs.edit().putString(PreferKey.highlightActionTrigger, "off").commit()
         taps(alpha, alpha)
@@ -310,8 +314,13 @@ class HighlightTriggerUiTest {
     }
 
     private fun clearSelection() { scenario!!.onActivity { it.findViewById<ReadView>(R.id.read_view).cancelSelect() } }
-    private fun noRulePopup() { onView(withText(R.string.highlight_rule_disable)).check(doesNotExist()) }
-    private fun screenY(view: View): Int = IntArray(2).also(view::getLocationOnScreen)[1]
+    private fun label(id: Int): String {
+        lateinit var value: String
+        scenario!!.onActivity { value = it.getString(id) }
+        return value
+    }
+    private fun node(id: Int) = compose.onNodeWithText(label(id))
+    private fun noRulePopup() { node(R.string.highlight_rule_disable).assertDoesNotExist() }
     private fun awaitReader(condition: (ReadView) -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15000
         do {

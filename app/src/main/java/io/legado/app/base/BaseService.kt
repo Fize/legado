@@ -1,5 +1,11 @@
 package io.legado.app.base
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import androidx.lifecycle.Lifecycle
+import io.legado.app.ui.recovery.RestoreRecoveryActivity
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -7,6 +13,9 @@ import androidx.annotation.CallSuper
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
+import io.legado.app.help.storage.RestoreRecoveryGate
+import io.legado.app.help.storage.RestoreRecoveryStatus
+import kotlinx.coroutines.launch
 import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.permission.Permissions
@@ -31,6 +40,50 @@ abstract class BaseService : LifecycleService() {
 
     private val simpleName = this::class.simpleName.toString()
     private var isForeground = false
+    protected open val guardsRestoreRecovery: Boolean = false
+    private var recoveryStopped = false
+    protected val isRestoreRecoveryBlocked: Boolean
+        get() = guardsRestoreRecovery && (recoveryStopped || RestoreRecoveryGate.isQuarantined)
+
+    protected fun stopIfRestoreRecoveryRequired(): Boolean {
+        if (!isRestoreRecoveryBlocked) return false
+        if (lifecycle.currentState == Lifecycle.State.DESTROYED) {
+            recoveryStopped = true
+            return true
+        }
+        if (!recoveryStopped) {
+            recoveryStopped = true
+            android.util.Log.i("RestoreRecovery", "Stopping $simpleName until restore recovery completes")
+            onRestoreRecoveryRequired()
+        }
+        // A start delivered after onCreate must also be stopped.
+        stopSelf()
+        return true
+    }
+
+    protected open fun onRestoreRecoveryRequired() {}
+
+    protected fun acknowledgeRecoveryForegroundStart(
+        notificationId: Int,
+        @androidx.annotation.StringRes message: Int = R.string.restore_recovery_playback_stopped,
+    ) {
+        // A foreground-service start must be acknowledged even when business initialization
+        // is blocked. The ordinary media notification reads AppConfig and cannot be used here.
+        val channel = "restore_recovery"
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(channel,
+            getString(R.string.restore_recovery_notification_channel), NotificationManager.IMPORTANCE_LOW))
+        val notification = Notification.Builder(this, channel)
+            .setSmallIcon(R.drawable.ic_volume_up)
+            .setContentTitle(getString(R.string.restore_recovery_title))
+            .setContentText(getString(message))
+            .setContentIntent(PendingIntent.getActivity(this, notificationId,
+                RestoreRecoveryActivity.intent(this), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            .build()
+        runCatching { startForeground(notificationId, notification) }.onFailure {
+            if (!it.isForegroundServiceStartDenied()) throw it
+        }
+    }
 
     fun <T> execute(
         scope: CoroutineScope = lifecycleScope,
@@ -44,14 +97,21 @@ abstract class BaseService : LifecycleService() {
     @CallSuper
     override fun onCreate() {
         super.onCreate()
+        if (stopIfRestoreRecoveryRequired()) return
+        if (guardsRestoreRecovery) lifecycleScope.launch {
+            RestoreRecoveryGate.status.collect {
+                if (it != RestoreRecoveryStatus.Ready) stopIfRestoreRecoveryRequired()
+            }
+        }
         LifecycleHelp.onServiceCreate(this)
         checkPermission()
     }
 
     @CallSuper
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (stopIfRestoreRecoveryRequired()) return START_NOT_STICKY
         LogUtils.d(simpleName) {
-            "onStartCommand $intent ${intent?.toUri(0)}"
+            "onStartCommand $intent ${intent?.cloneFilter()?.toUri(0)}"
         }
         if (!isForeground) {
             if (!tryStartForegroundNotification()) {
@@ -108,7 +168,7 @@ abstract class BaseService : LifecycleService() {
                 }
             }
             .onGranted {
-                if (lifecycleScope.isActive && !isForeground) {
+                if (!stopIfRestoreRecoveryRequired() && lifecycleScope.isActive && !isForeground) {
                     if (tryStartForegroundNotification()) {
                         isForeground = true
                     } else {
@@ -130,6 +190,7 @@ abstract class BaseService : LifecycleService() {
     }
 
     private fun tryStartForegroundNotification(): Boolean {
+        if (stopIfRestoreRecoveryRequired()) return false
         return runCatching {
             startForegroundNotification()
         }.fold(

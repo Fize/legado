@@ -22,7 +22,6 @@
     <item name="code_share_selection" type="id" />
     <item name="menu_del" type="id" />
     <item name="view_pager_main" type="id" />
-    <item name="view_pager_bookshelf" type="id" />
 
     <item name="tool_bar" type="id" />
     <item name="search_bar" type="id" />

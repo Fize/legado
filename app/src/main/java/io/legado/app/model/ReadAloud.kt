@@ -1,5 +1,6 @@
 package io.legado.app.model
 
+import io.legado.app.help.storage.RestoreRecoveryGate
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -38,8 +39,8 @@ internal fun resolveReadAloudEngineName(
 
 object ReadAloud {
     var httpTTS: HttpTTS? = null
-    val ttsEngine get() = ReadBook.book?.getTtsEngine() ?: AppConfig.ttsEngine
-    private var aloudClass: Class<*> = getReadAloudClass()
+    val ttsEngine get() = if (RestoreRecoveryGate.isQuarantined) null else ReadBook.book?.getTtsEngine() ?: AppConfig.ttsEngine
+    private var aloudClass: Class<*> = if (RestoreRecoveryGate.isQuarantined) TTSReadAloudService::class.java else getReadAloudClass()
 
     val followReadAloudPosition: Boolean
         get() = BaseReadAloudService.followReadAloudPosition
@@ -51,10 +52,12 @@ object ReadAloud {
         get() = BaseReadAloudService.readAloudChapterStart
 
     fun detachReadAloudFollow() {
+        if (RestoreRecoveryGate.isQuarantined) return
         BaseReadAloudService.detachReadAloudFollow()
     }
 
     fun restoreReadAloudFollow() {
+        if (RestoreRecoveryGate.isQuarantined) return
         BaseReadAloudService.restoreReadAloudFollow()
     }
 
@@ -74,6 +77,7 @@ object ReadAloud {
     }
 
     fun upReadAloudClass() {
+        if (RestoreRecoveryGate.isQuarantined) return
         stop(appCtx)
         aloudClass = getReadAloudClass()
     }
@@ -85,6 +89,7 @@ object ReadAloud {
         startPos: Int = 0,
         rewindToSentenceStart: Boolean = false
     ) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (!BaseReadAloudService.isRun) {
             restoreReadAloudFollow()
         }
@@ -109,6 +114,7 @@ object ReadAloud {
         pageIndex: Int = ReadBook.durPageIndex,
         startPos: Int = 0
     ) {
+        if (RestoreRecoveryGate.isQuarantined) return
         val bundle = Bundle().apply {
             putBoolean("play", play)
             putInt("pageIndex", pageIndex)
@@ -118,6 +124,7 @@ object ReadAloud {
     }
 
     fun pause(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.pause
@@ -126,6 +133,7 @@ object ReadAloud {
     }
 
     fun resume(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.resume
@@ -142,6 +150,7 @@ object ReadAloud {
     }
 
     fun prevParagraph(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.prevParagraph
@@ -150,6 +159,7 @@ object ReadAloud {
     }
 
     fun nextParagraph(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.nextParagraph
@@ -158,6 +168,7 @@ object ReadAloud {
     }
 
     fun prevChapter(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.prev
@@ -166,6 +177,7 @@ object ReadAloud {
     }
 
     fun nextChapter(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.next
@@ -174,6 +186,7 @@ object ReadAloud {
     }
 
     fun upTtsSpeechRate(context: Context) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.upTtsSpeechRate
@@ -182,6 +195,7 @@ object ReadAloud {
     }
 
     fun setTimer(context: Context, minute: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.setTimer
@@ -191,6 +205,7 @@ object ReadAloud {
     }
 
     fun setChapterStop(context: Context, count: Int) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.setChapterStop

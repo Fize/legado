@@ -1,78 +1,86 @@
 package io.legado.app.ui.replace.edit
 
-import android.app.Application
-import android.content.Intent
-import io.legado.app.base.BaseViewModel
-import io.legado.app.data.appDb
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.config.ReplacePreviewConfig
-import io.legado.app.utils.*
-import kotlinx.coroutines.Dispatchers
+import io.legado.app.data.repository.ReplaceRuleRepository
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class ReplaceEditViewModel(application: Application) : BaseViewModel(application) {
+@HiltViewModel
+class ReplaceEditViewModel @Inject constructor(
+    private val repository: ReplaceRuleRepository,
+) : ViewModel() {
 
-    var replaceRule: ReplaceRule? = null
+    private var loadedKey: String? = null
+    private val _initialRule = MutableStateFlow<ReplaceRule?>(null)
+    val initialRule = _initialRule.asStateFlow()
+    private val _loadError = MutableStateFlow<String?>(null)
+    val loadError = _loadError.asStateFlow()
 
-    fun initData(intent: Intent, finally: (replaceRule: ReplaceRule) -> Unit) {
-        execute {
-            val id = intent.getLongExtra("id", -1)
-            replaceRule = if (id > 0) {
-                appDb.replaceRuleDao.findById(id)
-            } else {
-                val pattern = intent.getStringExtra("pattern") ?: ""
-                val isRegex = intent.getBooleanExtra("isRegex", false)
-                val scope = intent.getStringExtra("scope")
-                ReplaceRule(
-                    name = pattern,
-                    pattern = pattern,
+    fun initData(
+        id: Long,
+        pattern: String?,
+        isRegex: Boolean,
+        scope: String?,
+    ) {
+        val key = "$id|$pattern|$isRegex|$scope"
+        if (loadedKey == key) return
+        loadedKey = key
+        viewModelScope.launch {
+            try {
+                val rule = if (id > 0) repository.getRule(id)
+                    ?: error("Replacement rule no longer exists")
+                else ReplaceRule(
+                    name = pattern.orEmpty(),
+                    pattern = pattern.orEmpty(),
                     isRegex = isRegex,
-                    scope = scope
+                    scope = scope,
                 )
-            }
-        }.onFinally {
-            replaceRule?.let {
-                finally(it)
+                _initialRule.value = rule
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _loadError.value = error.localizedMessage ?: "Rule could not be loaded"
             }
         }
     }
 
-    fun pasteRule(success: (ReplaceRule) -> Unit) {
-        execute(context = Dispatchers.Main) {
-            val text = context.getClipText()
-            if (text.isNullOrBlank()) {
-                throw NoStackTraceException("剪贴板为空")
+    fun consumeLoadError() {
+        _loadError.value = null
+    }
+
+    fun pasteRule(text: String?, onLoaded: (ReplaceRule) -> Unit, onError: (Throwable) -> Unit) {
+        runCatching {
+            require(!text.isNullOrBlank()) { "剪贴板为空" }
+            GSON.fromJsonObject<ReplaceRule>(text).getOrThrow()
+        }.onSuccess(onLoaded).onFailure(onError)
+    }
+
+    fun sampleFor(ruleId: Long): String = repository.sampleFor(ruleId)
+
+    fun save(
+        rule: ReplaceRule,
+        sample: String,
+        onSaved: (ReplaceRule) -> Unit,
+        onError: (Throwable) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                val saved = repository.saveRule(rule)
+                repository.saveSample(saved.id, ReplacePreview.normalizeSample(sample))
+                onSaved(saved)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                onError(error)
             }
-            GSON.fromJsonObject<ReplaceRule>(text).getOrNull()
-                ?: throw NoStackTraceException("格式不对")
-        }.onSuccess {
-            success.invoke(it)
-        }.onError {
-            context.toastOnUi(it.localizedMessage ?: "Error")
-            it.printOnDebug()
         }
     }
-
-    fun sampleFor(ruleId: Long): String = ReplacePreviewConfig.sample(ruleId)
-
-    fun saveSample(ruleId: Long, sample: String) {
-        ReplacePreviewConfig.saveSample(ruleId, ReplacePreview.normalizeSample(sample))
-    }
-
-    fun save(replaceRule: ReplaceRule, success: () -> Unit) {
-        execute {
-            replaceRule.checkValid()
-            if (replaceRule.order == Int.MIN_VALUE) {
-                replaceRule.order = appDb.replaceRuleDao.maxOrder + 1
-            }
-            appDb.replaceRuleDao.insert(replaceRule).firstOrNull()?.let {
-                replaceRule.id = it
-            }
-        }.onSuccess {
-            success()
-        }.onError {
-            context.toastOnUi("save error, ${it.localizedMessage}")
-        }
-    }
-
 }

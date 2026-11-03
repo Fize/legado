@@ -13,6 +13,35 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class PreferenceSnapshotTest {
 
+    @Test fun allFrameworkPreferenceTypesAndEscapedStringsRemainReadable() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val root = File(context.cacheDir, "preference-types-${UUID.randomUUID()}")
+        try {
+            writePreferenceSnapshot(context, root.absolutePath, "config") {
+                putString("text", "中文 <tag> & \"quoted\"\nnext")
+                putString("empty", "")
+                putInt("int", Int.MIN_VALUE)
+                putLong("long", Long.MAX_VALUE)
+                putFloat("float", 1.25f)
+                putBoolean("boolean", false)
+                putStringSet("set", setOf("", "中文", "<&>"))
+                putStringSet("emptySet", emptySet())
+            }
+            val values = readPreferenceSnapshot(context, root.absolutePath, "config")!!
+            assertEquals("中文 <tag> & \"quoted\"\nnext", values["text"])
+            assertEquals("", values["empty"])
+            assertEquals(Int.MIN_VALUE, values["int"])
+            assertEquals(Long.MAX_VALUE, values["long"])
+            assertEquals(1.25f, values["float"])
+            assertEquals(false, values["boolean"])
+            assertEquals(setOf("", "中文", "<&>"), values["set"])
+            assertEquals(emptySet<String>(), values["emptySet"])
+            assertEquals(listOf("config.xml"), root.list()?.toList())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     @Test
     fun repeatedSnapshotsDoNotReuseCachedPreferenceFiles() {
         val context = ApplicationProvider.getApplicationContext<Context>()

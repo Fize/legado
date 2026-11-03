@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.ensureActive
 import java.util.Collections
 import kotlin.String
 import kotlin.onFailure
@@ -31,6 +32,7 @@ object SourceCallBack {
         val chapterIndex: Int?,
         val bookType: Int,
         val event: String,
+        val ownerKey: String?,
     )
 
     private val pendingCustomButtons = Collections.synchronizedSet(mutableSetOf<CustomButtonRequest>())
@@ -64,6 +66,8 @@ object SourceCallBack {
         chapter: BookChapter?,
         bookType: Int = 0,
         result: String? = null,
+        scope: CoroutineScope = activity.lifecycleScope,
+        uiOwnerKey: String? = null,
         noCall: (() -> Unit)? = null
     ) {
         if (source == null || !source.eventListener) {
@@ -76,20 +80,22 @@ object SourceCallBack {
             return
         }
         val request = if (event == CLICK_CUSTOM_BUTTON || event == LONG_CLICK_CUSTOM_BUTTON) {
-            CustomButtonRequest(activity, source.getKey(), book.bookUrl, chapter?.index, bookType, event)
+            CustomButtonRequest(activity, source.getKey(), book.bookUrl, chapter?.index, bookType, event, uiOwnerKey)
         } else null
         if (request != null && !pendingCustomButtons.add(request)) return
         val browserKey = request?.let {
-            GSON.toJson(listOf(it.sourceKey, it.bookUrl, it.chapterIndex, it.bookType, it.event))
+            GSON.toJson(listOf(it.sourceKey, it.bookUrl, it.chapterIndex, it.bookType, it.event, it.ownerKey))
         }
         // Finish on Main after any showBrowser work posted by the script.
-        activity.lifecycleScope.launch(start = CoroutineStart.LAZY) {
+        scope.launch(start = CoroutineStart.LAZY) {
             if (browserKey != null && activity.supportFragmentManager.fragments.any {
                 it is BottomWebViewDialog && it.handlesCustomButton(browserKey)
             }) return@launch
             withContext(IO) {
                 val java = SourceLoginJsExtensions(activity, source, bookType).apply {
                     customButtonKey = browserKey
+                    uiScope = scope
+                    this.uiOwnerKey = uiOwnerKey
                 }
                 kotlin.runCatching {
                     val result = runScriptWithContext {
@@ -129,6 +135,11 @@ object SourceCallBack {
         }
     }
 
+    suspend fun callBackBookAwait(event: String, source: BookSource?, book: Book?) {
+        callBackBookInternal(event, source, book, showErrorToast = false)
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+    }
+
     fun callBackBooks(
         event: String,
         books: List<Pair<BookSource?, Book>>,
@@ -147,6 +158,7 @@ object SourceCallBack {
         book: Book?,
         chapter: BookChapter? = null,
         result: String? = null,
+        showErrorToast: Boolean = true,
     ) {
         if (source == null || book == null || !source.eventListener) return
         val jsStr = source.getContentRule().callBackJs
@@ -163,7 +175,7 @@ object SourceCallBack {
                 }
             }
         }.onFailure {
-            AppLog.put("${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}", it, true)
+            AppLog.put("${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}", it, showErrorToast)
         }
     }
 

@@ -1,0 +1,17 @@
+<resources>
+    <item name="restore_recovery_title" type="id" />
+    <item name="restore_recovery_message" type="id" />
+    <item name="restore_recovery_retry" type="id" />
+    <item name="restore_recovery_close" type="id" />
+    <string name="restore_recovery_title">Recovery required</string>
+    <string name="restore_recovery_message">A previous restore could not finish. New backups are paused to protect your data. Free some storage space, reconnect the original storage, or restore file access, then retry. Your recovery records will be kept.</string>
+    <string name="restore_recovery_retry">Retry recovery</string>
+    <string name="restore_recovery_close">Close app</string>
+    <string name="restore_recovery_working">Recovering your data…</string>
+    <string name="restore_recovery_complete_title">Recovery completed</string>
+    <string name="restore_recovery_complete_message">Your data has been recovered. Close and reopen the app before continuing. New backups remain paused until you reopen it.</string>
+    <string name="restore_recovery_retry_failed">Recovery could not finish. Check storage space, reconnect the original storage, or restore file access, then retry. Your recovery records are still kept and new backups remain paused.</string>
+    <string name="restore_recovery_notification_channel">Data recovery</string>
+    <string name="restore_recovery_playback_stopped">Playback stopped. Open the app to complete recovery.</string>
+    <string name="restore_recovery_background_stopped">Background tasks stopped. Open the app to complete data recovery.</string>
+</resources>

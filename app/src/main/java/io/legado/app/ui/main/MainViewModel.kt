@@ -27,7 +27,6 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.CacheBook
 import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.WebBook
-import io.legado.app.service.CacheBookService
 import io.legado.app.utils.onEachParallel
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
@@ -197,7 +196,7 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
             startUpTocJob()
             return
         }
-        if (tocUpdateRequests.isIdle() && !CacheBookService.isRun) {
+        if (tocUpdateRequests.isIdle()) {
             //所有目录更新完再开始缓存章节
             // A finished/finishing worker may still have a Job reference. Restart through
             // cacheBook(), which cancels it and lets the shared download queue resume.

@@ -18,7 +18,6 @@ import io.legado.app.R
 import io.legado.app.constant.Theme
 import io.legado.app.lib.theme.getToolbarTextColor
 import io.legado.app.lib.theme.primaryTextColor
-import splitties.init.appCtx
 import java.lang.reflect.Method
 
 @SuppressLint("RestrictedApi")
@@ -79,9 +78,8 @@ fun Menu.applyOpenTint(context: Context, showIcon: Boolean = true) {
     }
 }
 
-fun Menu.iconItemOnLongClick(id: Int, function: (view: View) -> Unit) {
+fun Menu.iconItemOnLongClick(context: Context, id: Int, function: (view: View) -> Unit) {
     findItem(id)?.let { item ->
-        val context = (this as? MenuBuilder)?.context ?: appCtx
         item.actionView = ImageButton(context, null, android.R.attr.actionButtonStyle).apply {
             this.id = R.id.item
             layoutParams = ViewGroup.LayoutParams(

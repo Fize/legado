@@ -18,6 +18,11 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
 import io.legado.app.constant.NotificationId
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
+import io.legado.app.help.storage.RestoreWriteGeneration
+import io.legado.app.help.storage.backupRestoreMutex
+import io.legado.app.help.storage.restoreWriteGeneration
+import io.legado.app.model.Download
 import io.legado.app.utils.IntentType
 import io.legado.app.utils.applyPromotedProgress
 import io.legado.app.utils.openFileUri
@@ -25,6 +30,9 @@ import io.legado.app.utils.progressPercent
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -41,6 +49,7 @@ internal fun isActiveDownloadStatus(statusCode: Int): Boolean =
  * 下载文件
  */
 class DownloadService : BaseService() {
+    override val guardsRestoreRecovery = true
     companion object {
         private const val TERMINAL_NOTIFICATION_DURATION = 4_500L
         private const val RESULT_NOTIFICATION_DELAY = 100L
@@ -62,28 +71,35 @@ class DownloadService : BaseService() {
     private val terminalJobs = hashMapOf<Long, Job>()
     private var nextNotificationId = NotificationId.Download
     private var upStateJob: Job? = null
+    private var receiverRegistered = false
+    private var pendingCommands = 0
+    private var latestStartId = 0
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            queryState()
+            lifecycleScope.launch { queryState() }
         }
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate() {
         super.onCreate()
+        if (isRestoreRecoveryBlocked) return
         ContextCompat.registerReceiver(
             this,
             downloadReceiver,
             IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
             ContextCompat.RECEIVER_EXPORTED
         )
+        receiverRegistered = true
     }
 
     override fun onDestroy() {
         upStateJob?.cancel()
         terminalJobs.values.forEach { it.cancel() }
         downloads.values.forEach { downloadInfo ->
-            if (downloadInfo.state == DownloadState.COMPLETED ||
+            if (isRestoreRecoveryBlocked || !downloadInfo.generation.isCurrent) {
+                notificationManager.cancel(downloadInfo.notificationId)
+            } else if (downloadInfo.state == DownloadState.COMPLETED ||
                 downloadInfo.state == DownloadState.FAILED
             ) {
                 notificationManager.cancel(downloadInfo.notificationId)
@@ -92,20 +108,37 @@ class DownloadService : BaseService() {
                 notificationManager.cancel(downloadInfo.notificationId)
             }
         }
-        unregisterReceiver(downloadReceiver)
+        if (receiverRegistered) unregisterReceiver(downloadReceiver)
         super.onDestroy()
     }
 
+    override fun onRestoreRecoveryRequired() {
+        // These are public files already handed to the system, not restored business
+        // state. Detach application actions without removing user-requested downloads.
+        upStateJob?.cancel()
+        terminalJobs.values.forEach { it.cancel() }
+        terminalJobs.clear()
+        downloads.values.forEach { notificationManager.cancel(it.notificationId) }
+        downloads.clear()
+        acknowledgeRecoveryForegroundStart(NotificationId.DownloadService, R.string.restore_recovery_background_stopped)
+        super.onRestoreRecoveryRequired()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val result = super.onStartCommand(intent, flags, startId)
+        if (result == START_NOT_STICKY) return result
+        latestStartId = startId
         when (intent?.action) {
-            IntentAction.start -> startDownload(
+            IntentAction.start -> guardedCommand(intent) { generation -> startDownload(
                 intent.getStringExtra("url"),
                 intent.getStringExtra("fileName"),
                 intent.getBooleanExtra("isAppUpdate", false),
-                intent.getIntExtra("notificationId", 0)
-            )
+                intent.getIntExtra("notificationId", 0),
+                generation
+            ) }
 
-            IntentAction.play -> {
+            IntentAction.play -> guardedCommand(intent) {
+                discardSupersededDownloads()
                 val id = intent.getLongExtra("downloadId", 0)
                 val fileName = intent.getStringExtra("fileName")
                 when (downloads[id]?.state) {
@@ -129,11 +162,36 @@ class DownloadService : BaseService() {
                 }
             }
         }
-        val result = super.onStartCommand(intent, flags, startId)
-        if (downloads.isEmpty()) {
+        stopIfIdle(startId)
+        return result
+    }
+
+    private fun stopIfIdle(startId: Int) {
+        if (downloads.isEmpty() && pendingCommands == 0) {
             stopSelfResult(startId)
         }
-        return result
+    }
+
+    private fun guardedCommand(intent: Intent, action: (RestoreWriteGeneration.Token) -> Unit) {
+        val generation = restoreWriteGeneration.capture()
+        if (intent.hasExtra(Download.EXTRA_RESTORE_SEQUENCE) &&
+            (intent.getLongExtra(Download.EXTRA_RESTORE_SEQUENCE, -1L) != generation.sequence ||
+                intent.getStringExtra(Download.EXTRA_RESTORE_PROCESS) != generation.processId)) return
+        pendingCommands++
+        lifecycleScope.launch {
+            try {
+                backupRestoreMutex.withLock {
+                    currentCoroutineContext().ensureActive()
+                    generation.requireCurrent()
+                    action(generation)
+                }
+            } catch (required: RestoreRecoveryRequiredException) {
+                throw CancellationException("Public download stopped for data recovery").apply { initCause(required) }
+            } finally {
+                pendingCommands--
+                stopIfIdle(latestStartId)
+            }
+        }
     }
 
     /**
@@ -144,14 +202,13 @@ class DownloadService : BaseService() {
         url: String?,
         fileName: String?,
         isAppUpdate: Boolean,
-        preferredNotificationId: Int = 0
+        preferredNotificationId: Int = 0,
+        generation: RestoreWriteGeneration.Token,
     ) {
         if (url == null || fileName == null) {
-            if (downloads.isEmpty()) {
-                stopSelf()
-            }
             return
         }
+        discardSupersededDownloads()
         if (downloads.values.any { it.url == url && it.state == DownloadState.ACTIVE }) {
             toastOnUi("已在下载列表")
             return
@@ -171,9 +228,10 @@ class DownloadService : BaseService() {
                     url,
                     fileName,
                     allocateNotificationId(url, fileName, preferredNotificationId),
-                    isAppUpdate
+                    isAppUpdate,
+                    generation
                 )
-            queryState()
+            queryStateLocked()
             if (upStateJob == null) {
                 checkDownloadState()
             }
@@ -249,9 +307,7 @@ class DownloadService : BaseService() {
         ) {
             updateResultNotification(downloadInfo)
         }
-        if (downloads.isEmpty()) {
-            stopSelf()
-        }
+        stopIfIdle(latestStartId)
     }
 
     private fun checkDownloadState() {
@@ -267,12 +323,33 @@ class DownloadService : BaseService() {
     /**
      * 查询下载进度
      */
+    private suspend fun queryState() {
+        try {
+            backupRestoreMutex.withLock {
+                currentCoroutineContext().ensureActive()
+                queryStateLocked()
+            }
+        } catch (_: RestoreRecoveryRequiredException) {
+            stopIfRestoreRecoveryRequired()
+        }
+    }
+
+    private fun discardSupersededDownloads() {
+        val stale = downloads.values.filter { !it.generation.isCurrent }
+        stale.forEach {
+            terminalJobs.remove(it.id)?.cancel()
+            notificationManager.cancel(it.notificationId)
+            downloads.remove(it.id)
+        }
+    }
+
     @Synchronized
-    private fun queryState() {
+    private fun queryStateLocked() {
+        discardSupersededDownloads()
         if (downloads.isEmpty()) {
             upStateJob?.cancel()
             upStateJob = null
-            stopSelf()
+            stopIfIdle(latestStartId)
             return
         }
         val activeIds = downloads
@@ -353,6 +430,11 @@ class DownloadService : BaseService() {
     }
 
     private fun updateResultNotification(downloadInfo: DownloadInfo) {
+        // Lifecycle cleanup is synchronous. If a restore owns the lock, omit this
+        // optional result notification rather than blocking Main or replaying old actions.
+        if (!backupRestoreMutex.tryLock()) return
+        try {
+            if (isRestoreRecoveryBlocked || !downloadInfo.generation.isCurrent) return
         val statusText = when (downloadInfo.state) {
             DownloadState.COMPLETED -> getString(R.string.download_success)
             DownloadState.FAILED -> getString(R.string.download_error)
@@ -365,6 +447,7 @@ class DownloadService : BaseService() {
             terminal = false,
             result = true
         )
+        } finally { backupRestoreMutex.unlock() }
     }
 
     /**
@@ -382,6 +465,7 @@ class DownloadService : BaseService() {
     }
 
     override fun startForegroundNotification() {
+        if (stopIfRestoreRecoveryRequired()) return
         val notification = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_download)
             .setSubText(getString(R.string.action_download))
@@ -417,6 +501,8 @@ class DownloadService : BaseService() {
                     }
                     setContentIntent(
                         servicePendingIntent<DownloadService>(action, downloadInfo.id.toInt()) {
+                            putExtra(Download.EXTRA_RESTORE_SEQUENCE, downloadInfo.generation.sequence)
+                            putExtra(Download.EXTRA_RESTORE_PROCESS, downloadInfo.generation.processId)
                             putExtra("downloadId", downloadInfo.id)
                             putExtra("fileName", downloadInfo.fileName)
                             if (action == IntentAction.start) {
@@ -521,6 +607,7 @@ class DownloadService : BaseService() {
         val fileName: String,
         val notificationId: Int,
         val isAppUpdate: Boolean,
+        val generation: RestoreWriteGeneration.Token,
         val startTime: Long = System.currentTimeMillis(),
         var progress: Int = 0,
         var max: Int = 0,

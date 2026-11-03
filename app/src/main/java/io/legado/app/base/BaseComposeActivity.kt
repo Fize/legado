@@ -16,6 +16,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
+import io.legado.app.help.storage.RestoreActivityRecovery
+import io.legado.app.help.storage.RestoreRecoveryGate
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
@@ -46,6 +48,14 @@ abstract class BaseComposeActivity(
     private val imageBg: Boolean = true
 ) : AppCompatActivity() {
 
+    protected open val guardsRestoreRecovery: Boolean = false
+    private val restoreRecovery by lazy { RestoreActivityRecovery(this) { super.finish() } }
+    protected val isRestoreRecoveryBlocked get() = guardsRestoreRecovery && restoreRecovery.isBlocked
+    protected var wasActivityContentCreated = false
+        private set
+    protected fun redirectIfRestoreRecoveryRequired(): Boolean =
+        guardsRestoreRecovery && restoreRecovery.redirectIfRequired()
+
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
         get() {
@@ -57,14 +67,22 @@ abstract class BaseComposeActivity(
         }
 
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(AppContextWrapper.wrap(newBase))
+        super.attachBaseContext(if (guardsRestoreRecovery && RestoreRecoveryGate.isQuarantined) newBase else AppContextWrapper.wrap(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (isRestoreRecoveryBlocked) {
+            setTheme(R.style.AppTheme_Light)
+            super.onCreate(null)
+            redirectIfRestoreRecoveryRequired()
+            return
+        }
         window.decorView.disableAutoFill()
         initTheme()
         super.onCreate(savedInstanceState)
         if (!shouldCreateContentView()) return
+        wasActivityContentCreated = true
+        if (guardsRestoreRecovery) restoreRecovery.observe()
         setupSystemBar()
         setupPredictiveBack()
         setContent {
@@ -101,11 +119,13 @@ abstract class BaseComposeActivity(
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        if (isRestoreRecoveryBlocked) return
         setupSystemBar()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        if (isRestoreRecoveryBlocked) return
         setupSystemBar()
     }
 
@@ -228,7 +248,7 @@ abstract class BaseComposeDialogFragment(
             )
             setContent {
                 LegadoTheme {
-                    Content()
+                    this@BaseComposeDialogFragment.Content()
                 }
             }
         }
@@ -257,7 +277,7 @@ abstract class BaseComposeFragment : BaseFragment() {
             )
             setContent {
                 LegadoTheme {
-                    Content()
+                    this@BaseComposeFragment.Content()
                 }
             }
         }

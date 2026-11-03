@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.addCallback
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -60,22 +59,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle.State.RESUMED
-import androidx.lifecycle.Lifecycle.State.STARTED
-import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.withStateAtLeast
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
@@ -87,9 +82,6 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -122,7 +114,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
             viewModel.startSearch()
         }
 
-    private var searchFinishDialog: AlertDialog? = null
     private var targetBook: Book? = null
     private var tocLoading by mutableStateOf(false)
     private var contentLoading by mutableStateOf(false)
@@ -193,6 +184,116 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
                     val sourceListState = rememberLazyListState()
                     val tocListState = rememberLazyListState()
                     val coroutineScope = rememberCoroutineScope()
+                    val chapterState by viewModel.chapterUiState.collectAsStateWithLifecycle(
+                        minActiveState = RESUMED,
+                    )
+                    val sourceState by viewModel.uiState.collectAsStateWithLifecycle(
+                        minActiveState = RESUMED,
+                    )
+
+                    LaunchedEffect(sourceState.searchResultsRevision) {
+                        searchItems = sourceState.searchItems
+                    }
+
+                    LaunchedEffect(sourceState.isSearching) {
+                        isSearching = sourceState.isSearching
+                    }
+
+                    LaunchedEffect(sourceState.groups) {
+                        groups.clear()
+                        groups.addAll(sourceState.groups)
+                    }
+
+                    LaunchedEffect(sourceState.changeSourceResultRevision) {
+                        when (
+                            val result = viewModel.consumeChangeSourceResult(
+                                sourceState.changeSourceResultRevision
+                            )
+                        ) {
+                            is SourceChangeResult.Success -> {
+                                val callback = callBack ?: return@LaunchedEffect
+                                val completion = SourceChangeCompletion(
+                                    result.deleteAfterChange,
+                                    viewModel::del,
+                                )
+                                callback.changeTo(
+                                    result.source,
+                                    result.book,
+                                    result.toc,
+                                    completion::success,
+                                )
+                                if (result.dismissDialog) dismissAllowingStateLoss()
+                            }
+
+                            is SourceChangeResult.Error -> AppLog.put(
+                                "自动换源失败\n${result.throwable.localizedMessage}",
+                                result.throwable,
+                                true,
+                            )
+
+                            null -> Unit
+                        }
+                    }
+
+                    LaunchedEffect(chapterState.originalChaptersState) {
+                        chapterState.originalChaptersState?.let(::showOriginalChaptersState)
+                    }
+
+                    LaunchedEffect(chapterState.tocState) {
+                        showTocState(chapterState.tocState)
+                    }
+
+                    LaunchedEffect(chapterState.contentLoading) {
+                        contentLoading = chapterState.contentLoading
+                    }
+
+                    LaunchedEffect(chapterState.contentResultRevision) {
+                        when (
+                            val result = viewModel.consumeContentResult(
+                                chapterState.contentResultRevision
+                            )
+                        ) {
+                            is ChapterContentResult.Success -> {
+                                val callback = callBack ?: return@LaunchedEffect
+                                callback.replaceContent(result.content)
+                                dismissAllowingStateLoss()
+                            }
+
+                            is ChapterContentResult.Error -> {
+                                tocVisible = false
+                                viewModel.clearToc()
+                                toastOnUi(result.message)
+                            }
+
+                            null -> Unit
+                        }
+                    }
+
+                    LaunchedEffect(chapterState.batchCaching) {
+                        updateBatchCaching(chapterState.batchCaching)
+                    }
+
+                    LaunchedEffect(chapterState.batchCacheResultRevision) {
+                        when (
+                            val result = viewModel.consumeBatchCacheResult(
+                                chapterState.batchCacheResultRevision
+                            )
+                        ) {
+                            is ChapterCacheResult.Success -> showCacheSuccess(result)
+                            is ChapterCacheResult.Error -> toastOnUi(result.message)
+                            null -> Unit
+                        }
+                    }
+
+                    LaunchedEffect(chapterState.automationState) {
+                        val state = chapterState.automationState
+                        showAutomationState(state)
+                        if (state is ChapterSourceAutomationState.Ready &&
+                            viewModel.chapterUiState.value.automationState == state
+                        ) {
+                            viewModel.runNextAutomationIfReady()
+                        }
+                    }
 
                     LaunchedEffect(scrollSourceTrigger) {
                         val index = scrollSourceTargetIndex ?: return@LaunchedEffect
@@ -482,7 +583,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
                                                 onClick = {
                                                     if (viewModel.isAutomationActive) {
                                                         if (viewModel.skipAutomationChapter() &&
-                                                            viewModel.automationState.value is ChapterSourceAutomationState.Finished
+                                                            viewModel.chapterUiState.value.automationState is ChapterSourceAutomationState.Finished
                                                         ) {
                                                             toastOnUi(R.string.chapter_source_finished)
                                                             dismissAllowingStateLoss()
@@ -579,7 +680,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
                             confirmButton = {
                                 TextButton(
                                     onClick = {
-                                        val tocState = viewModel.tocState.value as? ChapterTocState.Success
+                                        val tocState = viewModel.chapterUiState.value.tocState as? ChapterTocState.Success
                                         val originalBook = callBack?.oldBook
                                         val start = startText.trim().toIntOrNull()
                                         val end = endText.trim().toIntOrNull()
@@ -607,6 +708,44 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
                             }
                         )
                     }
+
+                    if (sourceState.showEmptyGroupDialog) {
+                        AlertDialog(
+                            onDismissRequest = viewModel::dismissEmptyGroupDialog,
+                            title = { Text("搜索结果为空") },
+                            text = {
+                                Text("${sourceState.selectedGroup}分组搜索结果为空，是否切换到全部分组")
+                            },
+                            confirmButton = {
+                                TextButton(onClick = viewModel::searchAllGroups) {
+                                    Text(stringResource(R.string.ok))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = viewModel::dismissEmptyGroupDialog) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            },
+                        )
+                    }
+
+                    if (sourceState.showRelativeWordCountWarning) {
+                        AlertDialog(
+                            onDismissRequest = viewModel::dismissRelativeWordCountWarning,
+                            text = {
+                                Text(
+                                    stringResource(
+                                        R.string.change_source_relative_word_count_unavailable
+                                    )
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = viewModel::dismissRelativeWordCountWarning) {
+                                    Text(stringResource(R.string.ok))
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -617,7 +756,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
         syncChangeSourceResultOptions()
         viewModel.initData(arguments, callBack?.oldBook, activity is ReadBookActivity)
         showTitle()
-        initLiveData()
         initBatchMode()
         activity?.onBackPressedDispatcher?.addCallback(viewLifecycleOwner) {
             if (viewModel.isAutomationActive) {
@@ -638,12 +776,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
         }
     }
 
-    override fun onDestroyView() {
-        searchFinishDialog?.dismiss()
-        searchFinishDialog = null
-        super.onDestroyView()
-    }
-
     private fun syncChangeSourceResultOptions() {
         checkAuthorState = AppConfig.changeSourceCheckAuthor
         loadInfoState = AppConfig.changeSourceLoadInfo
@@ -657,7 +789,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
     private fun showTitle() {
         currentTitle = viewModel.currentOriginalChapter?.title ?: viewModel.chapterTitle
         if (batchMode) {
-            currentSubtitle = when (val state = viewModel.automationState.value) {
+            currentSubtitle = when (val state = viewModel.chapterUiState.value.automationState) {
                 is ChapterSourceAutomationState.Ready -> getString(
                     R.string.chapter_source_automation_progress,
                     state.position + 1,
@@ -704,149 +836,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
         updateBatchActions()
         val oldBook = callBack?.oldBook ?: return
         viewModel.loadOriginalChapters(oldBook.bookUrl)
-    }
-
-    private fun initLiveData() {
-        val owner = viewLifecycleOwner
-        viewModel.searchStateData.observe(owner) {
-            isSearching = it
-        }
-        viewModel.searchFinishData.observe(owner) { event ->
-            owner.lifecycleScope.launch {
-                owner.lifecycle.withStateAtLeast(RESUMED) {
-                    showEmptySearchGroupDialog(event, owner)
-                }
-            }
-        }
-        viewModel.originalChaptersState.observe(owner, ::showOriginalChaptersState)
-        viewModel.tocState.observe(owner, ::showTocState)
-        viewModel.contentLoading.observe(owner) { loading ->
-            contentLoading = loading
-        }
-        viewModel.contentResult.observe(owner) { event ->
-            owner.lifecycleScope.launch {
-                owner.lifecycle.withStateAtLeast(RESUMED) {
-                    when (val result = event.take()) {
-                        is ChapterContentResult.Success -> {
-                            val callback = callBack ?: return@withStateAtLeast
-                            callback.replaceContent(result.content)
-                            dismissAllowingStateLoss()
-                        }
-
-                        is ChapterContentResult.Error -> {
-                            tocVisible = false
-                            viewModel.clearToc()
-                            toastOnUi(result.message)
-                        }
-
-                        null -> Unit
-                    }
-                }
-            }
-        }
-        viewModel.changeSourceResult.observe(owner) { event ->
-            owner.lifecycleScope.launch {
-                owner.lifecycle.withStateAtLeast(RESUMED) {
-                    when (val result = event.take()) {
-                        is SourceChangeResult.Success -> {
-                            val callback = callBack ?: return@withStateAtLeast
-                            val sourceViewModel = viewModel
-                            val completion = SourceChangeCompletion(
-                                result.deleteAfterChange,
-                                sourceViewModel::del,
-                            )
-                            callback.changeTo(
-                                result.source,
-                                result.book,
-                                result.toc,
-                                completion::success,
-                            )
-                            if (result.dismissDialog) dismissAllowingStateLoss()
-                        }
-
-                        is SourceChangeResult.Error -> {
-                            AppLog.put(
-                                "自动换源失败\n${result.throwable.localizedMessage}",
-                                result.throwable,
-                                true,
-                            )
-                        }
-
-                        null -> Unit
-                    }
-                }
-            }
-        }
-        viewModel.batchCaching.observe(owner, ::updateBatchCaching)
-        viewModel.automationState.observe(owner) { state ->
-            showAutomationState(state)
-            if (state is ChapterSourceAutomationState.Ready) {
-                owner.lifecycleScope.launch {
-                    owner.lifecycle.withStateAtLeast(RESUMED) {
-                        if (viewModel.automationState.value == state) {
-                            viewModel.runNextAutomationIfReady()
-                        }
-                    }
-                }
-            }
-        }
-        viewModel.batchCacheResult.observe(owner) { event ->
-            owner.lifecycleScope.launch {
-                owner.lifecycle.withStateAtLeast(RESUMED) {
-                    when (val result = event.take()) {
-                        is ChapterCacheResult.Success -> showCacheSuccess(result)
-                        is ChapterCacheResult.Error -> toastOnUi(result.message)
-                        null -> Unit
-                    }
-                }
-            }
-        }
-        owner.lifecycleScope.launch {
-            owner.lifecycle.currentStateFlow.first { it.isAtLeast(STARTED) }
-            viewModel.searchDataFlow.conflate().collect {
-                searchItems = it
-                delay(1000)
-            }
-        }
-        owner.lifecycleScope.launch {
-            appDb.bookSourceDao.flowEnabledGroups().conflate().collect {
-                groups.clear()
-                groups.addAll(it)
-            }
-        }
-    }
-
-    private fun showEmptySearchGroupDialog(
-        event: PendingEvent<Boolean>,
-        owner: LifecycleOwner,
-    ) {
-        if (event.peek() != true) {
-            event.take()
-            return
-        }
-        val searchGroup = AppConfig.searchGroup
-        if (searchGroup.isEmpty()) {
-            event.take()
-            return
-        }
-        if (searchFinishDialog != null) return
-        searchFinishDialog = context?.alert("搜索结果为空") {
-            setMessage("${searchGroup}分组搜索结果为空,是否切换到全部分组")
-            noButton { event.take() }
-            yesButton {
-                event.take()
-                AppConfig.searchGroup = ""
-                selectedGroupState = ""
-                viewModel.startSearch()
-                owner.lifecycleScope.launch {
-                    syncChangeSourceResultOptions()
-                }
-            }
-            onCancelled { event.take() }
-            onDismiss { dialog ->
-                if (searchFinishDialog === dialog) searchFinishDialog = null
-            }
-        }
     }
 
     private fun showOriginalChaptersState(state: OriginalChaptersState) {
@@ -1034,7 +1023,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
                 updateBatchActions()
                 return
             }
-            if (viewModel.automationState.value is ChapterSourceAutomationState.Finished) {
+            if (viewModel.chapterUiState.value.automationState is ChapterSourceAutomationState.Finished) {
                 toastOnUi(R.string.chapter_source_finished)
                 dismissAllowingStateLoss()
             } else {
@@ -1082,7 +1071,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
         if (!batchMode) return
         val hasOriginalChapter = viewModel.currentOriginalChapter != null
         val busy = tocLoading || batchCaching
-        val automationState = viewModel.automationState.value
+        val automationState = viewModel.chapterUiState.value.automationState
         val automationActive = viewModel.isAutomationActive
         val canSelect = !automationActive || automationState is ChapterSourceAutomationState.Paused
         hasOriginalChapterState = hasOriginalChapter
@@ -1092,7 +1081,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment() {
     }
 
     private fun showAutomationRangeDialog() {
-        val tocState = viewModel.tocState.value as? ChapterTocState.Success
+        val tocState = viewModel.chapterUiState.value.tocState as? ChapterTocState.Success
         if (tocState == null) {
             toastOnUi(R.string.chapter_source_automation_select_target)
             return

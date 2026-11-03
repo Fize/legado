@@ -41,7 +41,6 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
-import io.legado.app.constant.AppConst.charsets
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.cacheLocalUri
@@ -52,11 +51,12 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.model.CacheBook
+import io.legado.app.service.enqueueReaderDownload
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.ui.book.read.config.BgTextConfigDialog
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
+import io.legado.app.ui.book.read.config.CharsetDialog
 import io.legado.app.ui.book.read.config.PaddingConfigDialog
 import io.legado.app.ui.book.read.config.PageKeyDialog
 import io.legado.app.ui.book.read.page.ReadView
@@ -120,7 +120,7 @@ fun Context.showBookDownloadDialog(book: Book) {
             val end = endText.let {
                 if (it.isEmpty()) book.totalChapterNum else it.toInt()
             }
-            CacheBook.start(this@showBookDownloadDialog, book, start - 1, end - 1)
+            this@showBookDownloadDialog.enqueueReaderDownload(book, start - 1, end - 1)
         }
         cancelButton()
     }
@@ -210,6 +210,8 @@ class ActivityBookReadViewHolder(context: Context) {
 abstract class BaseReadBookActivity :
     VMBaseActivity<ReadBookViewModel>(imageBg = false) {
 
+    override val guardsRestoreRecovery = true
+
     protected val binding by lazy { ActivityBookReadViewHolder(this) }
     override val rootView: View
         get() = binding.root
@@ -233,12 +235,16 @@ abstract class BaseReadBookActivity :
                         book.cacheLocalUri(doc.uri)
                     }
                     viewModel.loadChapterList(book)
-                } ?: ReadBook.upMsg("找不到文件")
+                } ?: run {
+                    ReadBook.upMsg(getString(R.string.local_book_not_found))
+                    requestLocalBookAccessRecovery()
+                }
             }
-        } ?: ReadBook.upMsg("没有权限访问")
+        } ?: ReadBook.upMsg(getString(R.string.local_book_access_cancelled))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (isRestoreRecoveryBlocked) { super.onCreate(savedInstanceState); return }
         ReadBook.msg = null
         setOrientation()
         upLayoutInDisplayCutoutMode()
@@ -255,10 +261,22 @@ abstract class BaseReadBookActivity :
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.navigationBar.setBackgroundColor(bottomBackground)
         viewModel.permissionDenialLiveData.observe(this) {
-            selectBookFolderResult.launch {
-                mode = HandleFileContract.DIR_SYS
-                title = "选择书籍所在文件夹"
+            requestLocalBookAccessRecovery()
+        }
+    }
+
+    private fun requestLocalBookAccessRecovery() {
+        alert(
+            titleResource = R.string.local_book_access_required_title,
+            messageResource = R.string.local_book_access_required_message
+        ) {
+            positiveButton(R.string.local_book_access_select_folder) {
+                selectBookFolderResult.launch {
+                    mode = HandleFileContract.DIR_SYS
+                    title = getString(R.string.local_book_access_select_folder)
+                }
             }
+            cancelButton()
         }
     }
 
@@ -529,15 +547,7 @@ abstract class BaseReadBookActivity :
     }
 
     fun showCharsetConfig() {
-        showDialogFragment(
-            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
-                title = getString(R.string.set_charset),
-                initialValue = ReadBook.book?.charset.orEmpty(),
-                hint = "charset",
-                suggestions = charsets,
-                onConfirm = { ReadBook.setCharset(it) },
-            )
-        )
+        showDialogFragment(CharsetDialog.create(ReadBook.book?.charset.orEmpty()))
     }
 
     fun showPageAnimConfig(success: () -> Unit) {

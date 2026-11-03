@@ -1,10 +1,12 @@
 package io.legado.app.help.source
 
+import android.content.Intent
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.ui.association.VerificationCodeActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.VerificationCodeRoute
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.utils.isMainThread
 import io.legado.app.utils.startActivity
@@ -294,13 +296,18 @@ object SourceVerificationHelp {
         val verificationResultKey = registerVerificationAttempt(Thread.currentThread())
         try {
             if (!useBrowser) {
-                appCtx.startActivity<VerificationCodeActivity> {
-                    putExtra("imageUrl", url)
-                    putExtra("sourceOrigin", sourceKey)
-                    putExtra("sourceName", source.getTag())
-                    putExtra("sourceType", source.getSourceType())
-                    putExtra("verificationResultKey", verificationResultKey)
-                }
+                appCtx.startActivity(
+                    AppActivity.startIntent(
+                        appCtx,
+                        VerificationCodeRoute(
+                            imageUrl = url,
+                            sourceOrigin = sourceKey,
+                            sourceName = source.getTag(),
+                            sourceType = source.getSourceType(),
+                            verificationResultKey = verificationResultKey,
+                        ),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
             } else {
                 startBrowser(
                     source,

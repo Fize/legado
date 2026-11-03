@@ -717,11 +717,15 @@ object ChapterProvider {
     /**
      * 更新View尺寸
      */
-    fun upViewSize(width: Int, height: Int) {
+    fun upViewSize(width: Int, height: Int, force: Boolean = false) {
         if (width <= 0 || height <= 0) {
             return
         }
-        if (width != viewWidth || height != viewHeight) {
+        if (force) {
+            upViewSizeRunnable?.let(handler::removeCallbacks)
+            upViewSizeRunnable = null
+            notifyViewSizeChange(width, height)
+        } else if (width != viewWidth || height != viewHeight) {
             if (width == viewWidth) {
                 upViewSizeRunnable = handler.postDelayed(300) {
                     upViewSizeRunnable = null

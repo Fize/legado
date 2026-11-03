@@ -1,6 +1,5 @@
 package io.legado.app.ui.code.config
 
-import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
@@ -43,13 +42,27 @@ import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
 
-class SettingsDialog(private val context: Context, private val callBack: CallBack) :
-    BaseComposeDialogFragment() {
+class SettingsDialog : BaseComposeDialogFragment() {
 
-    private val initialEditNonPrintable = AppConfig.editNonPrintable
+    private val callBack: CallBack get() = requireActivity() as CallBack
+    private var initialEditNonPrintable = AppConfig.editNonPrintable
     private var fontSizeState by mutableIntStateOf(AppConfig.editFontScale)
     private var autoCompleteState by mutableStateOf(AppConfig.editAutoComplete)
     private var nonPrintableFlagsState by mutableIntStateOf(AppConfig.editNonPrintable)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        savedInstanceState?.let {
+            initialEditNonPrintable = it.getInt("initialNonPrintable", initialEditNonPrintable)
+            nonPrintableFlagsState = it.getInt("pendingNonPrintable", nonPrintableFlagsState)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("initialNonPrintable", initialEditNonPrintable)
+        outState.putInt("pendingNonPrintable", nonPrintableFlagsState)
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
 
@@ -177,15 +190,18 @@ class SettingsDialog(private val context: Context, private val callBack: CallBac
     }
 
     override fun onDismiss(dialog: DialogInterface) {
+        val host = activity
         super.onDismiss(dialog)
-        if (nonPrintableFlagsState != initialEditNonPrintable) {
+        // Destroying the old dialog window during recreation is not a user commit.
+        if (host != null && !host.isChangingConfigurations &&
+            nonPrintableFlagsState != initialEditNonPrintable) {
             putPrefInt(PreferKey.editNonPrintable, nonPrintableFlagsState)
-            callBack.upEdit(editNonPrintable = nonPrintableFlagsState)
+            (host as CallBack).upEdit(editNonPrintable = nonPrintableFlagsState)
         }
     }
 
     private fun Int.toFontSizeStr(): String {
-        return context.getString(R.string.font_size, this)
+        return getString(R.string.font_size, this)
     }
 
     interface CallBack {

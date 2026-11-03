@@ -897,6 +897,9 @@ class ReadView(context: Context, attrs: AttributeSet? = null) :
      */
     fun fillPage(direction: PageDirection): Boolean {
         if (replacePreview != null) return false
+        if (direction == PageDirection.NEXT || direction == PageDirection.PREV) {
+            markReadPositionChanged()
+        }
         return when (direction) {
             PageDirection.PREV -> {
                 pageFactory.moveToPrev(true)

@@ -12,6 +12,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface BookHighlightDao {
 
+    @Query("SELECT * FROM highlights WHERE time=:time")
+    fun get(time: Long): BookHighlight?
+    @Query("SELECT MAX(time) FROM highlights")
+    fun latestTime(): Long?
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    fun insertNew(value: BookHighlight)
+
+
     @get:Query(
         """select * from highlights
         order by bookName collate localized, bookAuthor collate localized, chapterIndex, chapterPos, time"""

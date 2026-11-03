@@ -21,6 +21,9 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.ui.navigation.AppRoute
+import io.legado.app.ui.navigation.OpenUrlConfirmRoute
+import kotlinx.serialization.json.Json
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.utils.defaultSharedPreferences
 import kotlinx.coroutines.currentCoroutineContext
@@ -122,7 +125,12 @@ class SourceNavigationUiTest {
                     Log.i("SourceNavigationTest", "webjs completed blocked=$blocked response=$response")
                     assertEquals("stored:Background:ok", response)
                     assertEquals(if (blocked) 0 else 4, starts.size)
-                    starts.forEach { assertEquals(SourceType.book, it.getIntExtra("sourceType", -1)) }
+                    starts.forEach { intent ->
+                        val route = Json.decodeFromString<AppRoute>(checkNotNull(intent.getStringExtra("initialDestination")))
+                        assertTrue(route is OpenUrlConfirmRoute)
+                        assertEquals(SourceType.book, (route as OpenUrlConfirmRoute).sourceType)
+                        assertEquals(source.bookSourceUrl, route.sourceOrigin)
+                    }
                     starts.clear()
                 }
                 source.header = null

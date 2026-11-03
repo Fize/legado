@@ -1,6 +1,8 @@
 package io.legado.app.ui.browser
 
 import android.app.Application
+import kotlinx.coroutines.CancellationException
+import io.legado.app.help.storage.RestoreRecoveryGate
 import android.content.Intent
 import android.util.Base64
 import android.webkit.URLUtil
@@ -86,8 +88,10 @@ class WebViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun saveImage(webPic: String?, path: String) {
+        if (RestoreRecoveryGate.isQuarantined) return
         webPic ?: return
         execute {
+            if (RestoreRecoveryGate.isQuarantined) throw CancellationException("Recovery requires restart")
             val fileName = "${AppConst.fileNameFormat.format(Date(System.currentTimeMillis()))}.jpg"
             webData2bitmap(webPic)?.let { byteArray ->
                 val fileDoc = FileDoc.fromDir(path)
@@ -100,7 +104,7 @@ class WebViewModel(application: Application) : BaseViewModel(application) {
             ACache.get().remove(imagePathKey)
             context.toastOnUi("保存图片失败:${it.localizedMessage}")
         }.onSuccess {
-            context.toastOnUi("保存成功")
+            if (!RestoreRecoveryGate.isQuarantined) context.toastOnUi("保存成功")
         }
     }
 
@@ -115,6 +119,7 @@ class WebViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun saveVerificationResult(webView: WebView, success: () -> Unit) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (!sourceVerificationEnable) {
             return success.invoke()
         }
@@ -130,15 +135,17 @@ class WebViewModel(application: Application) : BaseViewModel(application) {
                         coroutineContext = coroutineContext
                     ).getStrResponseAwait(useWebView = false).body
                 }
-                SourceVerificationHelp.setResult(verificationResultKey, html ?: "", baseUrl)
+                if (!RestoreRecoveryGate.isQuarantined) SourceVerificationHelp.setResult(verificationResultKey, html ?: "", baseUrl)
             }.onSuccess {
-                success.invoke()
+                if (!RestoreRecoveryGate.isQuarantined) success.invoke()
             }
         } else {
             webView.evaluateJavascript("document.documentElement.outerHTML") {
+                if (RestoreRecoveryGate.isQuarantined) return@evaluateJavascript
                 execute {
                     html = StringEscapeUtils.unescapeJson(it).trim('"')
                 }.onSuccess {
+                    if (RestoreRecoveryGate.isQuarantined) return@onSuccess
                     SourceVerificationHelp.setResult(
                         verificationResultKey,
                         html ?: "",

@@ -18,10 +18,11 @@
         <item name="android:windowBackground">@android:color/transparent</item>
     </style>
 
-    <!-- Welcome主题 -->
-    <style name="AppTheme.Welcome" parent="Base.AppTheme">
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowBackground">@color/background</item>
+    <!-- AndroidX SplashScreen entry theme -->
+    <style name="AppTheme.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/icon_read_book</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.Light</item>
     </style>
 
     <!-- Base application theme. -->

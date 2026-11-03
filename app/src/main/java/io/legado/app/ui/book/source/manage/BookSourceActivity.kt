@@ -1,8 +1,15 @@
 package io.legado.app.ui.book.source.manage
 
 import android.annotation.SuppressLint
+import android.app.ActivityManager
+import android.content.ClipData
+import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import java.io.File
+import io.legado.app.data.repository.SourceTargetStateStore
 import android.view.WindowManager
+import androidx.core.view.WindowCompat
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.background
@@ -11,17 +18,22 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -38,7 +50,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -48,10 +59,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -59,6 +73,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,20 +92,25 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.storage.restoreWriteGeneration
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.sourceSharePassphraseButton
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
-import io.legado.app.ui.association.ImportBookSourceDialog
-import io.legado.app.ui.book.search.SearchActivity
+import io.legado.app.ui.navigation.openBookSearch
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.compose.component.LegadoMenuAction
+import io.legado.app.ui.compose.component.LegadoTextInputDialog
 import io.legado.app.ui.compose.component.LegadoSearchBar
 import io.legado.app.ui.compose.component.LegadoSelectActionBar
 import io.legado.app.ui.compose.component.LegadoTopAppBar
-import io.legado.app.ui.config.CheckSourceConfig
+import io.legado.app.ui.config.SourceCheckDialog
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.compose.component.LegadoSearchActionLayout
+import io.legado.app.ui.navigation.BookSourceImportRoute
+import io.legado.app.ui.navigation.SourceLoginRoute
+import io.legado.app.ui.navigation.SourceLoginTarget
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.utils.ACache
 import io.legado.app.utils.NetworkUtils
@@ -119,6 +139,7 @@ import kotlinx.coroutines.launch
 import java.util.Collections
 
 private const val BOOK_SOURCE_GROUP_QUERY_PREFIX = "group:"
+private enum class SourceGroupEditMode { Add, Remove }
 
 internal fun isMissingBookSourceGroupFilter(
     query: CharSequence?,
@@ -134,8 +155,15 @@ internal fun isMissingBookSourceGroupFilter(
  */
 class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
 
+    override val guardsRestoreRecovery = true
+
     override val viewModel by viewModels<BookSourceViewModel>()
     private val importRecordKey = "bookSourceRecordKey"
+    private var showOnlineImportDialogState by mutableStateOf(false)
+    private var groupEditModeState by mutableStateOf<SourceGroupEditMode?>(null)
+    private var groupEditTargetsState: List<String> = emptyList()
+    private val sourceTargetStore by lazy { SourceTargetStateStore(File(noBackupFilesDir, "source-target-state")) }
+    private var sourceTargetLease: SourceTargetStateStore.Lease? = null
     private val finalMessageRegex = Regex("成功|失败")
 
     private var sourceFlowJob: Job? = null
@@ -148,9 +176,9 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
     private var checkSourceUiSessionId: Long? = null
     private var checkSnackBarMsgState by mutableStateOf<String?>(null)
     private var groupSourcesByDomain by mutableStateOf(false)
-    private var showCheckStatus by mutableStateOf(AppConfig.showSourceCheckStatus)
+    private var showCheckStatus by mutableStateOf(false)
     private var checkStatusFilter by mutableIntStateOf(0)
-    private var blockSourceNavigationState by mutableStateOf(AppConfig.blockSourceNavigation)
+    private var blockSourceNavigationState by mutableStateOf(false)
     private val checkStatuses = listOf(
         "",
         BookSourceCheckState.NEEDS_CHECK,
@@ -159,7 +187,8 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
     )
     private val hostMap = hashMapOf<String, String>()
 
-    private var itemsState by mutableStateOf<List<BookSourcePart>>(emptyList())
+    // BookSourcePart equality is URL identity; fresh query rows may change their other fields.
+    private var itemsState by mutableStateOf<List<BookSourcePart>>(emptyList(), referentialEqualityPolicy())
     private var selectedUrlsState by mutableStateOf<Set<String>>(emptySet())
     private var bookshelfCountsState by mutableStateOf<Map<String, Int>>(emptyMap())
     private var searchQueryState by mutableStateOf("")
@@ -170,15 +199,28 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
         get() = itemsState.filter { selectedUrlsState.contains(it.bookSourceUrl) }
 
     private val qrResult = registerForActivityResult(QrCodeResult()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it ?: return@registerForActivityResult
-        showDialogFragment(ImportBookSourceDialog(it))
+        openBookSourceImport(it)
     }
     private val importDoc = registerForActivityResult(HandleFileContract()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it.uri?.let { uri ->
-            showDialogFragment(ImportBookSourceDialog(uri.toString()))
+            openBookSourceImport(uri.toString(), uri)
         }
     }
+    private fun openBookSourceImport(source: String, grantUri: Uri? = null) {
+        val intent = AppActivity.startIntent(this, BookSourceImportRoute(source))
+        grantUri?.let { uri ->
+            intent.data = uri
+            intent.clipData = ClipData.newRawUri("book source", uri)
+            intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(intent)
+    }
+
     private val exportDir = registerForActivityResult(HandleFileContract()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it.uri?.let { uri ->
             val url = uri.toString()
             alert(R.string.export_success) {
@@ -198,6 +240,43 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        showOnlineImportDialogState = savedInstanceState?.getBoolean("onlineImportOpen") ?: false
+        groupEditModeState = SourceGroupEditMode.entries.firstOrNull {
+            it.name == savedInstanceState?.getString("groupEditMode")
+        }
+        try {
+            // Task membership, rather than elapsed time, determines when abandoned snapshots expire.
+            runCatching {
+                val tasks = getSystemService(ActivityManager::class.java).appTasks.map {
+                    sourceTargetTaskId(checkNotNull(it.taskInfo))
+                }.toSet() + taskId
+                sourceTargetStore.pruneRemovedTasks(tasks)
+            }.onFailure { AppLog.put("清理书源选择快照失败", it) }
+            val reference = savedInstanceState?.getString("sourceTargetsSnapshot")
+            val lists = if (reference != null) {
+                sourceTargetLease = sourceTargetStore.claim(reference)
+                sourceTargetStore.read(reference).also { check(it.size == 2) }
+            } else {
+                check(savedInstanceState?.getBoolean("sourceTargetsUnavailable") != true)
+                // Saved tasks from the preceding implementation still contain inline lists.
+                listOf(savedInstanceState?.getStringArrayList("selectedSourceUrls").orEmpty(),
+                    savedInstanceState?.getStringArrayList("groupEditTargets").orEmpty())
+            }
+            selectedUrlsState = lists[0].toSet()
+            groupEditTargetsState = lists[1]
+        } catch (error: Exception) {
+            AppLog.put("恢复书源选择失败", error)
+            selectedUrlsState = emptySet()
+            groupEditTargetsState = emptyList()
+            groupEditModeState = null
+            toastOnUi("无法恢复书源选择，请重新选择后操作")
+        }
+        if (sourceTargetLease == null) {
+            runCatching { sourceTargetStore.create(taskId) }.onSuccess { sourceTargetLease = it }
+                .onFailure { AppLog.put("创建书源选择快照失败", it) }
+        }
+        showCheckStatus = AppConfig.showSourceCheckStatus
+        blockSourceNavigationState = AppConfig.blockSourceNavigation
         val savedSearch = savedInstanceState?.getString("sourceSearch").orEmpty()
         searchQueryState = savedSearch
         isSearchActiveState = savedSearch.isNotEmpty()
@@ -219,9 +298,28 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        if (isRestoreRecoveryBlocked) { super.onSaveInstanceState(outState); return }
         outState.putInt("checkStatusFilter", checkStatusFilter)
         outState.putString("sourceSearch", searchQueryState)
+        outState.putBoolean("onlineImportOpen", showOnlineImportDialogState)
+        outState.putString("groupEditMode", groupEditModeState?.name)
+        try {
+            val lease = sourceTargetLease ?: sourceTargetStore.create(taskId).also { sourceTargetLease = it }
+            outState.putString("sourceTargetsSnapshot", sourceTargetStore.save(lease,
+                listOf(selectedUrlsState.toList(), groupEditTargetsState)))
+        } catch (error: Exception) {
+            AppLog.put("保存书源选择失败", error)
+            outState.putBoolean("sourceTargetsUnavailable", true)
+            outState.remove("groupEditMode")
+            toastOnUi("书源选择未能保存，返回后请重新选择")
+        }
         super.onSaveInstanceState(outState)
+    }
+
+    override fun setupSystemBar() {
+        super.setupSystemBar()
+        // Compose consumes system/IME insets itself, including on Android 8.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
     }
 
     @Composable
@@ -236,15 +334,32 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
         var showSortMenu by remember { mutableStateOf(false) }
         var showGroupMenu by remember { mutableStateOf(false) }
 
-        Scaffold(
+        BoxWithConstraints(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+        // A short window with large text cannot stack both search and selection
+        // above the IME. Move the same input session beside the selection menu.
+        val compactLayout = isSearchActiveState && maxHeight < 280.dp
+        LegadoSearchActionLayout(
+            compact = compactLayout,
+            modifier = Modifier.fillMaxSize().then(if (compactLayout) Modifier.statusBarsPadding() else Modifier),
+            searchBar = {
+                if (isSearchActiveState) LegadoSearchBar(
+                    query = searchQueryState,
+                    onQueryChange = { searchQueryState = it; upBookSource(it) },
+                    placeholder = stringResource(R.string.search_book_source),
+                    compact = compactLayout,
+                )
+            },
             topBar = {
-                Column {
+                if (!compactLayout) Column {
                     LegadoTopAppBar(
                         title = stringResource(R.string.book_source),
                         subtitle = searchQueryState.takeIf { it.isNotBlank() },
                         onBack = { finish() },
                         actions = {
-                            IconButton(onClick = { isSearchActiveState = !isSearchActiveState }) {
+                            IconButton(
+                                onClick = { isSearchActiveState = !isSearchActiveState },
+                                modifier = Modifier.testTag("bookSourceSearch"),
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Search,
                                     contentDescription = stringResource(R.string.search_book_source),
@@ -415,16 +530,6 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                             ),
                         ),
                     )
-                    if (isSearchActiveState) {
-                        LegadoSearchBar(
-                            query = searchQueryState,
-                            onQueryChange = {
-                                searchQueryState = it
-                                upBookSource(it)
-                            },
-                            placeholder = stringResource(R.string.search_book_source),
-                        )
-                    }
                     if (showCheckStatus) {
                         val filterOptions = stringArrayResource(R.array.source_check_status_options)
                         Row(
@@ -445,6 +550,7 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                                         }
                                     },
                                     label = { Text(optionLabel) },
+                                    modifier = Modifier.testTag("bookSourceCheckFilter$index"),
                                 )
                             }
                         }
@@ -487,7 +593,8 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                         }
                     }
                     LegadoSelectActionBar(
-                        selectedCount = selectedUrls.size,
+                        compact = compactLayout,
+                        selectedCount = items.count { it.bookSourceUrl in selectedUrls },
                         totalCount = items.size,
                         mainActionText = stringResource(R.string.delete),
                         onSelectAllChange = { selectAll ->
@@ -581,12 +688,10 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                     )
                 }
             },
-        ) { innerPadding ->
+        ) {
             if (items.isEmpty()) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -597,9 +702,7 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
                     itemsIndexed(
                         items = items,
@@ -661,6 +764,11 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                 }
             }
         }
+        }
+        if (showOnlineImportDialogState) {
+            OnlineImportDialog()
+        }
+        groupEditModeState?.let { GroupEditDialog(it) }
     }
 
     @Composable
@@ -774,7 +882,7 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                 Box {
                     IconButton(
                         onClick = { showRowMenu = true },
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(36.dp).testTag("bookSourceRowMenu:${source.bookSourceUrl}"),
                     ) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
@@ -817,10 +925,15 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                                 text = { Text(stringResource(R.string.login)) },
                                 onClick = {
                                     showRowMenu = false
-                                    startActivity<SourceLoginActivity> {
-                                        putExtra("type", "bookSource")
-                                        putExtra("key", source.bookSourceUrl)
-                                    }
+                                    startActivity(
+                                        AppActivity.startIntent(
+                                            this@BookSourceActivity,
+                                            SourceLoginRoute(
+                                                SourceLoginTarget.BookSource,
+                                                key = source.bookSourceUrl,
+                                            ),
+                                        ),
+                                    )
                                 },
                             )
                         }
@@ -1064,40 +1177,40 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
     }
 
     private fun checkSource() {
-        showDialogFragment(
-            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
-                title = getString(R.string.search_book_key),
-                initialValue = CheckSource.keyword,
-                hint = "search word",
-                neutralText = getString(R.string.check_source_config),
-                onNeutral = { showDialogFragment<CheckSourceConfig>() },
-                onConfirm = { keyword ->
-                keepScreenOn(true)
-                if (keyword.isNotEmpty()) CheckSource.keyword = keyword
-                val selectItems = selection
-                if (selectItems.isEmpty()) {
-                    keepScreenOn(false)
-                    return@ComposeTextInputDialog
-                }
-                val checkSessionId = Debug.tryStartCheckSession()
-                if (checkSessionId == null) {
-                    keepScreenOn(false)
-                    toastOnUi("书源调试通道占用中，请稍后重试")
-                    return@ComposeTextInputDialog
-                }
-                lifecycleScope.launch {
-                    try {
-                        CheckSource.start(this@BookSourceActivity, selectItems, checkSessionId)
-                        checkSourceUiSessionId = checkSessionId
-                        startCheckMessageRefreshJob()
-                    } catch (error: Exception) {
-                        keepScreenOn(false)
-                        toastOnUi(error.localizedMessage ?: "无法启动书源检验")
-                    }
-                }
-                },
-            )
-        )
+        runCatching {
+            showDialogFragment(SourceCheckDialog.create(CheckSource.keyword, selection.map { it.bookSourceUrl }, taskId))
+        }.onFailure {
+            AppLog.put("保存校验目标失败", it)
+            toastOnUi("无法保存校验目标，请稍后重试")
+        }
+    }
+
+    internal fun confirmSourceCheck(keyword: String, sourceUrls: Collection<String>) {
+        keepScreenOn(true)
+        if (keyword.isNotEmpty()) CheckSource.keyword = keyword
+        val targets = sourceUrls.toSet()
+        if (targets.isEmpty()) {
+            keepScreenOn(false)
+            return
+        }
+        val generation = restoreWriteGeneration.capture()
+        val checkSessionId = Debug.tryStartCheckSession()
+        if (checkSessionId == null) {
+            keepScreenOn(false)
+            toastOnUi("书源调试通道占用中，请稍后重试")
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                // Resolve restored targets inside the existing restore write boundary.
+                CheckSource.startSelected(this@BookSourceActivity, targets, checkSessionId, generation)
+                checkSourceUiSessionId = checkSessionId
+                startCheckMessageRefreshJob()
+            } catch (error: Exception) {
+                keepScreenOn(false)
+                toastOnUi(error.localizedMessage ?: "无法启动书源检验")
+            }
+        }
     }
 
     private fun resumeCheckSource() {
@@ -1110,54 +1223,70 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
     }
 
     private fun selectionAddToGroups() {
-        showDialogFragment(
-            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
-                title = getString(R.string.add_group),
-                hint = getString(R.string.group_name),
-                suggestions = groups.toList(),
-                onConfirm = {
-                    if (it.isNotEmpty()) viewModel.selectionAddToGroups(selection, it)
-                }
-            )
-        )
+        groupEditTargetsState = selection.map { it.bookSourceUrl }
+        if (groupEditTargetsState.isEmpty()) return
+        groupEditModeState = SourceGroupEditMode.Add
     }
 
     private fun selectionRemoveFromGroups() {
-        showDialogFragment(
-            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
-                title = getString(R.string.remove_group),
-                hint = getString(R.string.group_name),
-                suggestions = groups.toList(),
-                onConfirm = {
-                    if (it.isNotEmpty()) viewModel.selectionRemoveFromGroups(selection, it)
+        groupEditTargetsState = selection.map { it.bookSourceUrl }
+        if (groupEditTargetsState.isEmpty()) return
+        groupEditModeState = SourceGroupEditMode.Remove
+    }
+
+    @Composable
+    private fun GroupEditDialog(mode: SourceGroupEditMode) {
+        LegadoTextInputDialog(
+            title = stringResource(if (mode == SourceGroupEditMode.Add) R.string.add_group else R.string.remove_group),
+            initialValue = "",
+            hint = stringResource(R.string.group_name),
+            suggestions = groupsState,
+            onDismiss = {
+                groupEditModeState = null
+                groupEditTargetsState = emptyList()
+            },
+            onConfirm = { value ->
+                if (value.isNotEmpty()) {
+                    if (mode == SourceGroupEditMode.Add) {
+                        viewModel.selectionAddToGroups(groupEditTargetsState, value)
+                    } else {
+                        viewModel.selectionRemoveFromGroups(groupEditTargetsState, value)
+                    }
                 }
-            )
+            },
         )
     }
 
     private fun showImportDialog() {
-        val aCache = ACache.get(cacheDir = false)
-        val cacheUrls: MutableList<String> = aCache
-            .getAsString(importRecordKey)
-            ?.splitNotBlank(",")
-            ?.toMutableList() ?: mutableListOf()
-        showDialogFragment(
-            io.legado.app.ui.widget.dialog.ComposeTextInputDialog(
-                title = getString(R.string.import_on_line),
-                hint = "url",
-                suggestions = cacheUrls,
-                onDeleteSuggestion = {
-                    cacheUrls.remove(it)
+        showOnlineImportDialogState = true
+    }
+
+    @Composable
+    private fun OnlineImportDialog() {
+        val aCache = remember { ACache.get(cacheDir = false) }
+        val cacheUrls = remember {
+            (aCache.getAsString(importRecordKey)?.splitNotBlank(",")?.toList()
+                ?: emptyList()).toMutableStateList()
+        }
+        LegadoTextInputDialog(
+            title = stringResource(R.string.import_on_line),
+            initialValue = "",
+            hint = "url",
+            // URLs and pasted source JSON must keep their exact characters.
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
+            suggestions = cacheUrls,
+            onDeleteSuggestion = {
+                cacheUrls.remove(it)
+                aCache.put(importRecordKey, cacheUrls.joinToString(","))
+            },
+            onDismiss = { showOnlineImportDialogState = false },
+            onConfirm = { text ->
+                if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                    cacheUrls.add(0, text)
                     aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                },
-                onConfirm = { text ->
-                    if (text.isAbsUrl() && !cacheUrls.contains(text)) {
-                        cacheUrls.add(0, text)
-                        aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                    }
-                    showDialogFragment(ImportBookSourceDialog(text))
                 }
-            )
+                openBookSourceImport(text)
+            },
         )
     }
 
@@ -1261,13 +1390,23 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
     }
 
     fun searchBook(bookSource: BookSourcePart) {
-        SearchActivity.start(this, bookSource)
+        this.openBookSearch(bookSource)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isFinishing) sourceTargetLease?.let { lease ->
+            runCatching { sourceTargetStore.release(lease) }.onFailure { AppLog.put("清理书源选择快照失败", it) }
+        }
+        if (!wasActivityContentCreated) return
         if (!Debug.isChecking) {
             Debug.debugMessageMap.clear()
         }
     }
+}
+
+/** Inactive pre-Q tasks have id == -1 but remain restorable through their persistent ID. */
+internal fun sourceTargetTaskId(info: ActivityManager.RecentTaskInfo): Int {
+    @Suppress("DEPRECATION")
+    return if (Build.VERSION.SDK_INT >= 29) info.taskId else info.persistentId
 }

@@ -1,5 +1,6 @@
 package io.legado.app.ui.about
 
+import android.app.Activity
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -60,6 +61,13 @@ import io.noties.markwon.image.glide.GlideImagesPlugin
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+/** A posted render belongs to the view and host that scheduled it. */
+internal fun View.postForLiveHost(host: Activity?, render: () -> Unit) {
+    post {
+        if (isAttachedToWindow && host != null && !host.isFinishing && !host.isDestroyed) render()
+    }
+}
 
 class UpdateDialog() : BaseDialogFragment() {
 
@@ -249,12 +257,13 @@ class UpdateDialog() : BaseDialogFragment() {
                 // Markdown content
                 AndroidView(
                     factory = { ctx ->
+                        val host = activity
                         ScrollTextView(ctx).apply {
                             val pad = 12.dpToPx()
                             setPadding(pad, pad, pad, pad)
                             setTextColor(ctx.secondaryTextColor)
                             setTextIsSelectable(true)
-                            post {
+                            postForLiveHost(host) {
                                 Markwon.builder(ctx)
                                     .usePlugin(GlideImagesPlugin.create(ctx))
                                     .usePlugin(HtmlPlugin.create())

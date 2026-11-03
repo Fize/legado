@@ -36,13 +36,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.view.doOnLayout
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.applyMd3PopupStyle
+import io.legado.app.utils.activity
 import io.legado.app.utils.resolveDropDownYOffset
 
 /** Shared Compose action popup used by toolbars and the reader. */
@@ -143,6 +153,12 @@ class PopupAction(private val context: Context) :
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .semantics(mergeDescendants = true) {
+                    if (item.checkable) {
+                        role = Role.Checkbox
+                        toggleableState = if (item.checked) ToggleableState.On else ToggleableState.Off
+                    }
+                }
                 .combinedClickable(
                     enabled = enabled,
                     onClick = { onActionClick?.invoke(item.value) },
@@ -194,23 +210,50 @@ class PopupAction(private val context: Context) :
             super.showAsDropDown(anchor, xoff, yoff, gravity)
             return
         }
-        val visibleFrame = Rect()
-        anchor.getWindowVisibleDisplayFrame(visibleFrame)
-        contentView.measure(
-            View.MeasureSpec.makeMeasureSpec(visibleFrame.width(), View.MeasureSpec.AT_MOST),
-            View.MeasureSpec.makeMeasureSpec(visibleFrame.height(), View.MeasureSpec.AT_MOST),
-        )
-        val location = IntArray(2)
-        anchor.getLocationOnScreen(location)
-        val resolvedYOff = resolveDropDownYOffset(
-            anchorTop = location[1],
-            anchorHeight = anchor.height,
-            popupHeight = contentView.measuredHeight,
-            frameTop = visibleFrame.top,
-            frameBottom = visibleFrame.bottom,
-            gap = yoff,
-        )
-        super.showAsDropDown(anchor, xoff, resolvedYOff, gravity)
+        installOwners(anchor)
+        // Attach before measuring so Compose can obtain the popup window recomposer.
+        super.showAsDropDown(anchor, xoff, yoff, gravity)
+        installOwners(anchor)
+        contentView.doOnLayout { popupContent ->
+            if (!isShowing) return@doOnLayout
+            val visibleFrame = Rect()
+            anchor.getWindowVisibleDisplayFrame(visibleFrame)
+            val location = IntArray(2)
+            anchor.getLocationOnScreen(location)
+            val resolvedYOff = resolveDropDownYOffset(
+                anchorTop = location[1],
+                anchorHeight = anchor.height,
+                popupHeight = popupContent.height,
+                frameTop = visibleFrame.top,
+                frameBottom = visibleFrame.bottom,
+                gap = yoff,
+            )
+            if (resolvedYOff != yoff) {
+                update(anchor, xoff, resolvedYOff, -1, -1)
+            }
+        }
+    }
+
+    override fun showAtLocation(parent: View, gravity: Int, x: Int, y: Int) {
+        installOwners(parent)
+        super.showAtLocation(parent, gravity, x, y)
+        installOwners(parent)
+    }
+
+    private fun installOwners(anchor: View) {
+        val owner = requireNotNull(anchor.activity ?: contentView.activity) {
+            "Action popup requires an Activity owner"
+        }
+        listOf(contentView, contentView.rootView).forEach { root ->
+            root.setViewTreeLifecycleOwner(owner)
+            root.setViewTreeViewModelStoreOwner(owner)
+            root.setViewTreeSavedStateRegistryOwner(owner)
+        }
+    }
+
+    override fun dismiss() {
+        super.dismiss()
+        (contentView as? ComposeView)?.disposeComposition()
     }
 
     data class PopupActionItem(

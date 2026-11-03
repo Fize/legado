@@ -5,6 +5,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.AppPattern.spaceRegex
 import io.legado.app.data.appDb
+import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ReplaceRule
@@ -33,7 +34,9 @@ internal fun sameTitleLineMatcher(
 
 class ContentProcessor private constructor(
     private val bookName: String,
-    private val bookOrigin: String
+    private val bookOrigin: String,
+    private val database: AppDatabase = appDb,
+    private val readerBook: Book? = null,
 ) {
 
     companion object {
@@ -41,6 +44,10 @@ class ContentProcessor private constructor(
         private val isAndroid8 = Build.VERSION.SDK_INT in 26..27
 
         fun get(book: Book) = get(book.name, book.origin)
+
+        /** A reader load owns its processor instead of sharing mutable rule/cache state. */
+        fun create(book: Book, database: AppDatabase): ContentProcessor =
+            ContentProcessor(book.name, book.origin, database, book)
 
         fun get(bookName: String, bookOrigin: String): ContentProcessor {
             val processorWr = processors[bookName + bookOrigin]
@@ -72,16 +79,16 @@ class ContentProcessor private constructor(
     fun upReplaceRules() {
         titleReplaceRules.run {
             clear()
-            addAll(appDb.replaceRuleDao.findEnabledByTitleScope(bookName, bookOrigin))
+            addAll(database.replaceRuleDao.findEnabledByTitleScope(bookName, bookOrigin))
         }
         contentReplaceRules.run {
             clear()
-            addAll(appDb.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin))
+            addAll(database.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin))
         }
     }
 
     private fun upRemoveSameTitle() {
-        val book = appDb.bookDao.getBookByOrigin(bookName, bookOrigin) ?: return
+        val book = readerBook ?: database.bookDao.getBookByOrigin(bookName, bookOrigin) ?: return
         removeSameTitleCache.clear()
         val files = BookHelp.getChapterFiles(book).filter {
             it.endsWith("nr")
@@ -109,6 +116,9 @@ class ContentProcessor private constructor(
         replaceEnabledOverride: Boolean? = null,
         titleReplaceRulesOverride: List<ReplaceRule>? = null,
         contentReplaceRulesOverride: List<ReplaceRule>? = null,
+        paragraphIndent: String = ReadBookConfig.paragraphIndent,
+        adaptSpecialStyle: Boolean = AppConfig.adaptSpecialStyle,
+        chineseConverterType: Int = AppConfig.chineseConverterType,
     ): BookContent {
         var mContent = content
         var sameTitleRemoved = false
@@ -143,6 +153,8 @@ class ContentProcessor private constructor(
                         sameTitleRemoved = true
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 AppLog.put("去除重复标题出错\n${e.localizedMessage}", e)
             }
@@ -153,16 +165,18 @@ class ContentProcessor private constructor(
             if (chineseConvert) {
                 //简繁转换
                 try {
-                    when (AppConfig.chineseConverterType) {
+                    when (chineseConverterType) {
                         1 -> mContent = ChineseUtils.t2s(mContent)
                         2 -> mContent = ChineseUtils.s2t(mContent)
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {
                     appCtx.toastOnUi("简繁转换出错")
                 }
             }
             val useHtmlMap = mutableMapOf<String, String>()
-            if (AppConfig.adaptSpecialStyle) { //html处理
+            if (adaptSpecialStyle) { //html处理
                 mContent = AppPattern.useHtmlRegex.replace(mContent) { matchResult ->
                     val placeholder = "特殊格式的占位不应该被看见${useHtmlMap.size}。"
                     useHtmlMap[placeholder] = "\n${matchResult.value.replace("\n","")}\n"
@@ -196,9 +210,10 @@ class ContentProcessor private constructor(
                         }
                     } catch (e: RegexTimeoutException) {
                         item.isEnabled = false
-                        appDb.replaceRuleDao.enable(item.id, false)
+                        database.replaceRuleDao.enable(item.id, false)
                         mContent = item.name + e.stackTraceStr
-                    } catch (_: CancellationException) {
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
                     } catch (e: Exception) {
                         AppLog.put("替换净化: 规则 ${item.name}替换出错.\n${mContent}", e)
                         appCtx.toastOnUi("替换净化: 规则 ${item.name}替换出错")
@@ -211,10 +226,11 @@ class ContentProcessor private constructor(
         }
         if (includeTitle) {
             //重新添加标题
-            mContent = chapter.getDisplayTitle(
+            mContent = chapter.getDisplayTitleWithConversion(
                 titleRules,
                 useReplace = replaceEnabled,
-                replaceBook = replaceBook
+                replaceBook = replaceBook,
+                chineseConverterType = chineseConverterType
             ) + "\n" + mContent
         }
         if (isAndroid8) {
@@ -229,7 +245,7 @@ class ContentProcessor private constructor(
                 if (contents.isEmpty() && includeTitle) {
                     contents.add(paragraph)
                 } else {
-                    contents.add("${ReadBookConfig.paragraphIndent}$paragraph")
+                    contents.add("$paragraphIndent$paragraph")
                 }
             }
         }

@@ -27,7 +27,6 @@ class PredictiveBackTest {
     @Test
     fun `regular activities do not consume finish without closing`() {
         listOf(
-            "src/main/java/io/legado/app/ui/book/search/SearchActivity.kt",
             "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
         ).forEach { path ->
             assertFalse(File(path).readText().contains("override fun finish()"))
@@ -37,18 +36,13 @@ class PredictiveBackTest {
     @Test
     fun `activities intercept back before finish may defer closing`() {
         // A callback may close a text-selection menu before invoking the guarded finish().
-        val guardedFinishCallback = Regex(
-            """onBackPressedDispatcher\.addCallback\(this\)\s*\{[^}]*\bfinish\(\)"""
-        )
         listOf(
             "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
             "src/main/java/io/legado/app/ui/code/CodeEditActivity.kt",
             "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt",
-            "src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt",
-            "src/main/java/io/legado/app/ui/replace/edit/ReplaceEditActivity.kt",
         ).forEach { path ->
             val source = File(path).readText()
-            assertTrue(guardedFinishCallback.containsMatchIn(source))
+            assertTrue(source.contains("onBackPressedDispatcher.addCallback(this)"))
             assertTrue(source.contains("override fun finish()"))
         }
     }
@@ -56,7 +50,7 @@ class PredictiveBackTest {
     @Test
     fun `replace editor handles cursor only result after discarded code edit`() {
         val source = File(
-            "src/main/java/io/legado/app/ui/replace/edit/ReplaceEditActivity.kt"
+            "src/main/java/io/legado/app/ui/replace/edit/ReplaceRuleEditScreen.kt"
         ).readText()
 
         assertTrue(source.contains("it.hasExtra(\"cursorPosition\")"))

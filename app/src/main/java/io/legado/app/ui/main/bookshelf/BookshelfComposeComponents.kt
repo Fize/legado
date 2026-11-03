@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,11 +40,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -58,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -66,7 +67,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
@@ -75,8 +75,7 @@ import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.BookshelfReadProgressMode
 import io.legado.app.ui.compose.component.LegadoBookCover
-import io.legado.app.ui.main.bookshelf.style2.BookshelfGroupItem
-import io.legado.app.ui.widget.image.GroupCoverView
+import io.legado.app.ui.compose.component.LegadoGroupCover
 import io.legado.app.utils.toTimeAgo
 import kotlin.math.roundToInt
 
@@ -131,24 +130,27 @@ fun BookshelfTopBar(
                 title = {
                     if (bookGroups != null && bookGroups.isNotEmpty() && onTabSelected != null) {
                         val safeSelected = selectedTabIndex.coerceIn(0, bookGroups.lastIndex)
-                        ScrollableTabRow(
-                            selectedTabIndex = safeSelected,
-                            edgePadding = 0.dp,
-                            containerColor = Color.Transparent,
-                            divider = {},
+                        LazyRow(
                             modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            bookGroups.forEachIndexed { index, group ->
+                            itemsIndexed(
+                                items = bookGroups,
+                                key = { _, group -> group.groupId },
+                            ) { index, group ->
                                 val isSelected = index == safeSelected
-                                Tab(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (isSelected) {
-                                            onTabReselected?.invoke(index)
-                                        } else {
-                                            onTabSelected(index)
-                                        }
+                                Surface(
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    } else {
+                                        Color.Transparent
                                     },
+                                    contentColor = if (isSelected) {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    shape = RoundedCornerShape(20.dp),
                                     modifier = Modifier.combinedClickable(
                                         onClick = {
                                             if (isSelected) {
@@ -161,14 +163,14 @@ fun BookshelfTopBar(
                                             onTabLongClick?.invoke(group)
                                         },
                                     ),
-                                    text = {
-                                        Text(
-                                            text = group.groupName,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    },
-                                )
+                                ) {
+                                    Text(
+                                        text = group.groupName,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -395,6 +397,7 @@ fun BookshelfHeaderSection(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("bookshelf_continue_reading")
                     .combinedClickable(
                         onClick = { onContinueClick(continueBook) },
                         onLongClick = { onContinueLongClick(continueBook) },
@@ -832,15 +835,11 @@ fun BookshelfGroupListItem(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AndroidView(
+        LegadoGroupCover(item.group.cover, item.previewBooks,
             modifier = if (compact) {
                 Modifier.size(width = 48.dp, height = 64.dp)
             } else {
                 Modifier.size(width = 66.dp, height = 90.dp)
-            },
-            factory = { ctx -> GroupCoverView(ctx) },
-            update = { view ->
-                view.load(item.group.cover, item.previewBooks)
             },
         )
         Spacer(modifier = Modifier.width(10.dp))
@@ -879,14 +878,10 @@ fun BookshelfGroupGridItem(
                 .fillMaxWidth()
                 .aspectRatio(3f / 4f),
         ) {
-            AndroidView(
+            LegadoGroupCover(item.group.cover, item.previewBooks,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(4.dp),
-                factory = { ctx -> GroupCoverView(ctx) },
-                update = { view ->
-                    view.load(item.group.cover, item.previewBooks)
-                },
             )
 
             if (showBooknameMode == 2 && item.group.groupName.isNotBlank()) {

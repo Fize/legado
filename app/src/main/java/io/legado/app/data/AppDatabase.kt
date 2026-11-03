@@ -11,6 +11,16 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.dao.BookChapterDao
+import io.legado.app.data.dao.BookInfoDeleteDao
+import io.legado.app.data.entities.BookInfoDeleteCommand
+import io.legado.app.data.entities.BookInfoDeletionLease
+import io.legado.app.data.dao.BookInfoRequestDao
+import io.legado.app.data.entities.BookInfoRequest
+import io.legado.app.data.entities.BookInfoChildRequest
+import io.legado.app.data.dao.ReaderSessionDao
+import io.legado.app.data.entities.ReaderSessionState
+import io.legado.app.data.entities.ReaderBookOwner
+import io.legado.app.data.entities.ReaderCatalogRequest
 import io.legado.app.data.dao.BookDao
 import io.legado.app.data.dao.BookGroupDao
 import io.legado.app.data.dao.BookHighlightDao
@@ -27,6 +37,7 @@ import io.legado.app.data.dao.ReadRecordDao
 import io.legado.app.data.dao.ReplaceRuleDao
 import io.legado.app.data.dao.RuleSubDao
 import io.legado.app.data.dao.SearchBookDao
+import io.legado.app.data.dao.SearchSessionDao
 import io.legado.app.data.dao.SearchKeywordDao
 import io.legado.app.data.dao.ServerDao
 import io.legado.app.data.dao.TxtTocRuleDao
@@ -49,6 +60,10 @@ import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.SearchBook
+import io.legado.app.data.entities.SearchScreenDraft
+import io.legado.app.data.entities.SearchSessionSource
+import io.legado.app.data.entities.SearchSession
+import io.legado.app.data.entities.SearchSessionResult
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
 import io.legado.app.data.entities.TxtTocRule
@@ -60,25 +75,119 @@ import java.util.Locale
 val appDb by lazy {
     Room.databaseBuilder(appCtx, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
         .fallbackToDestructiveMigrationFrom(false, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-        .addMigrations(*DatabaseMigrations.migrations)
+        .addLegadoMigrations()
         .allowMainThreadQueries()
         .addCallback(AppDatabase.dbCallback)
         .build()
 }
 
 @Database(
-    version = 113,
-    exportSchema = false,
-    entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
+    version = 132,
+    exportSchema = true,
+    autoMigrations = [
+        AutoMigration(from = 130, to = 131),
+        AutoMigration(from = 131, to = 132),
+        AutoMigration(from = 129, to = 130),
+        AutoMigration(from = 128, to = 129),
+        AutoMigration(from = 127, to = 128),
+        AutoMigration(from = 126, to = 127),
+        AutoMigration(from = 125, to = 126),
+        AutoMigration(from = 124, to = 125),
+        AutoMigration(from = 123, to = 124),
+        AutoMigration(from = 122, to = 123),
+        AutoMigration(from = 121, to = 122),
+        AutoMigration(from = 120, to = 121),
+        AutoMigration(from = 119, to = 120),
+        AutoMigration(from = 118, to = 119),
+        AutoMigration(from = 116, to = 117),
+        AutoMigration(from = 115, to = 116),
+        AutoMigration(from = 43, to = 44),
+        AutoMigration(from = 44, to = 45),
+        AutoMigration(from = 45, to = 46),
+        AutoMigration(from = 46, to = 47),
+        AutoMigration(from = 47, to = 48),
+        AutoMigration(from = 48, to = 49),
+        AutoMigration(from = 49, to = 50),
+        AutoMigration(from = 50, to = 51),
+        AutoMigration(from = 51, to = 52),
+        AutoMigration(from = 52, to = 53),
+        AutoMigration(from = 53, to = 54),
+        AutoMigration(from = 54, to = 55, spec = DatabaseMigrations.Migration_54_55::class),
+        AutoMigration(from = 55, to = 56),
+        AutoMigration(from = 56, to = 57),
+        AutoMigration(from = 57, to = 58),
+        AutoMigration(from = 58, to = 59),
+        AutoMigration(from = 59, to = 60),
+        AutoMigration(from = 60, to = 61),
+        AutoMigration(from = 61, to = 62),
+        AutoMigration(from = 62, to = 63),
+        AutoMigration(from = 63, to = 64),
+        AutoMigration(from = 64, to = 65, spec = DatabaseMigrations.Migration_64_65::class),
+        AutoMigration(from = 65, to = 66),
+        AutoMigration(from = 66, to = 67),
+        AutoMigration(from = 67, to = 68),
+        AutoMigration(from = 68, to = 69),
+        AutoMigration(from = 69, to = 70),
+        AutoMigration(from = 70, to = 71),
+        AutoMigration(from = 71, to = 72),
+        AutoMigration(from = 72, to = 73),
+        AutoMigration(from = 73, to = 74),
+        AutoMigration(from = 74, to = 75),
+        AutoMigration(from = 75, to = 76),
+        AutoMigration(from = 76, to = 77),
+        AutoMigration(from = 77, to = 78),
+        AutoMigration(from = 78, to = 79),
+        AutoMigration(from = 79, to = 80),
+        AutoMigration(from = 80, to = 81, spec = DatabaseMigrations.Migration_80_81::class),
+        AutoMigration(from = 81, to = 82),
+        AutoMigration(from = 82, to = 83),
+        AutoMigration(from = 83, to = 84, spec = DatabaseMigrations.Migration_83_84::class),
+        AutoMigration(from = 84, to = 85, spec = DatabaseMigrations.Migration_84_85::class),
+        AutoMigration(from = 85, to = 86),
+        AutoMigration(from = 86, to = 87),
+        AutoMigration(from = 87, to = 88),
+        AutoMigration(from = 88, to = 89),
+        AutoMigration(from = 89, to = 90),
+        AutoMigration(from = 90, to = 91),
+        AutoMigration(from = 91, to = 92),
+        AutoMigration(from = 92, to = 93),
+        AutoMigration(from = 93, to = 94),
+        AutoMigration(from = 94, to = 95),
+        AutoMigration(from = 95, to = 96),
+        AutoMigration(from = 96, to = 97, spec = DatabaseMigrations.Migration_96_97::class),
+        AutoMigration(from = 97, to = 98),
+        AutoMigration(from = 98, to = 99, spec = DatabaseMigrations.Migration_98_99::class),
+        AutoMigration(from = 99, to = 100),
+        AutoMigration(from = 101, to = 102, spec = DatabaseMigrations.Migration_101_102::class),
+        AutoMigration(from = 102, to = 103),
+        AutoMigration(from = 103, to = 104),
+        AutoMigration(from = 110, to = 111, spec = DatabaseMigrations.Migration_110_111::class),
+    ],
+    entities = [io.legado.app.data.entities.BookTransferBatch::class, io.legado.app.data.entities.BookTransferTask::class, io.legado.app.data.entities.BookTransferLease::class, io.legado.app.data.entities.CacheManagerRecord::class, io.legado.app.data.entities.HighlightRuleImportSession::class, io.legado.app.data.entities.HighlightRuleImportRow::class, io.legado.app.data.entities.HighlightRuleManagerRecord::class, io.legado.app.data.entities.HighlightRuleDraft::class, io.legado.app.data.entities.ReaderAnnotationDraft::class, io.legado.app.data.entities.BookContentSearchSession::class, io.legado.app.data.entities.BookContentSearchHit::class,io.legado.app.data.entities.ReaderDetailRequest::class, io.legado.app.data.entities.ReaderDetailBookLease::class,
+        io.legado.app.data.entities.BookInfoUploadCommand::class, io.legado.app.data.entities.BookInfoUploadLease::class,
+        BookInfoDeleteCommand::class, BookInfoDeletionLease::class, Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
         Bookmark::class, TxtTocRule::class, ReadRecord::class, HttpTTS::class, Cache::class,
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
         BookHighlight::class, HighlightRule::class, BookSourceCheckState::class,
-        BookMemo::class],
+        BookMemo::class, BookInfoRequest::class, BookInfoChildRequest::class, ReaderSessionState::class, ReaderBookOwner::class, ReaderCatalogRequest::class, SearchSession::class, SearchSessionResult::class, SearchScreenDraft::class, SearchSessionSource::class],
     views = [BookSourcePart::class],
 )
 abstract class AppDatabase : RoomDatabase() {
 
+    abstract val bookTransferDao: io.legado.app.data.dao.BookTransferDao
+    abstract val highlightRuleImportDao: io.legado.app.data.dao.HighlightRuleImportDao
+    abstract val highlightRuleManagerDao: io.legado.app.data.dao.HighlightRuleManagerDao
+    abstract val highlightRuleDraftDao: io.legado.app.data.dao.HighlightRuleDraftDao
+    abstract val readerAnnotationDao: io.legado.app.data.dao.ReaderAnnotationDao
+
+    abstract val bookContentSearchDao: io.legado.app.data.dao.BookContentSearchDao
+
+    abstract val bookInfoDeleteDao: BookInfoDeleteDao
+    abstract val bookInfoUploadDao: io.legado.app.data.dao.BookInfoUploadDao
+    abstract val readerDetailDao: io.legado.app.data.dao.ReaderDetailDao
+    abstract val bookInfoRequestDao: BookInfoRequestDao
+    abstract val readerSessionDao: ReaderSessionDao
     abstract val bookDao: BookDao
     abstract val bookGroupDao: BookGroupDao
     abstract val bookHighlightDao: BookHighlightDao
@@ -88,6 +197,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val bookChapterDao: BookChapterDao
     abstract val replaceRuleDao: ReplaceRuleDao
     abstract val searchBookDao: SearchBookDao
+    abstract val searchSessionDao: SearchSessionDao
     abstract val searchKeywordDao: SearchKeywordDao
     abstract val bookmarkDao: BookmarkDao
     abstract val cookieDao: CookieDao
@@ -130,50 +240,50 @@ abstract class AppDatabase : RoomDatabase() {
             override fun onOpen(db: SupportSQLiteDatabase) {
                 @Language("sql")
                 val insertBookGroupAllSql = """
-                    insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdAll}, '全部', -10, 1
+                    insert into book_groups(groupId, groupName, 'order', show, generation)
+                    select ${BookGroup.IdAll}, '全部', -10, 1, lower(hex(randomblob(16)))
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdAll})
                 """.trimIndent()
                 db.execSQL(insertBookGroupAllSql)
                 @Language("sql")
                 val insertBookGroupLocalSql = """
-                    insert into book_groups(groupId, groupName, 'order', enableRefresh, show) 
-                    select ${BookGroup.IdLocal}, '本地', -9, 0, 1
+                    insert into book_groups(groupId, groupName, 'order', enableRefresh, show, generation)
+                    select ${BookGroup.IdLocal}, '本地', -9, 0, 1, lower(hex(randomblob(16)))
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdLocal})
                 """.trimIndent()
                 db.execSQL(insertBookGroupLocalSql)
                 @Language("sql")
                 val insertBookGroupMusicSql = """
-                    insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdAudio}, '音频', -8, 1
+                    insert into book_groups(groupId, groupName, 'order', show, generation)
+                    select ${BookGroup.IdAudio}, '音频', -8, 1, lower(hex(randomblob(16)))
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdAudio})
                 """.trimIndent()
                 db.execSQL(insertBookGroupMusicSql)
                 @Language("sql")
                 val insertBookGroupNetNoneGroupSql = """
-                    insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdNetNone}, '网络未分组', -7, 1
+                    insert into book_groups(groupId, groupName, 'order', show, generation)
+                    select ${BookGroup.IdNetNone}, '网络未分组', -7, 1, lower(hex(randomblob(16)))
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdNetNone})
                 """.trimIndent()
                 db.execSQL(insertBookGroupNetNoneGroupSql)
                 @Language("sql")
                 val insertBookGroupLocalNoneGroupSql = """
-                    insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdLocalNone}, '本地未分组', -6, 0
+                    insert into book_groups(groupId, groupName, 'order', show, generation)
+                    select ${BookGroup.IdLocalNone}, '本地未分组', -6, 0, lower(hex(randomblob(16)))
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdLocalNone})
                 """.trimIndent()
                 db.execSQL(insertBookGroupLocalNoneGroupSql)
                 @Language("sql")
                 val insertBookGroupVideoSql = """
-                    insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdVideo}, '视频', -5, 1
+                    insert into book_groups(groupId, groupName, 'order', show, generation)
+                    select ${BookGroup.IdVideo}, '视频', -5, 1, lower(hex(randomblob(16)))
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdVideo})
                     """.trimIndent()
                 db.execSQL(insertBookGroupVideoSql)
                 @Language("sql")
                 val insertBookGroupErrorSql = """
-                    insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdError}, '更新失败', -1, 1
+                    insert into book_groups(groupId, groupName, 'order', show, generation)
+                    select ${BookGroup.IdError}, '更新失败', -1, 1, lower(hex(randomblob(16)))
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdError})
                 """.trimIndent()
                 db.execSQL(insertBookGroupErrorSql)

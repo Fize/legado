@@ -23,7 +23,7 @@ import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.book.searchContent.SearchResult
+import io.legado.app.model.ContentSearchResult as SearchResult
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
@@ -60,7 +60,7 @@ class SearchMenu @JvmOverloads constructor(
         val fabLeft = FloatingActionButton(context).apply {
             id = R.id.fabLeft
             size = FloatingActionButton.SIZE_MINI
-            contentDescription = "上个结果"
+            contentDescription = context.getString(R.string.previous_search_result)
             rotation = 180f
             setImageResource(R.drawable.ic_arrow_right)
             compatElevation = 2f.dpToPx()
@@ -78,7 +78,7 @@ class SearchMenu @JvmOverloads constructor(
         val fabRight = FloatingActionButton(context).apply {
             id = R.id.fabRight
             size = FloatingActionButton.SIZE_MINI
-            contentDescription = "下个结果"
+            contentDescription = context.getString(R.string.next_search_result)
             setImageResource(R.drawable.ic_arrow_right)
             compatElevation = 2f.dpToPx()
             layoutParams = ConstraintLayout.LayoutParams(
@@ -95,21 +95,21 @@ class SearchMenu @JvmOverloads constructor(
         val ivSearchContentUp = AppCompatImageView(context).apply {
             id = R.id.iv_search_content_up
             layoutParams = LinearLayout.LayoutParams(
-                36.dpToPx(),
+                48.dpToPx(),
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundResource(borderlessBgResId)
-            contentDescription = context.getString(R.string.go_to_top)
+            contentDescription = context.getString(R.string.previous_search_result)
             setImageResource(R.drawable.ic_arrow_drop_up)
         }
         val ivSearchContentDown = AppCompatImageView(context).apply {
             id = R.id.iv_search_content_down
             layoutParams = LinearLayout.LayoutParams(
-                36.dpToPx(),
+                48.dpToPx(),
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundResource(borderlessBgResId)
-            contentDescription = context.getString(R.string.go_to_bottom)
+            contentDescription = context.getString(R.string.next_search_result)
             setImageResource(R.drawable.ic_arrow_drop_down)
         }
         val tvCurrentSearchInfo = TextView(context).apply {
@@ -130,7 +130,7 @@ class SearchMenu @JvmOverloads constructor(
             id = R.id.ll_search_base_info
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                36.dpToPx()
+                48.dpToPx()
             )
             gravity = Gravity.CENTER_VERTICAL
             orientation = LinearLayout.HORIZONTAL
@@ -147,7 +147,7 @@ class SearchMenu @JvmOverloads constructor(
                 1f
             )
             adjustViewBounds = true
-            contentDescription = "结果"
+            contentDescription = context.getString(R.string.search_menu_results)
             maxHeight = 20.dpToPx()
             setImageResource(R.drawable.ic_toc)
         }
@@ -160,20 +160,22 @@ class SearchMenu @JvmOverloads constructor(
                 gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = 3.dpToPx()
             }
-            maxLines = 1
-            text = "结果"
+            maxLines = 2
+            gravity = Gravity.CENTER
+            text = context.getString(R.string.search_menu_results)
             textSize = 12f
         }
         val llSearchResults = LinearLayout(context).apply {
             id = R.id.ll_search_results
             layoutParams = LinearLayout.LayoutParams(
-                60.dpToPx(),
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
             )
             setBackgroundResource(borderlessBgResId)
             isClickable = true
             isFocusable = true
-            contentDescription = "结果"
+            contentDescription = context.getString(R.string.search_menu_results)
             orientation = LinearLayout.VERTICAL
             setPadding(0, 0, 0, 7.dpToPx())
             addView(ivSearchResults)
@@ -200,15 +202,17 @@ class SearchMenu @JvmOverloads constructor(
                 gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = 3.dpToPx()
             }
-            maxLines = 1
+            maxLines = 2
+            gravity = Gravity.CENTER
             text = context.getString(R.string.main_menu)
             textSize = 12f
         }
         val llMainMenu = LinearLayout(context).apply {
             id = R.id.ll_main_menu
             layoutParams = LinearLayout.LayoutParams(
-                60.dpToPx(),
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
             )
             setBackgroundResource(borderlessBgResId)
             isClickable = true
@@ -227,7 +231,7 @@ class SearchMenu @JvmOverloads constructor(
                 1f
             )
             adjustViewBounds = true
-            contentDescription = "退出"
+            contentDescription = context.getString(R.string.exit)
             maxHeight = 20.dpToPx()
             setImageResource(R.drawable.ic_auto_page_stop)
         }
@@ -240,20 +244,22 @@ class SearchMenu @JvmOverloads constructor(
                 gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = 3.dpToPx()
             }
-            maxLines = 1
-            text = "退出"
+            maxLines = 2
+            gravity = Gravity.CENTER
+            text = context.getString(R.string.exit)
             textSize = 12f
         }
         val llSearchExit = LinearLayout(context).apply {
             id = R.id.ll_search_exit
             layoutParams = LinearLayout.LayoutParams(
-                60.dpToPx(),
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
             )
             setBackgroundResource(borderlessBgResId)
             isClickable = true
             isFocusable = true
-            contentDescription = "退出"
+            contentDescription = context.getString(R.string.exit)
             orientation = LinearLayout.VERTICAL
             setPadding(0, 0, 0, 7.dpToPx())
             addView(ivSearchExit)
@@ -267,23 +273,9 @@ class SearchMenu @JvmOverloads constructor(
             )
             isBaselineAligned = false
             orientation = LinearLayout.HORIZONTAL
-            addView(View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            })
             addView(llSearchResults)
-            addView(View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
-            })
             addView(llMainMenu)
-            addView(View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f)
-            })
             addView(llSearchExit)
-            addView(View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            })
         }
         val llBottomMenu = LinearLayout(context).apply {
             id = R.id.ll_bottom_menu
@@ -341,13 +333,29 @@ class SearchMenu @JvmOverloads constructor(
         initAnimation()
         initView()
         bindEvent()
+        updateNavigationAvailability()
         updateSearchInfo()
     }
 
     fun upSearchResultList(resultList: List<SearchResult>) {
         searchResultList.clear()
         searchResultList.addAll(resultList)
+        updateNavigationAvailability()
         updateSearchInfo()
+    }
+
+    private fun updateNavigationAvailability() = binding.run {
+        listOf(fabLeft, fabRight, ivSearchContentUp, ivSearchContentDown).forEach {
+            it.isEnabled = hasSearchResult
+        }
+    }
+
+    private fun navigateResult(index: Int) {
+        if (!hasSearchResult) return
+        updateSearchResultIndex(index)
+        searchResultList.getOrNull(currentSearchResultIndex)?.let {
+            callBack.navigateToSearch(it, currentSearchResultIndex)
+        }
     }
 
     private fun initView() = binding.run {
@@ -388,11 +396,11 @@ class SearchMenu @JvmOverloads constructor(
         }
     }
 
-    @SuppressLint("SetTextI18n")
     fun updateSearchInfo() {
         ReadBook.curTextChapter?.let {
-            binding.tvCurrentSearchInfo.text =
-                """${context.getString(R.string.search_content_size)}: ${searchResultList.size} / 当前章节: ${it.title}"""
+            binding.tvCurrentSearchInfo.text = context.getString(
+                R.string.search_menu_chapter_summary, searchResultList.size, it.title,
+            )
         }
     }
 
@@ -430,35 +438,19 @@ class SearchMenu @JvmOverloads constructor(
         }
 
         fabLeft.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex - 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
+            navigateResult(currentSearchResultIndex - 1)
         }
 
         ivSearchContentUp.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex - 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
+            navigateResult(currentSearchResultIndex - 1)
         }
 
         ivSearchContentDown.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex + 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
+            navigateResult(currentSearchResultIndex + 1)
         }
 
         fabRight.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex + 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
+            navigateResult(currentSearchResultIndex + 1)
         }
     }
 

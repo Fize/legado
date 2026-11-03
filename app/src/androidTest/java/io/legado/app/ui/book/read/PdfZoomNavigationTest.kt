@@ -198,11 +198,10 @@ class PdfZoomNavigationTest {
     }
 
     @Test
-    fun reportersTextbookRendersSharpSingleAndDoublePageRegions() {
+    fun generatedTextbookRendersSharpSingleAndDoublePageRegions() {
         PdfFile.clear(book.bookUrl)
-        instrumentation.context.assets.open("pdf_zoom_textbook.pdf").use { input ->
-            file.outputStream().use { output -> input.copyTo(output) }
-        }
+        // The vector/text fixture is generated in setup; the reporter's private PDF
+        // is not in the repository and cannot be a prerequisite for this regression.
         val chapters = PdfFile.getChapterList(book)
         book.totalChapterNum = chapters.size
         appDb.bookDao.update(book)
@@ -241,7 +240,11 @@ class PdfZoomNavigationTest {
         scenario!!.onActivity { repeat(2) { _ -> pinch(it.reader, true) } }
         await { it.reader.content.pdfRenderCount > 0 }
         val initial = ReadBook.durChapterPos
-        scenario!!.onActivity { drag(it.reader, -100f, -150f) }
+        scenario!!.onActivity {
+            // Keep the pan relative to the viewport so the image enters the visible region on
+            // both phone-width and tablet-width readers.
+            drag(it.reader, -it.reader.width * .75f, -150f)
+        }
         assertEquals(initial, ReadBook.durChapterPos)
         await { it.reader.content.pdfRenderCount >= 2 }
         screenshot("pdf-zoom-scroll-detail")
@@ -273,7 +276,7 @@ class PdfZoomNavigationTest {
             activity.requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                 else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismissAllowingStateLoss() }
         }
         await { ReadBook.book?.bookUrl == book.bookUrl && images(it).isNotEmpty() &&
             ReadBook.curTextChapter?.isCompleted == true && it.bottomDialog == 0 &&
@@ -293,6 +296,7 @@ class PdfZoomNavigationTest {
         return result
     }
     private fun await(condition: (ReadBookActivity) -> Boolean) {
+        val requestedAt = Throwable().stackTrace.firstOrNull { it.className == javaClass.name && it.methodName != "await" }
         val deadline = SystemClock.elapsedRealtime() + 30_000
         do {
             var ready = false
@@ -302,9 +306,19 @@ class PdfZoomNavigationTest {
         } while (SystemClock.elapsedRealtime() < deadline)
         scenario!!.onActivity {
             saveBitmap(captureContent(it.reader), "pdf-zoom-failure-content")
+            println(io.legado.app.constant.AppLog.exportText(io.legado.app.constant.AppLog.logs).takeLast(8000))
             assertTrue("PDF reader state: images=${images(it)}, scale=${it.reader.pdfZoom.scale}, " +
                 "rendered=${it.reader.content.pdfRenderedPages}, chapter=${ReadBook.durChapterIndex}, " +
-                "position=${ReadBook.durChapterPos}, size=${it.reader.width}x${it.reader.height}", condition(it))
+                "position=${ReadBook.durChapterPos}, size=${it.reader.width}x${it.reader.height}, " +
+                "content=${it.reader.content.width}x${it.reader.content.height}, main=${it.reader.content.isMainView}, " +
+                "attached=${it.reader.content.isAttachedToWindow}, visible=${it.reader.content.visibility}, " +
+                "gesturing=${it.reader.pdfZoom.isInteracting}, count=${it.reader.content.pdfRenderCount}, " +
+                "offset=${it.reader.pdfZoom.offsetX},${it.reader.pdfZoom.offsetY}, caller=$requestedAt, " +
+                "images=" + it.reader.curPage.textPage.lines.joinToString { line ->
+                    line.columns.filterIsInstance<ImageColumn>().joinToString { image ->
+                        "${image.src}:${image.start},${image.end},${line.lineTop},${line.lineBottom}"
+                    }
+                }, condition(it))
         }
     }
     private fun screenshot(name: String) {

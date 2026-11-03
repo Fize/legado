@@ -53,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -80,7 +81,7 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.about.openAppLogs
 import io.legado.app.ui.code.config.ChangeThemeDialog
 import io.legado.app.ui.code.config.SettingsDialog
 import io.legado.app.ui.compose.component.LegadoTopAppBar
@@ -112,6 +113,8 @@ class CodeEditActivity :
         private const val SAFE_EDITOR_READ_TIMEOUT_MILLIS = 5_000L
     }
 
+    override val guardsRestoreRecovery = true
+
     override val viewModel by viewModels<CodeEditViewModel>()
     private val softKeyboardTool by lazy {
         KeyboardToolPop(this, lifecycleScope, window.decorView, this)
@@ -119,6 +122,7 @@ class CodeEditActivity :
     private val editor: CodeEditor by lazy {
         CodeEditor(this).apply {
             setTextSize(18f)
+            contentDescription = "codeEditorNative"
         }
     }
     private val editorContainer: FrameLayout by lazy {
@@ -145,7 +149,7 @@ class CodeEditActivity :
     private var textActions: CodeTextActions? = null
 
     private var titleState by mutableStateOf("")
-    private var autoWrapState by mutableStateOf(AppConfig.editAutoWrap)
+    private var autoWrapState by mutableStateOf(true)
     private var showSearchGroup by mutableStateOf(false)
     private var showReplaceGroup by mutableStateOf(false)
     private var findTextState by mutableStateOf(findText)
@@ -168,6 +172,7 @@ class CodeEditActivity :
     private var themeIndex = -1
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        autoWrapState = AppConfig.editAutoWrap
         titleState = getString(R.string.edit_code)
         // SavedStateHandle is available only after BaseActivity has called super.onCreate.
         if (!isInitialized) {
@@ -181,7 +186,7 @@ class CodeEditActivity :
         softKeyboardTool.attachToWindow(window)
         editor.colorScheme = TextMateColorScheme2.create(ThemeRegistry.getInstance()) //先设置颜色,避免一开始的白屏
         viewModel.initData(intent) {
-            if (isDestroyed) return@initData
+            if (isDestroyed || isRestoreRecoveryBlocked) return@initData
             viewModel.title?.let {
                 titleState = it
             }
@@ -204,6 +209,14 @@ class CodeEditActivity :
             windowInsets
         }
     }
+
+    internal fun codeEditorForTest(): CodeEditor = editor
+
+    internal fun editorContainerForTest(): ViewGroup = editorContainer
+
+    internal fun saveForTest() = save(false)
+
+    internal fun showNativeTextActionsForTest() = textActions?.showForTest()
 
     @Composable
     override fun Content() {
@@ -238,7 +251,8 @@ class CodeEditActivity :
                         if (viewModel.writable) {
                             IconButton(
                                 onClick = { save(false) },
-                                enabled = canReturnText
+                                enabled = canReturnText,
+                                modifier = Modifier.testTag("codeEditorSave"),
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_save),
@@ -313,7 +327,7 @@ class CodeEditActivity :
                                         text = { Text(stringResource(R.string.config_settings)) },
                                         onClick = {
                                             showMenu = false
-                                            showDialogFragment(SettingsDialog(this@CodeEditActivity, this@CodeEditActivity))
+                                            showDialogFragment(SettingsDialog())
                                         }
                                     )
                                     DropdownMenuItem(
@@ -337,7 +351,7 @@ class CodeEditActivity :
                                     text = { Text(stringResource(R.string.log)) },
                                     onClick = {
                                         showMenu = false
-                                        showDialogFragment<AppLogDialog>()
+                                        this@CodeEditActivity.openAppLogs()
                                     }
                                 )
                             }
@@ -354,6 +368,7 @@ class CodeEditActivity :
                 AndroidView(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .testTag("codeEditorContainer")
                         .weight(1f),
                     factory = {
                         (editorContainer.parent as? ViewGroup)?.removeView(editorContainer)
@@ -363,7 +378,9 @@ class CodeEditActivity :
 
                 if (showSearchGroup && !useSafeEditor) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("codeEditorSearchTools"),
                         color = MaterialTheme.colorScheme.surfaceContainer,
                         tonalElevation = 2.dp
                     ) {
@@ -930,6 +947,7 @@ class CodeEditActivity :
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        if (isRestoreRecoveryBlocked) { super.onSaveInstanceState(outState); return }
         if (editorReady) {
             if (!useSafeEditor) {
                 val text = editor.text.toString()
@@ -942,6 +960,7 @@ class CodeEditActivity :
     }
 
     override fun onDestroy() {
+        if (!wasActivityContentCreated) { super.onDestroy(); return }
         receiptSearch?.unsubscribe()
         receiptChange?.unsubscribe()
         textActions?.dismiss()
@@ -968,6 +987,7 @@ class CodeEditActivity :
      * 使用super.finish(),防止循环回调
      * */
     private fun save(check: Boolean) {
+        if (isRestoreRecoveryBlocked) return super.finish()
         if (!viewModel.writable) return super.finish()
         if (useSafeEditor) {
             if (safeEditorReadPending) {
@@ -1007,6 +1027,7 @@ class CodeEditActivity :
     }
 
     private fun saveText(check: Boolean, text: String, cursorPos: Int) {
+        if (isRestoreRecoveryBlocked) return super.finish()
         when {
             text == viewModel.initialText -> {
                 val returnText = !check &&
@@ -1057,6 +1078,7 @@ class CodeEditActivity :
     }
 
     private fun returnText(action: String) {
+        if (isRestoreRecoveryBlocked) return super.finish()
         if (!viewModel.writable) return
         if (useSafeEditor) {
             if (safeEditorReadPending) return
@@ -1074,6 +1096,7 @@ class CodeEditActivity :
     }
 
     private fun returnText(action: String, text: String, cursorPosition: Int) {
+        if (isRestoreRecoveryBlocked) return super.finish()
         val result = Intent().apply {
             putEditorText(this, text)
             putExtra("cursorPosition", cursorPosition)
@@ -1195,6 +1218,11 @@ class CodeEditActivity :
     }
 
     override fun finish() {
+        if (isRestoreRecoveryBlocked) return super.finish()
+        if (isFinishing || isDestroyed) {
+            super.finish()
+            return
+        }
         save(true)
     }
 

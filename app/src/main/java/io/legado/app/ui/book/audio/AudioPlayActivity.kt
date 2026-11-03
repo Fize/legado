@@ -86,7 +86,7 @@ import io.legado.app.constant.Theme
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.replaceBookAfterSourceChange
+import io.legado.app.data.repository.PlatformReaderReturnRepository
 import io.legado.app.help.audio.AudioCacheManager
 import io.legado.app.help.audio.AudioCachePolicy
 import io.legado.app.help.book.isAudio
@@ -103,14 +103,16 @@ import io.legado.app.model.BookCover
 import io.legado.app.model.SourceCallBack
 import io.legado.app.service.AudioCacheService
 import io.legado.app.service.AudioPlayService
-import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.about.openAppLogs
 import io.legado.app.ui.book.audio.SliderPopup.Companion.SPEED
 import io.legado.app.ui.book.audio.config.AudioSkipCredits
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.SourceLoginRoute
+import io.legado.app.ui.navigation.SourceLoginTarget
 import io.legado.app.ui.widget.dialog.SleepTimerDialog
 import io.legado.app.ui.widget.image.CircleImageView
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
@@ -143,6 +145,8 @@ class AudioPlayActivity :
     ChangeBookSourceDialog.CallBack,
     AudioPlay.CallBack,
     SleepTimerDialog.CallBack {
+
+    override val guardsRestoreRecovery = true
 
     private val viewModel by viewModels<AudioPlayViewModel>()
     private val speedControlPopup by lazy { SliderPopup(this, SPEED) }
@@ -285,9 +289,13 @@ class AudioPlayActivity :
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (redirectIfRestoreRecoveryRequired()) return
+        AudioPlay.saveRead()
         setIntent(intent)
         val requestedBookUrl = intent.getStringExtra("bookUrl")
-        if (shouldReuseCurrentAudioPlay(requestedBookUrl, AudioPlay.book?.bookUrl)) return
+        if (intent.getStringExtra(PlatformReaderReturnRepository.REQUEST_ID) == null &&
+            viewModel.platformRequestId == null &&
+            shouldReuseCurrentAudioPlay(requestedBookUrl, AudioPlay.book?.bookUrl)) return
         viewModel.initData(
             intent = intent,
             success = ::initListener,
@@ -464,7 +472,7 @@ class AudioPlayActivity :
                 withContext(IO) {
                     AudioPlay.book?.migrateTo(book, toc)
                     book.removeType(BookType.updateError)
-                    replaceBookAfterSourceChange(AudioPlay.book, book, toc)
+                    viewModel.replaceForOtherReader(book, toc)
                 }
                 onSuccess()
                 startActivityForBook(book)
@@ -474,6 +482,7 @@ class AudioPlayActivity :
     }
 
     override fun finish() {
+        if (isRestoreRecoveryBlocked) return super.finish()
         val book = AudioPlay.book ?: return super.finish()
         if (AudioPlay.inBookshelf) {
             callBackBookEnd()
@@ -505,6 +514,11 @@ class AudioPlayActivity :
     }
 
     override fun onDestroy() {
+        if (!wasActivityContentCreated) { super.onDestroy(); return }
+        if (isFinishing && !isRestoreRecoveryBlocked) {
+            AudioPlay.saveRead()
+            viewModel.finishPlatformReturn()
+        }
         super.onDestroy()
         if (AudioPlay.status != Status.PLAY) {
             AudioPlay.stop()
@@ -690,9 +704,15 @@ class AudioPlayActivity :
                                         onClick = {
                                             overflowExpanded = false
                                             AudioPlay.bookSource?.let {
-                                                startActivity<SourceLoginActivity> {
-                                                    putExtra("bookType", BookType.audio)
-                                                }
+                                                startActivity(
+                                                    AppActivity.startIntent(
+                                                        this@AudioPlayActivity,
+                                                        SourceLoginRoute(
+                                                            SourceLoginTarget.CurrentReading,
+                                                            bookType = BookType.audio,
+                                                        ),
+                                                    ),
+                                                )
                                             }
                                         }
                                     )
@@ -778,7 +798,7 @@ class AudioPlayActivity :
                                     text = { Text(stringResource(R.string.log)) },
                                     onClick = {
                                         overflowExpanded = false
-                                        showDialogFragment<AppLogDialog>()
+                                        this@AudioPlayActivity.openAppLogs()
                                     }
                                 )
                             }

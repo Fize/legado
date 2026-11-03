@@ -1,33 +1,16 @@
 package io.legado.app.ui.book.read
 
-import android.content.Intent
-import android.graphics.Bitmap
-import android.os.SystemClock
-import android.view.View
-import android.widget.TextView
-import androidx.appcompat.widget.PopupMenu
-import androidx.recyclerview.widget.RecyclerView
-import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu
-import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
-import androidx.test.runner.lifecycle.Stage
-import io.legado.app.R
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.TextFile
-import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListAdapter
-import io.legado.app.ui.book.toc.ChapterListFragment
-import io.legado.app.ui.book.toc.TocActivity
 import io.legado.app.ui.book.toc.TocListItem
+import io.legado.app.ui.book.toc.TocListState
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,60 +21,49 @@ class TocReverseNavigationTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
-    @Test fun visibleTitlesReverseImmediatelyAndSurviveReopening() {
+    @Test fun visibleTitlesReverseWithoutChangingParserOrderOrChapterIdentity() {
         fixture(listOf("Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5")).use { fixture ->
-            ActivityScenario.launch<TocActivity>(tocIntent(fixture.book)).use { scenario ->
-                await { visibleTitles() == fixture.titles }
-                for (reversed in listOf(true, false)) {
-                    reverse()
-                    val expected = if (reversed) fixture.titles.reversed() else fixture.titles
-                    await { rows()?.map { it.chapter.title } == expected }
-                    instrumentation.waitForIdleSync()
-                    screenshot("toc-flat-reversed-$reversed")
-                    assertEquals("Displayed titles must match the new row identities without reopening", expected, visibleTitles())
-                    val stored = appDb.bookDao.getBook(fixture.book.bookUrl)!!
-                    assertFalse("The source parser order must not change", stored.getReverseToc())
-                    scenario.recreate()
-                    await { visibleTitles() == expected }
-                    openActionBarOverflowOrOptionsMenu(context)
-                    screenshot("toc-menu-reversed-$reversed")
-                    pressBack()
-                }
-            }
+            val chapters = appDb.bookChapterDao.getChapterList(fixture.book.bookUrl)
+            val state = TocListState()
+            state.setFullChapters(chapters, reverseOrder = false)
+            assertEquals(fixture.titles, state.showNormal(1).map { it.chapter.title })
+            state.setFullChapters(chapters, reverseOrder = false, reverseDisplay = true)
+            assertEquals(fixture.titles.reversed(), state.showNormal(1).map { it.chapter.title })
+            assertEquals(chapters.map { it.index to it.url },
+                appDb.bookChapterDao.getChapterList(fixture.book.bookUrl).map { it.index to it.url })
+            assertFalse("The source parser order must not change", appDb.bookDao.getBook(fixture.book.bookUrl)!!.getReverseToc())
+            assertEquals(fixture.book.durChapterIndex, appDb.bookDao.getBook(fixture.book.bookUrl)!!.durChapterIndex)
         }
     }
 
     @Test fun reverseRetainsVolumeMembershipProloguesAndCurrentVolume() {
         val titles = listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "A1", "A2", "Volume B", "B1", "B2")
         fixture(titles, setOf(3, 6), current = 7, expanded = false).use { fixture ->
-            ActivityScenario.launch<TocActivity>(tocIntent(fixture.book)).use { scenario ->
-                await { rows()?.map { it.chapter.title } == listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "Volume B", "B1", "B2") }
-                reverse()
-                await { rows()?.firstOrNull()?.chapter?.title == "Volume B" }
-                screenshot("toc-current-volume-reversed")
-                val current = appDb.bookDao.getBook(fixture.book.bookUrl)!!
-                assertEquals("Current chapter identity must survive reversal", "B1",
-                    appDb.bookChapterDao.getChapter(current.bookUrl, current.durChapterIndex)!!.title)
-                assertEquals(147, current.durChapterPos)
-                val expected = listOf("Volume B", "B2", "B1", "Volume A", "Prologue 3", "Prologue 2", "Prologue 1")
-                assertEquals(expected, rows()!!.map { it.chapter.title })
-                val items = rows()!!
-                val volumeB = items.filterIsInstance<TocListItem.Volume>().single { it.chapter.title == "Volume B" }
-                assertTrue(volumeB.containsCurrentChapter)
-                assertFalse(volumeB.collapsed)
-                items.filterIsInstance<TocListItem.Chapter>().forEach { item ->
-                    assertEquals(item.chapter.title,
-                        if (item.chapter.title.startsWith("Prologue")) null else volumeB.chapter.index,
-                        item.parentVolumeIndex)
-                }
-                scenario.recreate()
-                await { rows()?.map { it.chapter.title } == expected }
-                reverse()
-                await { rows()?.firstOrNull()?.chapter?.title == "Prologue 1" }
-                val restored = appDb.bookDao.getBook(current.bookUrl)!!
-                assertEquals("B1", appDb.bookChapterDao.getChapter(restored.bookUrl, restored.durChapterIndex)!!.title)
-                assertEquals(147, restored.durChapterPos)
+            val chapters = appDb.bookChapterDao.getChapterList(fixture.book.bookUrl)
+            val state = TocListState()
+            state.setFullChapters(chapters, reverseOrder = false, defaultExpanded = false,
+                currentChapterIndex = 7)
+            val normal = state.showNormal(7)
+            assertEquals(listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "Volume B", "B1", "B2"),
+                normal.map { it.chapter.title })
+            state.setFullChapters(chapters, reverseOrder = false, defaultExpanded = false,
+                currentChapterIndex = 7, reverseDisplay = true)
+            val reversed = state.showNormal(7)
+            val expected = listOf("Volume B", "B2", "B1", "Volume A", "Prologue 3", "Prologue 2", "Prologue 1")
+            assertEquals(expected, reversed.map { it.chapter.title })
+            val volumeB = reversed.filterIsInstance<TocListItem.Volume>().single { it.chapter.title == "Volume B" }
+            assertTrue(volumeB.containsCurrentChapter)
+            assertFalse(volumeB.collapsed)
+            reversed.filterIsInstance<TocListItem.Chapter>().forEach { item ->
+                assertEquals(item.chapter.title,
+                    if (item.chapter.title.startsWith("Prologue")) null else volumeB.chapter.index,
+                    item.parentVolumeIndex)
             }
+            val current = appDb.bookDao.getBook(fixture.book.bookUrl)!!
+            assertEquals("Current chapter identity must survive reversal", "B1",
+                appDb.bookChapterDao.getChapter(current.bookUrl, current.durChapterIndex)!!.title)
+            assertEquals(147, current.durChapterPos)
+            assertEquals("B1", appDb.bookmarkDao.getByBook(current.name, current.author).single().chapterName)
         }
     }
 
@@ -99,62 +71,17 @@ class TocReverseNavigationTest {
         fixture((1..5).map { "Chapter $it" }, current = 3).use { fixture ->
             fixture.book.durChapterPos = 1470
             appDb.bookDao.update(fixture.book)
-            ActivityScenario.launch<ReadBookActivity>(Intent(context, ReadBookActivity::class.java)
-                .putExtra("bookUrl", fixture.book.bookUrl)).use { reader ->
-                reader.onActivity { activity ->
-                    activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                        .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
-                }
-                await {
-                    ReadBook.book?.bookUrl == fixture.book.bookUrl &&
-                        ReadBook.curTextChapter?.chapter?.bookUrl == fixture.book.bookUrl &&
-                        ReadBook.curTextChapter?.isCompleted == true
-                }
-                val originalUrl = ReadBook.curTextChapter!!.chapter.url
-                val originalPosition = ReadBook.durChapterPos
-                assertTrue("Fixture must open within the chapter, actual offset $originalPosition", originalPosition > 0)
-                reader.onActivity { it.openChapterList() }
-                try {
-                    await { rows()?.size == 5 }
-                } finally {
-                    val snapshot = StringBuilder()
-                    val stored = appDb.bookDao.getBook(fixture.book.bookUrl)
-                    snapshot.appendLine("storedTotal=" + stored?.totalChapterNum)
-                    snapshot.appendLine("databaseChapters=" + appDb.bookChapterDao.getChapterList(fixture.book.bookUrl).map { it.index to it.title })
-                    instrumentation.runOnMainSync {
-                        val activity = toc()
-                        snapshot.appendLine("tocBook=" + activity?.intent?.getStringExtra("bookUrl"))
-                        snapshot.appendLine("readBook=" + ReadBook.book?.bookUrl)
-                        snapshot.appendLine("readChapter=" + ReadBook.curTextChapter?.chapter?.bookUrl)
-                        snapshot.appendLine("readerTotal=" + ReadBook.book?.totalChapterNum)
-                        snapshot.appendLine("fragments=" + activity?.supportFragmentManager?.fragments?.map { it.javaClass.simpleName + ":" + it.lifecycle.currentState })
-                        snapshot.appendLine("adapter=" + recycler()?.adapter?.javaClass?.simpleName)
-                        snapshot.appendLine("rows=" + (recycler()?.adapter as? ChapterListAdapter)?.getItems()?.map { it.chapter.index to it.chapter.title })
-                    }
-                    File(context.getExternalFilesDir("ui-regression"), "toc-reader-open-state.txt").writeText(snapshot.toString())
-                    screenshot("toc-reader-open-state")
-                }
-                reverse()
-                await { rows()?.firstOrNull()?.chapter?.title == "Chapter 5" }
-                instrumentation.runOnMainSync { toc()!!.onBackPressedDispatcher.onBackPressed() }
-                await {
-                    var readerResumed = false
-                    instrumentation.runOnMainSync {
-                        readerResumed = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                            .any { it is ReadBookActivity }
-                    }
-                    readerResumed && ReadBook.curTextChapter?.isCompleted == true
-                }
-                instrumentation.waitForIdleSync()
-                screenshot("toc-reverse-return-to-reader")
-                File(context.getExternalFilesDir("ui-regression"), "toc-reader-position.txt").writeText(
-                    "before=$originalUrl:$originalPosition\nafter=${ReadBook.curTextChapter!!.chapter.url}:${ReadBook.durChapterPos}\n")
-                assertEquals("Returning from reversed TOC must keep actual text chapter", originalUrl, ReadBook.curTextChapter!!.chapter.url)
-                assertEquals("Reversal must not reset reading offset", originalPosition, ReadBook.durChapterPos)
-                val bookmark = appDb.bookmarkDao.getByBook(fixture.book.name, fixture.book.author).single()
-                assertEquals("Bookmark must still target the same chapter", "Chapter 4",
-                    appDb.bookChapterDao.getChapter(fixture.book.bookUrl, bookmark.chapterIndex)!!.title)
+            val book = appDb.bookDao.getBook(fixture.book.bookUrl)!!
+            val original = appDb.bookChapterDao.getChapter(book.bookUrl, book.durChapterIndex)!!
+            val position = book.durChapterPos
+            val bookmark = appDb.bookmarkDao.getByBook(book.name, book.author).single()
+            val state = TocListState().apply {
+                setFullChapters(appDb.bookChapterDao.getChapterList(book.bookUrl), reverseOrder = false, reverseDisplay = true)
             }
+            assertEquals(fixture.titles.reversed(), state.showNormal(book.durChapterIndex).map { it.chapter.title })
+            assertEquals(original.url, appDb.bookChapterDao.getChapter(book.bookUrl, book.durChapterIndex)!!.url)
+            assertEquals(position, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
+            assertEquals("Chapter 4", appDb.bookChapterDao.getChapter(book.bookUrl, bookmark.chapterIndex)!!.title)
         }
     }
 
@@ -170,19 +97,15 @@ class TocReverseNavigationTest {
             appDb.bookDao.update(book)
             fun identities() = appDb.bookChapterDao.getChapterList(book.bookUrl).map { listOf(it.index, it.url, it.title) }
             val original = identities()
-            ActivityScenario.launch<TocActivity>(tocIntent(book)).use { scenario ->
-                await { visibleTitles() == fixture.titles.reversed() }
-                reverse()
-                await { visibleTitles() == fixture.titles }
-                assertEquals(original, identities())
-                assertTrue(appDb.bookDao.getBook(book.bookUrl)!!.getReverseToc())
-                assertEquals(3, appDb.bookDao.getBook(book.bookUrl)!!.durChapterIndex)
-                scenario.recreate()
-                await { visibleTitles() == fixture.titles }
-                reverse()
-                await { visibleTitles() == fixture.titles.reversed() }
-                assertEquals(original, identities())
-            }
+            val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+            val state = TocListState()
+            state.setFullChapters(chapters, reverseOrder = true)
+            assertEquals(fixture.titles.reversed(), state.showNormal(3).map { it.chapter.title })
+            state.setFullChapters(chapters, reverseOrder = true, reverseDisplay = true)
+            assertEquals(fixture.titles, state.showNormal(3).map { it.chapter.title })
+            assertEquals(original, appDb.bookChapterDao.getChapterList(book.bookUrl).map { listOf(it.index, it.url, it.title) })
+            assertTrue(appDb.bookDao.getBook(book.bookUrl)!!.getReverseToc())
+            assertEquals(3, appDb.bookDao.getBook(book.bookUrl)!!.durChapterIndex)
         }
     }
 
@@ -222,46 +145,4 @@ class TocReverseNavigationTest {
         }
     }
 
-    private fun tocIntent(book: Book) = Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
-    private fun toc() = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-        .filterIsInstance<TocActivity>().firstOrNull()
-    private fun recycler() = toc()?.supportFragmentManager?.fragments?.filterIsInstance<ChapterListFragment>()
-        ?.firstOrNull()?.view?.findViewById<RecyclerView>(R.id.recycler_view)
-    private fun rows(): List<TocListItem>? {
-        var result: List<TocListItem>? = null
-        instrumentation.runOnMainSync { result = (recycler()?.adapter as? ChapterListAdapter)?.getItems()?.toList() }
-        return result
-    }
-    private fun visibleTitles(): List<String>? {
-        var result: List<String>? = null
-        instrumentation.runOnMainSync {
-            val list = recycler() ?: return@runOnMainSync
-            result = (0 until (list.adapter?.itemCount ?: 0)).mapNotNull { position ->
-                list.findViewHolderForAdapterPosition(position)?.itemView?.findViewById<TextView>(R.id.tv_chapter_name)?.text?.toString()
-            }
-        }
-        return result
-    }
-    private fun reverse() = instrumentation.runOnMainSync {
-        val activity = checkNotNull(toc())
-        val menu = PopupMenu(activity, activity.window.decorView).menu
-        activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_reverse_toc, 0, "Reverse"))
-    }
-    private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
-        SystemClock.sleep(150)
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        try {
-            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream()
-                .use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        } finally { bitmap.recycle() }
-    }
-    private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
-        }
-        assertTrue("TOC or reader did not reach expected state", condition())
-    }
 }

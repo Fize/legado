@@ -1,7 +1,13 @@
 package io.legado.app.ui.book.source.edit
 
 import android.app.Application
+import io.legado.app.help.storage.RestoreRecoveryGate
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
 import android.content.Intent
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
+import io.legado.app.data.repository.SourceVariableRepository
+import io.legado.app.ui.variable.VariableEditorController
 import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
@@ -30,7 +36,8 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 
 
-class BookSourceEditViewModel(application: Application) : BaseViewModel(application) {
+class BookSourceEditViewModel(application: Application, savedState: SavedStateHandle) : BaseViewModel(application) {
+    val variableEditor = VariableEditorController(savedState, viewModelScope, SourceVariableRepository())
     var autoComplete = false
     var bookSource: BookSource? = null
 
@@ -50,7 +57,9 @@ class BookSourceEditViewModel(application: Application) : BaseViewModel(applicat
     }
 
     fun save(source: BookSource, success: ((BookSource) -> Unit)? = null) {
+        if (RestoreRecoveryGate.isQuarantined) return
         execute {
+            if (RestoreRecoveryGate.isQuarantined) throw RestoreRecoveryRequiredException()
             if (source.bookSourceUrl.isBlank() || source.bookSourceName.isBlank()) {
                 throw NoStackTraceException(context.getString(R.string.non_null_name_url))
             }
@@ -77,7 +86,7 @@ class BookSourceEditViewModel(application: Application) : BaseViewModel(applicat
             concurrentRecordMap.remove(source.bookSourceUrl) //删除并发限制缓存
             source
         }.onSuccess {
-            success?.invoke(it)
+            if (!RestoreRecoveryGate.isQuarantined) success?.invoke(it)
         }.onError {
             context.toastOnUi(it.localizedMessage)
             it.printOnDebug()

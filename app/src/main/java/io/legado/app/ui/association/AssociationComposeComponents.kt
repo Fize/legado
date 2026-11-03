@@ -21,6 +21,9 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -34,8 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
@@ -93,13 +99,15 @@ fun ImportSourceItemRow(
     comment: String? = null,
     showOpen: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
-    onOpenClick: (() -> Unit)? = null
+    onOpenClick: (() -> Unit)? = null,
+    testTag: String? = null,
 ) {
     var commentExpanded by remember(name, comment) { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
@@ -130,7 +138,8 @@ fun ImportSourceItemRow(
             if (showOpen && onOpenClick != null) {
                 TextButton(
                     onClick = onOpenClick,
-                    enabled = enabled
+                    enabled = enabled,
+                    modifier = if (testTag == null) Modifier else Modifier.testTag("$testTag:open"),
                 ) {
                     Text(
                         text = stringResource(R.string.open),
@@ -163,7 +172,10 @@ fun ImportDialogFooter(
     okEnabled: Boolean = true,
     onSelectAllClick: () -> Unit,
     onCancelClick: () -> Unit,
-    onOkClick: () -> Unit
+    onOkClick: () -> Unit,
+    testTagPrefix: String? = null,
+    compact: Boolean = false,
+    compactSelectionText: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -173,20 +185,33 @@ fun ImportDialogFooter(
     ) {
         TextButton(
             onClick = onSelectAllClick,
-            enabled = selectAllEnabled
+            enabled = selectAllEnabled,
+            modifier = (if (compactSelectionText != null) Modifier.weight(1f).semantics {
+                contentDescription = selectAllText
+            } else Modifier).then(if (testTagPrefix == null) Modifier else Modifier.testTag("$testTagPrefix:selectAll")),
         ) {
-            Text(selectAllText)
+            Text(if (compact) compactSelectionText ?: selectAllText else selectAllText,
+                maxLines = if (compactSelectionText == null) Int.MAX_VALUE else if (compact) 1 else 2,
+                overflow = TextOverflow.Ellipsis)
         }
-        Spacer(modifier = Modifier.weight(1f))
-        TextButton(
+        if (compactSelectionText == null) Spacer(modifier = Modifier.weight(1f))
+        if (compact) IconButton(
             onClick = onCancelClick,
-            enabled = cancelEnabled
+            enabled = cancelEnabled,
+            modifier = if (testTagPrefix == null) Modifier else Modifier.testTag("$testTagPrefix:cancel"),
+        ) {
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+        } else TextButton(
+            onClick = onCancelClick,
+            enabled = cancelEnabled,
+            modifier = if (testTagPrefix == null) Modifier else Modifier.testTag("$testTagPrefix:cancel"),
         ) {
             Text(stringResource(R.string.cancel))
         }
         TextButton(
             onClick = onOkClick,
-            enabled = okEnabled
+            enabled = okEnabled,
+            modifier = if (testTagPrefix == null) Modifier else Modifier.testTag("$testTagPrefix:ok"),
         ) {
             Text(stringResource(R.string.ok))
         }
@@ -234,7 +259,8 @@ fun ImportCustomGroupDialog(
                     }
                     Switch(
                         checked = isAddGroup,
-                        onCheckedChange = { isAddGroup = it }
+                        onCheckedChange = { isAddGroup = it },
+                        modifier = Modifier.testTag("sourceImportGroupAdd"),
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -257,6 +283,7 @@ fun ImportCustomGroupDialog(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .testTag("sourceImportGroupName")
                             .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                     )
                     if (filteredGroups.isNotEmpty()) {
@@ -279,12 +306,18 @@ fun ImportCustomGroupDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(groupName, isAddGroup) }) {
+            TextButton(
+                onClick = { onConfirm(groupName, isAddGroup) },
+                modifier = Modifier.testTag("sourceImportGroupConfirm"),
+            ) {
                 Text(stringResource(R.string.ok))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("sourceImportGroupCancel"),
+            ) {
                 Text(stringResource(R.string.cancel))
             }
         }

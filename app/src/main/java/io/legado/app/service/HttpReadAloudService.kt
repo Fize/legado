@@ -163,13 +163,14 @@ class HttpReadAloudService : BaseReadAloudService(),
     private val ttsFolderPath: String by lazy {
         cacheDir.absolutePath + File.separator + "httpTTS" + File.separator
     }
-    private val cache by lazy {
+    private val cacheDelegate = lazy {
         SimpleCache(
             File(cacheDir, "httpTTS_cache"),
             LeastRecentlyUsedCacheEvictor(128 * 1024 * 1024),
             StandaloneDatabaseProvider(appCtx)
         )
     }
+    private val cache by cacheDelegate
     private val cacheDataSinkFactory by lazy {
         CacheDataSink.Factory()
             .setCache(cache)
@@ -177,7 +178,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     private val loadErrorHandlingPolicy by lazy {
         CustomLoadErrorHandlingPolicy()
     }
-    private var speechRate: Int = AppConfig.speechRatePlay + 5
+    private var speechRate: Int = 5
     private var downloadTask: Coroutine<*>? = null
     private var playIndexJob: Job? = null
     private var downloadErrorNo: Int = 0
@@ -188,6 +189,8 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     override fun onCreate() {
         super.onCreate()
+        if (isRestoreRecoveryBlocked) return
+        speechRate = AppConfig.speechRatePlay + 5
         exoPlayer.addListener(this)
     }
 
@@ -195,14 +198,18 @@ class HttpReadAloudService : BaseReadAloudService(),
         invalidatePlaybackSession()
         cancelDownloadTask()
         super.onDestroy()
+        if (!wasReadAloudContentCreated) return
+        exoPlayer.removeListener(this)
         exoPlayer.release()
-        cache.release()
-        Coroutine.async {
+        if (cacheDelegate.isInitialized()) cache.release()
+        if (!isRestoreRecoveryBlocked) Coroutine.async {
+            if (isRestoreRecoveryBlocked) return@async
             removeCacheFile()
         }
     }
 
     override fun play() {
+        if (isRestoreRecoveryBlocked) return
         pageChanged = false
         playStop()
         if (!requestFocus()) return
@@ -222,12 +229,15 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun playStop() {
         invalidatePlaybackSession()
         cancelDownloadTask()
-        exoPlayer.stop()
-        exoPlayer.clearMediaItems()
+        if (wasReadAloudContentCreated) {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+        }
         playIndexJob?.cancel()
     }
 
     private fun updateNextPos() {
+        if (isRestoreRecoveryBlocked) return
         readAloudNumber += contentList[nowSpeak].length + 1 - paragraphStartPos
         paragraphStartPos = 0
         if (nowSpeak < contentList.lastIndex) {
@@ -615,15 +625,27 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun createSpeakFile(name: String): File {
+        if (isRestoreRecoveryBlocked) throw CancellationException("Recovery requires restart")
         return FileUtils.createFileIfNotExist("${ttsFolderPath}$name.mp3")
     }
 
     private suspend fun createSpeakFile(name: String, inputStream: InputStream) {
+        if (isRestoreRecoveryBlocked) { inputStream.close(); throw CancellationException("Recovery requires restart") }
         val file = FileUtils.createFileIfNotExist("${ttsFolderPath}$name.mp3")
         try {
             runInterruptible {
                 file.outputStream().use { out ->
-                    inputStream.use { it.copyTo(out) }
+                    inputStream.use { input ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            if (isRestoreRecoveryBlocked || Thread.currentThread().isInterrupted)
+                                throw CancellationException("Playback stopped")
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            if (isRestoreRecoveryBlocked) throw CancellationException("Recovery requires restart")
+                            out.write(buffer, 0, count)
+                        }
+                    }
                 }
             }
         } catch (throwable: Throwable) {
@@ -633,6 +655,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun getOrCreatePauseFile(durationMs: Int): File {
+        if (isRestoreRecoveryBlocked) throw CancellationException("Recovery requires restart")
         val file = FileUtils.createFileIfNotExist("${ttsFolderPath}pause_$durationMs.wav")
         if (file.length() == 0L) {
             file.writeBytes(generateSilentWavBytes(durationMs))
@@ -662,8 +685,10 @@ class HttpReadAloudService : BaseReadAloudService(),
      * 移除缓存文件
      */
     private fun removeCacheFile() {
+        if (isRestoreRecoveryBlocked) return
         val titleMd5 = MD5Utils.md5Encode16(textChapter?.title ?: "")
         FileUtils.listDirsAndFiles(ttsFolderPath)?.forEach {
+            if (isRestoreRecoveryBlocked) return@forEach
             val isSilentSound = it.length() == 2160L
             if ((!it.name.startsWith(titleMd5)
                         && System.currentTimeMillis() - it.lastModified() > 600000)
@@ -676,6 +701,7 @@ class HttpReadAloudService : BaseReadAloudService(),
 
 
     override fun pauseReadAloud(abandonFocus: Boolean) {
+        if (isRestoreRecoveryBlocked) return
         super.pauseReadAloud(abandonFocus)
         kotlin.runCatching {
             playIndexJob?.cancel()
@@ -684,6 +710,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     override fun resumeReadAloud() {
+        if (isRestoreRecoveryBlocked) return
         super.resumeReadAloud()
         kotlin.runCatching {
             if (pageChanged) {
@@ -696,6 +723,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun upPlayPos() {
+        if (isRestoreRecoveryBlocked) return
         playIndexJob?.cancel()
         val textChapter = textChapter ?: return
         playIndexJob = lifecycleScope.launch {
@@ -710,6 +738,7 @@ class HttpReadAloudService : BaseReadAloudService(),
             val sleep = exoPlayer.duration / speakTextLength
             val start = speakTextLength * exoPlayer.currentPosition / exoPlayer.duration
             for (i in start..contentList[nowSpeak].length) {
+                if (isRestoreRecoveryBlocked) return@launch
                 if (pageIndex + 1 < textChapter.pageSize
                     && readAloudNumber + i > textChapter.getReadLength(pageIndex + 1)
                 ) {
@@ -726,6 +755,7 @@ class HttpReadAloudService : BaseReadAloudService(),
      * 更新朗读速度
      */
     override fun upSpeechRate(reset: Boolean) {
+        if (isRestoreRecoveryBlocked) return
         playStop()
         speechRate = AppConfig.speechRatePlay + 5
         if (AppConfig.streamReadAloudAudio) {
@@ -736,6 +766,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
+        if (isRestoreRecoveryBlocked) return
         super.onPlaybackStateChanged(playbackState)
         when (playbackState) {
             Player.STATE_IDLE -> {
@@ -768,6 +799,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+        if (isRestoreRecoveryBlocked) return
         when (reason) {
             Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED -> {
                 if (!timeline.isEmpty && exoPlayer.playbackState == Player.STATE_IDLE) {
@@ -780,6 +812,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        if (isRestoreRecoveryBlocked) return
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
         if (!isCurrentSessionMediaItem(mediaItem)) return
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
@@ -792,6 +825,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     override fun onPlayerError(error: PlaybackException) {
+        if (isRestoreRecoveryBlocked) return
         super.onPlayerError(error)
         val mediaItem = exoPlayer.currentMediaItem ?: return
         if (!isCurrentSessionMediaItem(mediaItem)) return
@@ -825,6 +859,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun deleteCurrentSpeakFile() {
+        if (isRestoreRecoveryBlocked) return
         if (AppConfig.streamReadAloudAudio) {
             return
         }
@@ -893,7 +928,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun isSessionActive(sessionId: Long): Boolean {
-        return playbackSessionId.get() == sessionId
+        return !isRestoreRecoveryBlocked && playbackSessionId.get() == sessionId
     }
 
     private fun ensureSessionActive(sessionId: Long) {

@@ -121,15 +121,10 @@ class BookshelfReadProgressTest {
         assertTrue(components.contains("fun BookshelfHeaderSection"))
         assertTrue(components.contains("R.string.continue_read"))
 
-        val style1 = projectFile(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style1/BookshelfFragment1.kt"
+        val root = projectFile(
+            "src/main/java/io/legado/app/ui/main/bookshelf/BookshelfRootScreen.kt"
         ).readText()
-        assertTrue(style1.contains("ShelfHeaderComposable()"))
-
-        val style2 = projectFile(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt"
-        ).readText()
-        assertTrue(style2.contains("ShelfHeaderComposable()"))
+        assertTrue(root.contains("BookshelfHeaderSection("))
     }
 
     @Test
@@ -147,15 +142,15 @@ class BookshelfReadProgressTest {
             ),
         )
 
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/main/bookshelf/BaseBookshelfFragment.kt",
+        val repository = projectFile(
+            "src/main/java/io/legado/app/data/repository/BookshelfRepository.kt",
         ).readText()
-        val disabledGate = fragment.indexOf("if (!showRecentReading && !showBookshelfStats) return")
-        val databaseFlow = fragment.indexOf("appDb.bookDao.flowShelfBookCount()")
+        val disabledGate = repository.indexOf("if (!showRecentReading && !showStats) return")
+        val databaseFlow = repository.indexOf("appDb.bookDao.flowShelfBookCount()")
         assertTrue(disabledGate >= 0)
         assertTrue(databaseFlow > disabledGate)
-        assertTrue(fragment.contains("val book = if (showRecentReading)"))
-        assertTrue(fragment.contains("val readingCount = if (showBookshelfStats)"))
+        assertTrue(repository.contains("continueBook = if (showRecentReading)"))
+        assertTrue(repository.contains("readingCount = if (showStats)"))
     }
 
     @Test

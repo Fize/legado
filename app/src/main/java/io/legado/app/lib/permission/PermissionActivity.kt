@@ -13,6 +13,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
+import io.legado.app.help.storage.RestoreActivityRecovery
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
 import io.legado.app.constant.AppLog
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.utils.applyTint
@@ -25,6 +27,20 @@ import androidx.core.net.toUri
 class PermissionActivity : AppCompatActivity() {
 
     private var rationaleDialog: AlertDialog? = null
+    private var recoveryRequestRejected = false
+    private var ownedRequest: OnRequestPermissionsResultCallback? = null
+    private val restoreRecovery by lazy { RestoreActivityRecovery(this) {
+        if (!recoveryRequestRejected) {
+            recoveryRequestRejected = true
+            val request = currentRequest()
+            if (request != null) RequestPlugins.sRequestCallback = null
+            runCatching { request?.onError(RestoreRecoveryRequiredException()) }
+                .onFailure { android.util.Log.e("RestoreRecovery", "Permission request cancellation failed", it) }
+        }
+        rationaleDialog?.dismiss()
+        rationaleDialog = null
+        super.finish()
+    } }
 
     private val settingActivityResult =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -39,7 +55,15 @@ class PermissionActivity : AppCompatActivity() {
 
     @SuppressLint("BatteryLife")
     override fun onCreate(savedInstanceState: Bundle?) {
+        ownedRequest = RequestPlugins.sRequestCallback
+        if (restoreRecovery.isBlocked) {
+            setTheme(R.style.AppTheme_Light)
+            super.onCreate(null)
+            restoreRecovery.redirectIfRequired()
+            return
+        }
         super.onCreate(savedInstanceState)
+        restoreRecovery.observe()
         val rationale = intent.getStringExtra(KEY_RATIONALE)
 //        val requestCode = intent.getIntExtra(KEY_INPUT_PERMISSIONS_CODE, 1000)
         val permissions = intent.getStringArrayExtra(KEY_INPUT_PERMISSIONS)!!
@@ -56,7 +80,7 @@ class PermissionActivity : AppCompatActivity() {
                         }
                     } catch (e: Exception) {
                         AppLog.put("请求权限出错\n$e", e, true)
-                        RequestPlugins.sRequestCallback?.onError(e)
+                        currentRequest()?.onError(e)
                         finish()
                     }
                 }
@@ -80,7 +104,7 @@ class PermissionActivity : AppCompatActivity() {
                     }
                 } catch (e: Exception) {
                     AppLog.put("请求所有文件的管理权限出错\n$e", e, true)
-                    RequestPlugins.sRequestCallback?.onError(e)
+                    currentRequest()?.onError(e)
                     finish()
                 }
             }
@@ -104,7 +128,7 @@ class PermissionActivity : AppCompatActivity() {
                         }
                     } catch (e: Exception) {
                         AppLog.put("请求通知权限出错\n$e", e, true)
-                        RequestPlugins.sRequestCallback?.onError(e)
+                        currentRequest()?.onError(e)
                         finish()
                     }
                 }
@@ -130,11 +154,12 @@ class PermissionActivity : AppCompatActivity() {
                                 settingActivityResultAwait.launch(intent)
                             }
                         }
+                        if (restoreRecovery.redirectIfRequired()) return@launch
                         intent.component = null
                         settingActivityResult.launch(intent)
                     } catch (e: Exception) {
                         AppLog.put("请求后台权限出错\n$e", e, true)
-                        RequestPlugins.sRequestCallback?.onError(e)
+                        currentRequest()?.onError(e)
                         finish()
                     }
                 }
@@ -150,7 +175,7 @@ class PermissionActivity : AppCompatActivity() {
                         }
                     } catch (e: Exception) {
                         AppLog.put("请求悬浮窗权限出错\n$e", e, true)
-                        RequestPlugins.sRequestCallback?.onError(e)
+                        currentRequest()?.onError(e)
                     }
                 }
             }
@@ -160,19 +185,31 @@ class PermissionActivity : AppCompatActivity() {
         }
     }
 
+    private fun currentRequest(): OnRequestPermissionsResultCallback? =
+        ownedRequest?.takeIf { RequestPlugins.sRequestCallback === it }
+
+    override fun onDestroy() {
+        rationaleDialog?.dismiss()
+        rationaleDialog = null
+        ownedRequest = null
+        super.onDestroy()
+    }
+
     private fun onRequestPermissionFinish() {
-        RequestPlugins.sRequestCallback?.onSettingActivityResult()
+        if (restoreRecovery.redirectIfRequired()) return
+        currentRequest()?.onSettingActivityResult()
         finish()
     }
 
     private fun openSettingsActivity() {
+        if (restoreRecovery.redirectIfRequired()) return
         try {
             val settingIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
             settingIntent.data = Uri.fromParts("package", packageName, null)
             settingActivityResult.launch(settingIntent)
         } catch (e: Exception) {
             toastOnUi(R.string.tip_cannot_jump_setting_page)
-            RequestPlugins.sRequestCallback?.onError(e)
+            currentRequest()?.onError(e)
             finish()
         }
     }
@@ -183,7 +220,8 @@ class PermissionActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        RequestPlugins.sRequestCallback?.onRequestPermissionsResult(
+        if (restoreRecovery.redirectIfRequired()) return
+        currentRequest()?.onRequestPermissionsResult(
             permissions,
             grantResults
         )
@@ -208,6 +246,7 @@ class PermissionActivity : AppCompatActivity() {
         rationale: CharSequence?,
         onOk: () -> Unit
     ) {
+        if (restoreRecovery.redirectIfRequired()) return
         rationaleDialog?.dismiss()
         if (rationale.isNullOrEmpty()) {
             finish()
@@ -216,7 +255,7 @@ class PermissionActivity : AppCompatActivity() {
         permissions.forEach {
             if (getDenyCount(it) > 5) {
                 toastOnUi(rationale)
-                RequestPlugins.sRequestCallback?.onRequestPermissionsResult(
+                currentRequest()?.onRequestPermissionsResult(
                     permissions,
                     IntArray(0)
                 )
@@ -228,17 +267,20 @@ class PermissionActivity : AppCompatActivity() {
             .setTitle(R.string.dialog_title)
             .setMessage(rationale)
             .setPositiveButton(R.string.dialog_setting) { _, _ ->
+                if (restoreRecovery.redirectIfRequired()) return@setPositiveButton
                 onOk.invoke()
             }
             .setNegativeButton(R.string.dialog_cancel) { _, _ ->
-                RequestPlugins.sRequestCallback?.onRequestPermissionsResult(
+                if (restoreRecovery.redirectIfRequired()) return@setNegativeButton
+                currentRequest()?.onRequestPermissionsResult(
                     permissions,
                     IntArray(0)
                 )
                 permissions.forEach { incrementDenyCount(it) }
                 finish()
             }.setOnCancelListener {
-                RequestPlugins.sRequestCallback?.onRequestPermissionsResult(
+                if (restoreRecovery.redirectIfRequired()) return@setOnCancelListener
+                currentRequest()?.onRequestPermissionsResult(
                     permissions,
                     IntArray(0)
                 )

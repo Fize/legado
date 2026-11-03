@@ -4,14 +4,16 @@ import android.content.Context
 import android.os.Parcelable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import kotlinx.parcelize.Parcelize
+import java.util.UUID
 
 @Suppress("ConstPropertyName")
 @Parcelize
-@Entity(tableName = "book_groups")
+@Entity(tableName = "book_groups", indices = [Index(value = ["generation"], unique = true)])
 data class BookGroup(
     @PrimaryKey
     val groupId: Long = 0b1,
@@ -26,7 +28,9 @@ data class BookGroup(
     var bookSort: Int = -1,
     // 只更新已读
     @ColumnInfo(defaultValue = "0")
-    var onlyUpdateRead: Boolean = false
+    var onlyUpdateRead: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL")
+    val generation: String? = UUID.randomUUID().toString(),
 ) : Parcelable {
 
     companion object {
@@ -74,6 +78,7 @@ data class BookGroup(
                     && other.onlyUpdateRead == onlyUpdateRead
                     && other.show == show
                     && other.order == order
+                    && other.generation == generation
         }
         return false
     }

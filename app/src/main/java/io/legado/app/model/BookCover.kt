@@ -19,8 +19,10 @@ import com.bumptech.glide.request.target.Target
 import com.bumptech.glide.request.target.Target.SIZE_ORIGINAL
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
+import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.Cache
 import io.legado.app.help.CacheManager
 import io.legado.app.help.DefaultData
 import io.legado.app.help.config.AppConfig
@@ -36,6 +38,10 @@ import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.lib.theme.accentColor
 import kotlinx.coroutines.currentCoroutineContext
 import splitties.init.appCtx
 import java.io.File
@@ -77,11 +83,15 @@ object BookCover {
         private set
 
 
+    private val _appearance = MutableStateFlow<BookCoverAppearance?>(null)
+    val appearance = _appearance.asStateFlow()
+
     init {
         upDefaultCover()
     }
 
     @SuppressLint("UseCompatLoadingForDrawables")
+    @Synchronized
     fun upDefaultCover() {
         var path: String?
         val isNightTheme = AppConfig.isNightTheme
@@ -114,6 +124,9 @@ object BookCover {
         defaultDrawable = runCatching {
             BitmapUtils.decodeBitmap(path!!, 600, 900)!!.toDrawable(appCtx.resources)
         }.getOrDefault(appCtx.resources.getDrawable(R.drawable.image_cover_default, null))
+        _appearance.value = BookCoverAppearance(defaultDrawable, AppConfig.useDefaultCover,
+            drawBookName, drawBookAuthor, drawBookNameHorizontal, adaptiveTitleSize,
+            keepPunctuation, fontSizes, fontTypeface, fontCacheKey, appCtx.backgroundColor, appCtx.accentColor)
     }
 
     /**
@@ -173,6 +186,7 @@ object BookCover {
         path: String?,
         loadOnlyWifi: Boolean = false,
         sourceOrigin: String? = null,
+        bookUrl: String? = null,
         transformation: Transformation<Bitmap>? = null,
     ): RequestBuilder<Drawable> {
         var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi)
@@ -181,6 +195,7 @@ object BookCover {
         if (sourceOrigin != null) {
             options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
         }
+        if (bookUrl != null) options = options.set(OkHttpModelLoader.bookUrlOption, bookUrl)
         return ImageLoader.load(context, path)
             .apply(options)
             .override(context.resources.displayMetrics.widthPixels, SIZE_ORIGINAL)
@@ -199,12 +214,14 @@ object BookCover {
         path: String?,
         loadOnlyWifi: Boolean = false,
         sourceOrigin: String? = null,
+        bookUrl: String? = null,
     ): RequestBuilder<File> {
         var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi)
             .set(OkHttpModelLoader.mangaOption, true)
         if (sourceOrigin != null) {
             options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
         }
+        if (bookUrl != null) options = options.set(OkHttpModelLoader.bookUrlOption, bookUrl)
         return ImageLoader.loadFile(context, path).apply(options)
     }
 
@@ -269,6 +286,18 @@ object BookCover {
 
     fun saveCoverRule(json: String) {
         CacheManager.put(coverRuleConfigKey, json)
+    }
+
+    /** Restore writes the database row in its transaction and publishes memory only after commit. */
+    internal fun persistRestoredCoverRule(json: String) {
+        appDb.cacheDao.insert(Cache(coverRuleConfigKey, json))
+    }
+
+    internal fun publishRestoredCoverRule(json: String) {
+        // Serialize with CacheManager.get, which may still be publishing a pre-commit read.
+        synchronized(CacheManager) {
+            CacheManager.putMemory(coverRuleConfigKey, json)
+        }
     }
 
     fun delCoverRule() {

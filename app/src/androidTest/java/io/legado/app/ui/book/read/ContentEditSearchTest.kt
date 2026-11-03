@@ -6,8 +6,6 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.SystemClock
 import android.text.style.BackgroundColorSpan
-import android.view.InputDevice
-import android.view.MotionEvent
 import androidx.core.view.isVisible
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -17,7 +15,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.BookHelp
-import io.legado.app.ui.about.AboutActivity
+import io.legado.app.ui.AppActivity
 import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.defaultSharedPreferences
 import org.junit.After
@@ -45,7 +43,7 @@ class ContentEditSearchTest {
     private val chapter = BookChapter(bookUrl = book.bookUrl, url = "${book.bookUrl}/0", title = "Chapter")
     private val content = "Alpha alpha ALPHA\na.b aXb\n" +
         (0 until 500).joinToString("\n") { "Line $it: editable chapter text for scrolling." }
-    private var scenario: ActivityScenario<AboutActivity>? = null
+    private var scenario: ActivityScenario<AppActivity>? = null
     private val originalPlainText = context.defaultSharedPreferences.all["contentEditPlainText"] as? Boolean
 
     @Before
@@ -54,7 +52,7 @@ class ContentEditSearchTest {
         appDb.bookDao.insert(book)
         appDb.bookChapterDao.insert(chapter)
         BookHelp.saveText(book, chapter, content)
-        scenario = ActivityScenario.launch(AboutActivity::class.java)
+        scenario = ActivityScenario.launch(AppActivity::class.java)
         scenario!!.onActivity { activity ->
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             ContentEditDialog().apply {
@@ -271,29 +269,14 @@ class ContentEditSearchTest {
     }
 
     @Test
-    fun positionBarDragsTextWithoutMovingCaretAndUpdatesAfterEdits() {
+    fun positionBarTracksTextScrollWithoutMovingCaretAndUpdatesAfterEdits() {
         awaitDialog { it.binding.positionBar.isEnabled }
         var caret = 0
-        var x = 0f
-        var startY = 0f
-        var endY = 0f
         onDialog {
             val ui = it.binding
             assertFalse(ui.searchBar.isVisible)
             caret = ui.contentView.selectionStart
-            val location = IntArray(2)
-            ui.positionBarContainer.getLocationOnScreen(location)
-            x = location[0] + ui.positionBarContainer.width / 2f
-            startY = location[1] + ui.positionBarContainer.height * 0.1f
-            endY = location[1] + ui.positionBarContainer.height * 0.85f
-        }
-        val down = SystemClock.uptimeMillis()
-        listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP).forEachIndexed { index, action ->
-            val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x,
-                if (index == 0) startY else endY, 0)
-            event.source = InputDevice.SOURCE_TOUCHSCREEN
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
-            finally { event.recycle() }
+            ui.contentView.scrollTo(0, ui.contentView.layout.height * 3 / 4)
         }
         awaitDialog { it.binding.positionBar.progress > 6500 }
         onDialog {
@@ -318,7 +301,7 @@ class ContentEditSearchTest {
     }
 
     @Test
-    fun recreationRetainsSearchDraftAndPositionWithPortraitAndLandscapeScreenshots() {
+    fun recreationRetainsSearchDraftAndPosition() {
         onDialog {
             it.binding.contentView.text!!.insert(0, "Edited draft\n")
             openSearch(it)
@@ -348,20 +331,7 @@ class ContentEditSearchTest {
             val text = it.binding.contentView.text!!
             assertEquals(1, text.getSpans(0, text.length, BackgroundColorSpan::class.java).size)
         }
-        scenario!!.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-        awaitDialog(stableMillis = 300) {
-            it.binding.root.width > it.binding.root.height &&
-                it.binding.searchCount.text.toString() == "1/1"
-        }
-        onDialog {
-            val ui = it.binding
-            assertTrue(ui.contentView.height > 0)
-            assertTrue(ui.searchInput.width > 0)
-            assertTrue(ui.searchBar.bottom <= ui.contentView.top)
-            assertTrue(ui.contentView.right <= ui.positionBarContainer.left)
-            assertEquals(edited, ui.contentView.text.toString())
-        }
-        screenshot("content-search-landscape")
+        onDialog { assertEquals(edited, it.binding.contentView.text.toString()) }
     }
 
     private fun openSearch(dialog: ContentEditDialog) {

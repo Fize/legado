@@ -2,11 +2,11 @@ package io.legado.app
 
 import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.DatabaseMigrations
+import io.legado.app.data.addLegadoMigrations
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.HighlightRule
 import org.junit.Assert.assertEquals
@@ -28,8 +28,8 @@ class MigrationTest {
     @get:Rule
     val helper: MigrationTestHelper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
-        AppDatabase::class.java.canonicalName,
-        FrameworkSQLiteOpenHelperFactory()
+        AppDatabase::class.java,
+        DatabaseMigrations.autoMigrationSpecs.toList()
     )
 
     @Test
@@ -46,7 +46,7 @@ class MigrationTest {
             InstrumentationRegistry.getInstrumentation().targetContext,
             AppDatabase::class.java,
             TEST_DB
-        ).addMigrations(*ALL_MIGRATIONS)
+        ).addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase
                 close()
@@ -62,7 +62,7 @@ class MigrationTest {
         helper.createDatabase(databaseName, 95).close()
 
         Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
+            .addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase.query("PRAGMA table_info(highlights)").use { cursor ->
                     val nameIndex = cursor.getColumnIndexOrThrow("name")
@@ -145,7 +145,7 @@ class MigrationTest {
         }
 
         Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
+            .addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase.query(
                     "select bookUrl, chapterUrl from highlights where time = 1"
@@ -167,7 +167,7 @@ class MigrationTest {
         helper.createDatabase(databaseName, 97).close()
 
         Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
+            .addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase.query("PRAGMA table_info(highlightRules)")
                     .use { cursor ->
@@ -215,7 +215,7 @@ class MigrationTest {
         }
 
         Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
+            .addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase.query(
                     "select applyToBody from highlightRules where name = 'rule'"
@@ -245,7 +245,7 @@ class MigrationTest {
         }
 
         Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
+            .addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase.query(
                     "select name, pattern, isEnabled, sortOrder, uuid " +
@@ -310,7 +310,7 @@ class MigrationTest {
         }
 
         Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
+            .addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase.query(
                     "select bookUrl, customCoverUrl, persistedCoverUrl from books order by bookUrl"
@@ -345,7 +345,7 @@ class MigrationTest {
         }
 
         Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
+            .addLegadoMigrations()
             .build().apply {
                 openHelper.writableDatabase.query(
                     "select scopeTitle, scopeSource, scopeContent from replace_rules where id = 1"
@@ -367,24 +367,22 @@ class MigrationTest {
         context.deleteDatabase(databaseName)
         helper.createDatabase(databaseName, 103).close()
 
-        Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .addMigrations(*ALL_MIGRATIONS)
-            .build().apply {
-                openHelper.writableDatabase.query("PRAGMA table_info(rssSources)").use { cursor ->
-                    val nameIndex = cursor.getColumnIndexOrThrow("name")
-                    val columns = buildSet {
-                        while (cursor.moveToNext()) add(cursor.getString(nameIndex))
-                    }
-                    assertTrue(columns.contains("nextContentUrl"))
+        helper.runMigrationsAndValidate(databaseName, 104, true, *ALL_MIGRATIONS).use { database ->
+            database.query("PRAGMA table_info(rssSources)").use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val columns = buildSet {
+                    while (cursor.moveToNext()) add(cursor.getString(nameIndex))
                 }
-                close()
+                assertTrue(columns.contains("nextContentUrl"))
             }
+        }
     }
 
     @Test
     fun bookCoverUpdatesRejectStaleStateAndSupportBothRestoreLevels() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .addLegadoMigrations()
             .allowMainThreadQueries()
             .build()
         try {
@@ -463,6 +461,7 @@ class MigrationTest {
     fun highlightRuleDaoKeepsUuidIdentityAndRollsBackInvalidImports() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .addLegadoMigrations()
             .allowMainThreadQueries()
             .build()
         try {

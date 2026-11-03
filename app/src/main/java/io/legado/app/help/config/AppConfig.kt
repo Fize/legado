@@ -223,12 +223,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.showLastUpdateTime, value)
         }
 
-    var showSearchReadRecord: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.showSearchReadRecord, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.showSearchReadRecord, value)
-        }
-
     var bookshelfReadProgressMode: Int
         get() = BookshelfReadProgressMode.resolve(
             appCtx.defaultSharedPreferences.all[PreferKey.bookshelfReadProgressMode],
@@ -820,12 +814,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val paddingDisplayCutouts
         get() = appCtx.getPrefBoolean(PreferKey.paddingDisplayCutouts, false)
 
-    var searchScope: String
-        get() = appCtx.getPrefString("searchScope") ?: ""
-        set(value) {
-            appCtx.putPrefString("searchScope", value)
-        }
-
     var searchGroup: String
         get() = appCtx.getPrefString("searchGroup") ?: ""
         set(value) {
@@ -939,111 +927,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     //跳转到漫画界面不使用富文本模式
     val showMangaUi: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showMangaUi, true)
-
-    //禁用漫画缩放
-    var disableMangaScale: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.disableMangaScale, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.disableMangaScale, value)
-        }
-
-    var mangaLongClickSaveImage: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.mangaLongClickSaveImage, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.mangaLongClickSaveImage, value)
-        }
-
-    var disableMangaPageAnim: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.disableMangaPageAnim, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.disableMangaPageAnim, value)
-        }
-
-    //漫画预加载数量
-    var mangaPreDownloadNum
-        get() = appCtx.getPrefInt(PreferKey.mangaPreDownloadNum, 10)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.mangaPreDownloadNum, value)
-        }
-
-    //点击翻页
-    var disableClickScroll
-        get() = appCtx.getPrefBoolean(PreferKey.disableClickScroll, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.disableClickScroll, value)
-        }
-
-    //漫画滚动速度
-    var mangaAutoPageSpeed
-        get() = appCtx.getPrefInt(PreferKey.mangaAutoPageSpeed, 3)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.mangaAutoPageSpeed, value)
-        }
-
-    //漫画页脚配置
-    var mangaFooterConfig
-        get() = appCtx.getPrefString(PreferKey.mangaFooterConfig, "")
-        set(value) {
-            appCtx.putPrefString(PreferKey.mangaFooterConfig, value)
-        }
-
-    //漫画水平滚动
-    var enableMangaHorizontalScroll
-        get() = appCtx.getPrefBoolean(PreferKey.enableMangaHorizontalScroll, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.enableMangaHorizontalScroll, value)
-        }
-
-    //漫画横屏双页并排翻页（默认开启）
-    var enableMangaDoublePage: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.enableMangaDoublePage, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.enableMangaDoublePage, value)
-        }
-
-    var mangaRightToLeft
-        get() = appCtx.getPrefBoolean(PreferKey.mangaRightToLeft, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.mangaRightToLeft, value)
-        }
-
-    var mangaColorFilter
-        get() = appCtx.getPrefString(PreferKey.mangaColorFilter, "")
-        set(value) {
-            appCtx.putPrefString(PreferKey.mangaColorFilter, value)
-        }
-
-    //禁用漫画内标题
-    var hideMangaTitle
-        get() = appCtx.getPrefBoolean(PreferKey.hideMangaTitle, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.hideMangaTitle, value)
-        }
-
-    //开启墨水屏模式
-    var enableMangaEInk
-        get() = appCtx.getPrefBoolean(PreferKey.enableMangaEInk, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.enableMangaEInk, value)
-        }
-
-    var mangaEInkThreshold
-        get() = appCtx.getPrefInt(PreferKey.mangaEInkThreshold, 150)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.mangaEInkThreshold, value)
-        }
-
-    var disableHorizontalPageSnap
-        get() = appCtx.getPrefBoolean(PreferKey.disableHorizontalPageSnap, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.disableHorizontalPageSnap, value)
-        }
-
-    var enableMangaGray
-        get() = appCtx.getPrefBoolean(PreferKey.enableMangaGray, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.enableMangaGray, value)
-        }
 
     var welcomeImage
         get() = appCtx.getPrefString(PreferKey.welcomeImage)

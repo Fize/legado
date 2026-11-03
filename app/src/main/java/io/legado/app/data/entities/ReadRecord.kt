@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import io.legado.app.constant.AppConst
 import io.legado.app.data.appDb
+import io.legado.app.data.AppDatabase
 import io.legado.app.help.book.ReadRecordCoverCache
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.utils.GSON
@@ -75,9 +76,9 @@ fun ReadRecord.saveWithCover(book: Book?, elapsed: Long? = null) {
     ReadRecordCoverCache.request(saved.copy(), snapshotBook?.getCoverSourceOrigin())
 }
 
-private fun ReadRecord.refreshChapterTitle(snapshotBook: Book?) {
+private fun ReadRecord.refreshChapterTitle(snapshotBook: Book?, database: AppDatabase = appDb) {
     if (snapshotBook != null && lastChapterIndex >= 0) {
-        appDb.bookChapterDao.getChapter(snapshotBook.bookUrl, lastChapterIndex)?.let { chapter ->
+        database.bookChapterDao.getChapter(snapshotBook.bookUrl, lastChapterIndex)?.let { chapter ->
             lastChapterTitle = chapter.getDisplayTitle(
                 ContentProcessor.get(snapshotBook.name, snapshotBook.origin).getTitleReplaceRules(),
                 snapshotBook.getUseReplaceRule(),
@@ -88,16 +89,16 @@ private fun ReadRecord.refreshChapterTitle(snapshotBook: Book?) {
 }
 
 /** Copy the bookshelf data before deleting it so the history row remains displayable. */
-fun Book.saveReadRecordSnapshot() {
+fun Book.saveReadRecordSnapshot(database: AppDatabase = appDb) {
     var snapshot: ReadRecord? = null
-    appDb.runInTransaction {
-        val current = appDb.readRecordDao.getRecord(AppConst.androidId, name, author) ?: return@runInTransaction
+    database.runInTransaction {
+        val current = database.readRecordDao.getRecord(AppConst.androidId, name, author) ?: return@runInTransaction
         val record = current.copy().apply {
             updateSnapshot(this@saveReadRecordSnapshot)
-            refreshChapterTitle(this@saveReadRecordSnapshot)
+            refreshChapterTitle(this@saveReadRecordSnapshot, database)
             coverUrl = ReadRecordCoverCache.retainLocal(coverUrl)
         }
-        if (record != current) appDb.readRecordDao.update(record)
+        if (record != current) database.readRecordDao.update(record)
         snapshot = record
     }
     snapshot?.let { ReadRecordCoverCache.request(it, getCoverSourceOrigin()) }

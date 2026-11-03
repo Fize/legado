@@ -52,12 +52,15 @@ import androidx.fragment.app.viewModels
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.entities.HttpTTS
+import io.legado.app.help.http.WebCookieUnavailableException
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.about.openAppLogs
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.SourceLoginRoute
+import io.legado.app.ui.navigation.SourceLoginTarget
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.GSON
 import io.legado.app.utils.sendToClip
@@ -198,7 +201,11 @@ class HttpTtsEditDialog() : BaseDialogFragment(adaptationSoftKeyboard = true) {
     }
 
     private fun clearLoginHeader() {
-        dataFromView().removeLoginHeader()
+        try {
+            dataFromView().removeLoginHeader()
+        } catch (error: WebCookieUnavailableException) {
+            toastOnUi(R.string.web_cookie_unavailable)
+        }
     }
 
     @Composable
@@ -276,10 +283,15 @@ class HttpTtsEditDialog() : BaseDialogFragment(adaptationSoftKeyboard = true) {
                                                 toastOnUi("登录url不能为空")
                                             } else {
                                                 viewModel.save(httpTts) {
-                                                    startActivity<SourceLoginActivity> {
-                                                        putExtra("type", "httpTts")
-                                                        putExtra("key", httpTts.id.toString())
-                                                    }
+                                                    startActivity(
+                                                        AppActivity.startIntent(
+                                                            requireContext(),
+                                                            SourceLoginRoute(
+                                                                SourceLoginTarget.HttpTts,
+                                                                key = httpTts.id.toString(),
+                                                            ),
+                                                        ),
+                                                    )
                                                 }
                                             }
                                         }
@@ -321,7 +333,7 @@ class HttpTtsEditDialog() : BaseDialogFragment(adaptationSoftKeyboard = true) {
                                     text = { Text(stringResource(R.string.log)) },
                                     onClick = {
                                         showMenu = false
-                                        showDialogFragment<AppLogDialog>()
+                                        requireContext().openAppLogs()
                                     }
                                 )
                             }

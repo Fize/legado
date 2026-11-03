@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.view.KeyEvent
+import io.legado.app.help.storage.RestoreRecoveryGate
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.help.LifecycleHelp
@@ -37,6 +38,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
         private const val TAG = "MediaButtonReceiver"
 
         fun handleIntent(context: Context, intent: Intent): Boolean {
+            if (RestoreRecoveryGate.isQuarantined) return false
             val intentAction = intent.action
             if (Intent.ACTION_MEDIA_BUTTON == intentAction) {
                 @Suppress("DEPRECATION")
@@ -79,6 +81,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
         }
 
         fun readAloud(context: Context, isMediaKey: Boolean = true) {
+            if (RestoreRecoveryGate.isQuarantined) return
             when {
                 BaseReadAloudService.isRun -> {
                     if (BaseReadAloudService.isPlay()) {

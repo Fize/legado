@@ -33,9 +33,12 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.MalformedURLException
 import java.net.URL
+import java.security.MessageDigest
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
+
+enum class WebDavContentMatch { Missing, Matches, Different }
 
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 open class WebDav(
@@ -425,6 +428,31 @@ open class WebDav(
             checkResult(this)
         }.body.byteStream()
         return byteStream
+    }
+
+    /** Bounded streaming verification after a PUT whose acknowledgement may have been lost. */
+    suspend fun matchesContent(sha256: String, size: Long): WebDavContentMatch = withContext(IO) {
+        require(size >= 0)
+        val url = httpUrl ?: throw WebDavException("url不能为空")
+        webDavClient.newCallResponse { url(url) }.use { response ->
+            if (response.code == 404) return@withContext WebDavContentMatch.Missing
+            checkResult(response)
+            val digest = MessageDigest.getInstance("SHA-256")
+            var read = 0L
+            response.body.byteStream().use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val count = input.read(buffer, 0, minOf(buffer.size.toLong(), size - read + 1).toInt())
+                    if (count < 0) break
+                    read += count
+                    if (read > size) return@withContext WebDavContentMatch.Different
+                    digest.update(buffer, 0, count)
+                }
+            }
+            if (read == size && digest.digest().joinToString("") { "%02x".format(it) } == sha256)
+                WebDavContentMatch.Matches else WebDavContentMatch.Different
+        }
     }
 
     /**

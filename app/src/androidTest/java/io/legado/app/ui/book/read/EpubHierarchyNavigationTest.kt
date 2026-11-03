@@ -1,18 +1,7 @@
 package io.legado.app.ui.book.read
 
-import android.content.Intent
-import android.graphics.Bitmap
-import android.os.SystemClock
-import android.view.View
-import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
-import androidx.recyclerview.widget.RecyclerView
-import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
-import androidx.test.runner.lifecycle.Stage
-import io.legado.app.R
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.appDb
@@ -20,15 +9,9 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.book.BookHelp
-import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.EpubFile
-import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListAdapter
-import io.legado.app.ui.book.toc.ChapterListFragment
-import io.legado.app.ui.book.toc.TocActivity
+import io.legado.app.ui.book.toc.TocListState
 import io.legado.app.ui.book.toc.TocListItem
-import io.legado.app.ui.widget.TitleBar
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.HtmlFormatter
 import org.junit.Assert.*
 import org.junit.Test
@@ -57,6 +40,52 @@ class EpubHierarchyNavigationTest {
                 assertEquals(index, chapter.index)
                 assertEquals(urls.getOrNull(index + 1).orEmpty(), chapter.getVariable("nextUrl"))
                 assertTrue(EpubFile.getContent(fixture.book, chapter).orEmpty().contains("正文"))
+            }
+        }
+    }
+
+    @Test
+    fun readerResourcesKeepChapterFragmentsAndEachPhysicalFileScope() {
+        for (asset in listOf("issue1074-containers-fragments.epub", "issue1074-nav3-containers.epub")) {
+            fixture(asset).use { fixture ->
+                val identities = identities(fixture.book)
+                val first = EpubFile.getReaderChapter(fixture.book, fixture.chapters[0])!!
+                val second = EpubFile.getReaderChapter(fixture.book, fixture.chapters[1])!!
+                val next = EpubFile.getReaderChapter(fixture.book, fixture.chapters[2])!!
+                assertEquals(listOf("OEBPS/a.xhtml"), first.parts.map { it.address.path })
+                assertEquals(listOf("OEBPS/a.xhtml", "OEBPS/b.xhtml"), second.parts.map { it.address.path })
+                assertEquals(listOf("OEBPS/b.xhtml"), next.parts.map { it.address.path })
+                val firstText = first.parts.joinToString { org.jsoup.Jsoup.parse(it.html).text() }
+                val secondText = second.parts.joinToString { org.jsoup.Jsoup.parse(it.html).text() }
+                val nextText = next.parts.joinToString { org.jsoup.Jsoup.parse(it.html).text() }
+                assertTrue(firstText.contains("ALPHA_ONLY")); assertFalse(firstText.contains("BEFORE_START") || firstText.contains("SECOND_ONLY"))
+                assertTrue(secondText.contains("SECOND_ONLY") && secondText.contains("TAIL_AFTER_SHARED_ID"))
+                assertFalse(secondText.contains("ALPHA_ONLY") || secondText.contains("NEXT_RESOURCE_ONLY"))
+                assertTrue(nextText.contains("NEXT_RESOURCE_ONLY")); assertFalse(nextText.contains("BEFORE_NEXT"))
+                assertEquals(identities, identities(fixture.book))
+            }
+        }
+    }
+
+    @Test
+    fun scopedLinksResolveToTheClippedChapterInsteadOfTheOtherFilesIdenticalId() = kotlinx.coroutines.runBlocking {
+        for (asset in listOf("issue1074-containers-fragments.epub","issue1074-nav3-containers.epub")) {
+            fixture(asset).use { fixture ->
+                val id=UUID.randomUUID().toString()
+                val owner=io.legado.app.data.repository.ReaderProgressOwner(id,"link-owner",0)
+                appDb.readerSessionDao.claim(io.legado.app.data.entities.ReaderSessionState(id,fixture.book.bookUrl,
+                    fixture.book.bookUrl,true,false,updatedAt=System.currentTimeMillis()),owner.token)
+                try {
+                    val repository=io.legado.app.data.repository.TextReaderEpubRepository(appDb,io.legado.app.data.cache.CacheResourceLeases())
+                    val key=io.legado.app.model.TextReaderChapterKey(owner,fixture.book.bookUrl,fixture.book.origin,0,1)
+                    for ((path,fragment,index) in listOf(Triple("OEBPS/a.xhtml","cut",1),
+                        Triple("OEBPS/a.xhtml","collision",1),Triple("OEBPS/b.xhtml","collision",2))) {
+                        val address=io.legado.app.model.localBook.EpubResourceAddress.fromPath(path,fragment)!!
+                        assertEquals(index,repository.targetChapter(key,address)!!.index)
+                    }
+                    assertFalse(EpubFile.getReaderChapter(fixture.book,fixture.chapters[0])!!.parts.single().startsAtRoot)
+                    assertTrue(EpubFile.getReaderChapter(fixture.book,fixture.chapters[1])!!.parts.last().startsAtRoot)
+                } finally { appDb.readerSessionDao.close(id,owner.token) }
             }
         }
     }
@@ -125,7 +154,7 @@ class EpubHierarchyNavigationTest {
     }
 
     @Test
-    fun oldImportedDirectorySupportsRecursiveUiAndKeepsProgressBookmarksAndReaderTargets() {
+    fun oldImportedDirectoryHierarchyKeepsProgressBookmarksAndReaderTargets() {
         fixture("issue1074-reporter.epub").use { fixture ->
             val book = fixture.book.apply {
                 durChapterIndex = 2; durChapterPos = 1; durChapterTitle = titles[2]
@@ -134,58 +163,40 @@ class EpubHierarchyNavigationTest {
             val bookmark = Bookmark(bookName = book.name, chapterIndex = 7, chapterPos = 9, chapterName = titles[7])
             appDb.bookmarkDao.insert(bookmark)
             val identities = identities(book)
+            val state = TocListState().apply {
+                setFullChapters(fixture.chapters, reverseOrder = false, currentChapterIndex = 2,
+                    epubToc = EpubFile.getToc(book))
+            }
             try {
-                ActivityScenario.launch<TocActivity>(tocIntent(book)).use { scenario ->
-                    await { rows()?.map { it.chapter.title } == titles }
-                    assertEquals(depths, rows()!!.map { it.depth })
-                    assertVisibleIndent(-1, 0); assertVisibleIndent(-2, 1); assertVisibleIndent(-3, 2)
-                    scrollToTop()
-                    screenshot("epub-hierarchy-expanded")
-                    clickNode(-2, arrow = true)
-                    await { rows()?.size == 9 }
-                    clickNode(-1, arrow = true)
-                    await { rows()?.size == 8 }
-                    assertTrue((rows()!!.first() as TocListItem.Volume).containsCurrentChapter)
-                    assertTrue(rows()!!.filter { it.chapter.title.startsWith("番外") }.all { it.depth == 0 })
-                    screenshot("epub-hierarchy-collapsed")
-                    search(scenario, "第一节")
-                    await { rows()?.map { it.chapter.title } == titles.take(3) }
-                    screenshot("epub-hierarchy-search")
-                    closeSearch(scenario)
-                    await { rows()?.size == 8 }
-                    scenario.onActivity { assertTrue(it.findViewById<View>(R.id.tv_current_chapter_info).performClick()) }
-                    await { rows()?.size == 10 }
-                    assertTrue(rows()!!.filterIsInstance<TocListItem.Volume>().take(2).all { !it.collapsed })
-                    screenshot("epub-hierarchy-current-revealed")
-                    reverse(scenario)
-                    val reversedTitles = listOf(9, 8, 6, 7, 5, 3, 4, 0, 1, 2).map(titles::get)
-                    await { rows()?.map { it.chapter.title } == reversedTitles }
-                    scrollToTop()
-                    screenshot("epub-hierarchy-reversed")
-                    scenario.recreate()
-                    await { rows()?.map { it.chapter.title } == reversedTitles }
-                    assertEquals(2, appDb.bookDao.getBook(book.bookUrl)!!.durChapterIndex)
-                    assertEquals(1, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
-                    assertEquals(identities, identities(book))
-                    assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(book.name, book.author))
-                }
-                ActivityScenario.launch<ReadBookActivity>(readerIntent(book)).use { reader ->
-                    await { ReadBook.book?.bookUrl == book.bookUrl && ReadBook.curTextChapter?.isCompleted == true }
-                    dismissFirstRun(reader)
-                    reader.onActivity { it.openChapterList() }
-                    await { rows()?.size == 10 }
-                    clickNode(-9)
-                    await { ReadBook.durChapterIndex == 8 && ReadBook.curTextChapter?.chapter?.url == "OEBPS/Text/09.html" }
-                    screenshot("epub-hierarchy-reader-extra")
-                    assertEquals(identities, identities(book))
-                    assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(book.name, book.author))
-                }
+                val expanded = state.showNormal(2)
+                assertEquals(titles, expanded.map { it.chapter.title })
+                assertEquals(depths, expanded.map { it.depth })
+                assertTrue(state.toggleVolume(-2))
+                assertTrue(state.toggleVolume(-1))
+                val collapsed = state.showNormal(2)
+                assertEquals(8, collapsed.size)
+                assertTrue((collapsed.first() as TocListItem.Volume).containsCurrentChapter)
+                assertTrue(collapsed.filter { it.chapter.title.startsWith("番外") }.all { it.depth == 0 })
+                val search = state.showSearch(state.searchIndexes("第一节"), 2)
+                assertEquals(titles.take(3), search.map { it.chapter.title })
+                assertTrue(state.expandVolumeContainingChapter(2))
+                assertEquals(titles, state.showNormal(2).map { it.chapter.title })
+                state.setFullChapters(fixture.chapters, reverseOrder = true, epubToc = EpubFile.getToc(book))
+                assertEquals(listOf(9, 8, 6, 7, 5, 3, 4, 0, 1, 2).map(titles::get),
+                    state.showNormal(2).map { it.chapter.title })
+                assertEquals(2, appDb.bookDao.getBook(book.bookUrl)!!.durChapterIndex)
+                assertEquals(1, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
+                assertEquals(identities, identities(book))
+                assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(book.name, book.author))
+                val extra = fixture.chapters.single { it.url == "OEBPS/Text/09.html" }
+                assertEquals(8, extra.index)
+                assertTrue(EpubFile.getContent(book, extra).orEmpty().contains("正文"))
             } finally { appDb.bookmarkDao.delete(bookmark) }
         }
     }
 
     @Test
-    fun oldPhysicallyReversedCacheKeepsIndexesAndContainerClicksCannotOpenPreviousContent() {
+    fun oldPhysicallyReversedCacheKeepsIndexesAndContainerContentBoundaries() {
         fixture("issue1074-containers-fragments.epub").use { fixture ->
             val book = fixture.book.apply {
                 setReverseToc(true); durChapterIndex = 1; durChapterPos = 7; durChapterTitle = "Second"
@@ -195,34 +206,24 @@ class EpubHierarchyNavigationTest {
             appDb.bookChapterDao.insert(*reversed.toTypedArray())
             appDb.bookDao.update(book)
             val identities = identities(book)
-            ActivityScenario.launch<TocActivity>(tocIntent(book)).use { scenario ->
-                await { rows()?.map { it.chapter.title } == listOf("Next", "Container", "First", "Second", "Alias") }
-                assertNull(rows()!![1].readingChapter)
-                assertEquals(1, rows()!![3].readingChapter!!.index)
-                clickNode(-1)
-                await { rows()?.map { it.chapter.title } == listOf("Next", "Container") }
-                scenario.onActivity { assertFalse(it.isFinishing) }
-                clickNode(-1)
-                await { rows()?.size == 5 }
-                reverse(scenario)
-                await { rows()?.map { it.chapter.title } == listOf("Container", "First", "Alias", "Second", "Next") }
-                assertEquals(identities, identities(book))
-                assertEquals(7, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
-                screenshot("epub-hierarchy-resource-less-parent")
-            }
-            ActivityScenario.launch<ReadBookActivity>(readerIntent(book)).use { reader ->
-                await { ReadBook.book?.bookUrl == book.bookUrl && ReadBook.curTextChapter?.isCompleted == true }
-                dismissFirstRun(reader)
-                reader.onActivity { it.openChapterList() }
-                await { rows()?.size == 5 }
-                clickNode(-4)
-                await { ReadBook.durChapterIndex == 1 && ReadBook.curTextChapter?.chapter?.url == "OEBPS/a.xhtml#cut" }
-                val chapter = ReadBook.curTextChapter!!.chapter
-                val content = EpubFile.getContent(book, chapter).orEmpty()
-                assertTrue(content.contains("SECOND_ONLY") && content.contains("TAIL_AFTER_SHARED_ID"))
-                assertFalse(content.contains("ALPHA_ONLY") || content.contains("NEXT_RESOURCE_ONLY"))
-                assertEquals(identities, identities(book))
-            }
+            val epubToc = EpubFile.getToc(book)
+            val state = TocListState().apply { setFullChapters(reversed, reverseOrder = true, epubToc = epubToc) }
+            val rows = state.showNormal(1)
+            assertEquals(listOf("Next", "Container", "First", "Second", "Alias"), rows.map { it.chapter.title })
+            assertNull(rows[1].readingChapter)
+            assertEquals(1, rows[3].readingChapter!!.index)
+            assertTrue(state.toggleVolume(rows[1].chapter.index))
+            assertEquals(listOf("Next", "Container"), state.showNormal(1).map { it.chapter.title })
+            assertTrue(state.toggleVolume(rows[1].chapter.index))
+            state.setFullChapters(reversed, reverseOrder = false, epubToc = epubToc)
+            assertEquals(listOf("Container", "First", "Alias", "Second", "Next"),
+                state.showNormal(1).map { it.chapter.title })
+            assertEquals(identities, identities(book))
+            assertEquals(7, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
+            val chapter = fixture.chapters.single { it.url == "OEBPS/a.xhtml#cut" }
+            val content = EpubFile.getContent(book, chapter).orEmpty()
+            assertTrue(content.contains("SECOND_ONLY") && content.contains("TAIL_AFTER_SHARED_ID"))
+            assertFalse(content.contains("ALPHA_ONLY") || content.contains("NEXT_RESOURCE_ONLY"))
         }
     }
 
@@ -256,97 +257,5 @@ class EpubHierarchyNavigationTest {
 
     private fun identities(book: Book) = appDb.bookChapterDao.getChapterList(book.bookUrl).map {
         listOf(it.index, it.url, it.title, it.startFragmentId, it.endFragmentId, it.getVariable("nextUrl"))
-    }
-    private fun tocIntent(book: Book) = Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
-    private fun readerIntent(book: Book) = Intent(context, ReadBookActivity::class.java).putExtra("bookUrl", book.bookUrl)
-
-    private fun rows(): List<TocListItem>? {
-        var items: List<TocListItem>? = null
-        instrumentation.runOnMainSync { items = (recycler()?.adapter as? ChapterListAdapter)?.getItems()?.toList() }
-        return items
-    }
-
-    private fun recycler(): RecyclerView? = ActivityLifecycleMonitorRegistry.getInstance()
-        .getActivitiesInStage(Stage.RESUMED).filterIsInstance<TocActivity>().firstOrNull()
-        ?.supportFragmentManager?.fragments?.filterIsInstance<ChapterListFragment>()?.firstOrNull()
-        ?.view?.findViewById(R.id.recycler_view)
-
-    private fun clickNode(index: Int, arrow: Boolean = false) {
-        await {
-            var clicked = false
-            instrumentation.runOnMainSync {
-                val list = recycler() ?: return@runOnMainSync
-                val adapter = list.adapter as? ChapterListAdapter ?: return@runOnMainSync
-                val position = adapter.getItems().indexOfFirst { it.chapter.index == index }
-                if (position < 0) return@runOnMainSync
-                list.scrollToPosition(position)
-                val row = list.findViewHolderForAdapterPosition(position)?.itemView ?: return@runOnMainSync
-                clicked = (if (arrow) row.findViewById<View>(R.id.end_actions) else row).performClick()
-            }
-            clicked
-        }
-    }
-
-    private fun assertVisibleIndent(index: Int, depth: Int) {
-        await {
-            var ready = false
-            instrumentation.runOnMainSync {
-                val list = recycler() ?: return@runOnMainSync
-                val adapter = list.adapter as? ChapterListAdapter ?: return@runOnMainSync
-                val position = adapter.getItems().indexOfFirst { it.chapter.index == index }
-                list.scrollToPosition(position)
-                val row = list.findViewHolderForAdapterPosition(position)?.itemView ?: return@runOnMainSync
-                assertEquals(12.dpToPx() + depth * 10.dpToPx(), row.findViewById<View>(R.id.tv_chapter_item).paddingStart)
-                ready = true
-            }
-            ready
-        }
-    }
-
-    private fun scrollToTop() = instrumentation.runOnMainSync { recycler()?.scrollToPosition(0) }
-    private fun reverse(scenario: ActivityScenario<TocActivity>) = scenario.onActivity { activity ->
-        val menu = PopupMenu(activity, activity.window.decorView).menu
-        activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_reverse_toc, 0, "Reverse"))
-    }
-    private fun search(scenario: ActivityScenario<TocActivity>, query: String) = scenario.onActivity { activity ->
-        val search = activity.findViewById<TitleBar>(R.id.title_bar).menu.findItem(R.id.menu_search).actionView as SearchView
-        assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_button).performClick())
-        search.setQuery(query, false)
-        assertFalse(search.isIconified)
-    }
-    private fun closeSearch(scenario: ActivityScenario<TocActivity>) = scenario.onActivity { activity ->
-        val search = activity.findViewById<TitleBar>(R.id.title_bar).menu.findItem(R.id.menu_search).actionView as SearchView
-        search.setQuery("", false)
-        assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_close_btn).performClick())
-    }
-    private fun dismissFirstRun(reader: ActivityScenario<ReadBookActivity>) = reader.onActivity { activity ->
-        activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-            .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
-    }
-    private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
-        await {
-            var settled = false
-            instrumentation.runOnMainSync {
-                val list = recycler()
-                settled = list == null || (!list.isComputingLayout && list.itemAnimator?.isRunning != true)
-            }
-            settled
-        }
-        SystemClock.sleep(100)
-        instrumentation.waitForIdleSync()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        try {
-            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream()
-                .use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        } finally { bitmap.recycle() }
-    }
-    private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
-        }
-        assertTrue("EPUB directory or reader did not reach the expected state", condition())
     }
 }

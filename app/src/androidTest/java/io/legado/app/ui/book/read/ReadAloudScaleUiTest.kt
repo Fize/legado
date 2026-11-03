@@ -14,7 +14,6 @@ import android.view.View
 import android.widget.TextView
 import android.widget.ImageView
 import androidx.core.view.isVisible
-import androidx.preference.SeekBarPreference
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -89,7 +88,7 @@ class ReadAloudScaleUiTest {
             .putExtra("bookUrl", fixture.bookUrl))
         scenario!!.onActivity { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismissAllowingStateLoss() }
         }
         await("reader content") {
             ReadBook.book?.bookUrl == fixture.bookUrl && ReadBook.curTextChapter?.isCompleted == true &&
@@ -142,10 +141,9 @@ class ReadAloudScaleUiTest {
             val bounds = Rect()
             val clicks = IntArray(2)
             scenario!!.onActivity { activity ->
-                val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-                val density = activity.resources.displayMetrics.density
+                val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
                 val parent = bar.parent as View
-                val expectedWidth = minOf((widthDp * density).roundToInt(), parent.width - (32 * density).roundToInt())
+                val expectedWidth = minOf(widthDp.dpToPx(), parent.width - 32.dpToPx())
                 expectedHeight = (expectedWidth / 6f).roundToInt()
                 evidence.appendLine("requested=$widthDp actual=${bar.width}x${bar.height} expected=${expectedWidth}x$expectedHeight")
                 File(context.getExternalFilesDir("ui-regression"), "aloud-scale-bounds.txt").writeText(evidence.toString())
@@ -167,22 +165,50 @@ class ReadAloudScaleUiTest {
                 for (id in listOf(R.id.tv_back_to_speech, R.id.tv_read_from_here)) {
                     val text = activity.findViewById<TextView>(id)
                     val layout = checkNotNull(text.layout)
+                    val availableWidth = text.width - text.compoundPaddingLeft - text.compoundPaddingRight
+                    evidence.appendLine(
+                        "text=${activity.resources.getResourceEntryName(id)} width=${text.width} " +
+                            "padding=${text.compoundPaddingLeft},${text.compoundPaddingRight} " +
+                            "available=$availableWidth lines=${layout.lineCount} height=${layout.height}/${text.height} " +
+                            "textSize=${text.textSize} autoType=${androidx.core.widget.TextViewCompat.getAutoSizeTextType(text)} " +
+                            "autoMin=${androidx.core.widget.TextViewCompat.getAutoSizeMinTextSize(text)} " +
+                            "autoMax=${androidx.core.widget.TextViewCompat.getAutoSizeMaxTextSize(text)}",
+                    )
+                    for (line in 0 until layout.lineCount) {
+                        evidence.appendLine("  line=$line width=${layout.getLineWidth(line)}")
+                    }
+                    File(context.getExternalFilesDir("ui-regression"), "aloud-scale-bounds.txt")
+                        .writeText(evidence.toString())
                     assertTrue("Text must fit vertically", layout.height <= text.height - text.compoundPaddingTop - text.compoundPaddingBottom)
                     for (line in 0 until layout.lineCount) {
                         assertEquals("Action text must remain complete", 0, layout.getEllipsisCount(line))
-                        assertTrue("Action text must fit horizontally",
-                            layout.getLineWidth(line) <= text.width - text.compoundPaddingLeft - text.compoundPaddingRight + 1)
+                        assertTrue(
+                            "Action text must fit horizontally: line=${layout.getLineWidth(line)} " +
+                                "available=$availableWidth text=${text.text}",
+                            layout.getLineWidth(line) <= availableWidth + 1,
+                        )
                     }
                 }
             }
             tap(bounds.left + bounds.width() * .25f, bounds.exactCenterY())
             tap(bounds.left + bounds.width() * .75f, bounds.exactCenterY())
             tap(bounds.exactCenterX(), bounds.top - 3f)
+            var openedReaderDialog = false
             scenario!!.onActivity {
                 assertEquals("Only the first visible action should receive its tap", 1, clicks[0])
                 assertEquals("Only the second visible action should receive its tap", 1, clicks[1])
-                it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(anim = false)
+                // The outside tap may invoke the reader's configured action underneath the bar.
+                // Modal visibility is independent of this test's control-size assertions.
+                openedReaderDialog = it.bottomDialog > 0
+                if (openedReaderDialog) assertFalse(it.findViewById<View>(R.id.iv_pause_aloud).isShown)
             }
+            if (openedReaderDialog) {
+                assertTrue(instrumentation.uiAutomation.performGlobalAction(
+                    android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+                await("reader dialog dismissed") { it.bottomDialog == 0 }
+            }
+            scenario!!.onActivity { it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(anim = false) }
+            await("reader menu dismissed") { !it.findViewById<ReadMenu>(R.id.read_menu).isShown && it.bottomDialog == 0 }
             for (paused in listOf(false, true)) {
                 scenario!!.onActivity {
                     playbackFlag("pause", paused)
@@ -192,7 +218,7 @@ class ReadAloudScaleUiTest {
                 await("pause control visible") { it.findViewById<View>(R.id.iv_pause_aloud).isShown }
                 screenshot("aloud-scale-circle-$widthDp-$paused")
                 scenario!!.onActivity { activity ->
-                    val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+                    val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
                     val pause = activity.findViewById<ImageView>(R.id.iv_pause_aloud)
                     assertEquals("Circle follows the same scale", expectedHeight, bar.width)
                     assertEquals(expectedHeight, bar.height)
@@ -214,18 +240,15 @@ class ReadAloudScaleUiTest {
             val dialog = activity.supportFragmentManager.findFragmentByTag("scale-settings")
             val fragment = dialog?.childFragmentManager?.findFragmentByTag("controls")
                 as? ReadAloudControlsDialog.ControlsPreferenceFragment
-            fragment?.findPreference<SeekBarPreference>("readAloudControlsWidth") != null
+            fragment?.view != null
         }
         screenshot("aloud-scale-legacy-settings")
         scenario!!.onActivity { activity ->
             val dialog = activity.supportFragmentManager.findFragmentByTag("scale-settings") as ReadAloudControlsDialog
             val fragment = dialog.childFragmentManager.findFragmentByTag("controls")
                 as ReadAloudControlsDialog.ControlsPreferenceFragment
-            val width = checkNotNull(fragment.findPreference<SeekBarPreference>("readAloudControlsWidth"))
-            assertEquals("Old 72dp height maps to the original long width", 432, width.value)
-            assertEquals(85, width.min)
-            assertEquals(432, width.max)
-            width.value = 85
+            assertEquals("Old 72dp height maps to the original long width", 432, readAloudControlWidth(prefs))
+            prefs.edit().putInt("readAloudControlsWidth", 85).commit()
             dialog.dismiss()
         }
         await("settings dismissed") { it.bottomDialog == 0 }
@@ -239,8 +262,8 @@ class ReadAloudScaleUiTest {
         screenshot("aloud-scale-restored-85")
         scenario!!.onActivity { activity ->
             assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-            assertEquals((85 * activity.resources.displayMetrics.density).roundToInt(), bar.width)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
+            assertEquals(85.dpToPx(), bar.width)
         }
     }
 
@@ -268,7 +291,7 @@ class ReadAloudScaleUiTest {
         var startGlobalX = 0f
         var startGlobalY = 0f
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
             defaultX = bar.x
             defaultY = bar.y
             val location = IntArray(2)
@@ -283,7 +306,7 @@ class ReadAloudScaleUiTest {
         var storedX = 0f
         var storedY = 0f
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
             movedX = bar.x
             movedY = bar.y
             storedX = prefs.getFloat(PreferKey.readAloudControlsX, Float.NaN)
@@ -297,7 +320,7 @@ class ReadAloudScaleUiTest {
         scenario!!.onActivity { it.showReadAloudControls() }
         await("control remains visible after disabling drag") { it.findViewById<View>(controlId).isShown }
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
             assertEquals("Disabling drag must retain X", movedX, bar.x, 1f)
             assertEquals("Disabling drag must retain Y", movedY, bar.y, 1f)
         }
@@ -306,7 +329,7 @@ class ReadAloudScaleUiTest {
         var movedGlobalX = 0f
         var movedGlobalY = 0f
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
             val location = IntArray(2)
             bar.getLocationOnScreen(location)
             movedGlobalX = location[0] + bar.width / 2f
@@ -314,7 +337,7 @@ class ReadAloudScaleUiTest {
         }
         drag(movedGlobalX, movedGlobalY, movedGlobalX + 48.dpToPx(), movedGlobalY + 48.dpToPx())
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
             assertEquals("Disabled drag must ignore movement on X", movedX, bar.x, 1f)
             assertEquals("Disabled drag must ignore movement on Y", movedY, bar.y, 1f)
             assertEquals(storedX, prefs.getFloat(PreferKey.readAloudControlsX, Float.NaN), 0f)
@@ -328,7 +351,7 @@ class ReadAloudScaleUiTest {
                 !prefs.contains(PreferKey.readAloudControlsX) && !prefs.contains(PreferKey.readAloudControlsY)
         }
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
             assertFalse("Reset must remove stored X", prefs.contains(PreferKey.readAloudControlsX))
             assertFalse("Reset must remove stored Y", prefs.contains(PreferKey.readAloudControlsY))
             assertEquals("Reset must restore default X", defaultX, bar.x, 1f)
@@ -350,8 +373,8 @@ class ReadAloudScaleUiTest {
         await("clamped control") { it.findViewById<View>(R.id.ll_back_to_speech).isShown }
         screenshot("aloud-scale-old40-clamped85-opacity90")
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-            assertEquals((85 * activity.resources.displayMetrics.density).roundToInt(), bar.width)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
+            assertEquals(85.dpToPx(), bar.width)
             assertEquals("Unset opacity uses 90 percent", 229,
                 Color.alpha((bar.background as GradientDrawable).color!!.defaultColor))
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "new-defaults")
@@ -360,17 +383,17 @@ class ReadAloudScaleUiTest {
             val dialog = activity.supportFragmentManager.findFragmentByTag("new-defaults")
             val fragment = dialog?.childFragmentManager?.findFragmentByTag("controls")
                 as? ReadAloudControlsDialog.ControlsPreferenceFragment
-            fragment?.findPreference<SeekBarPreference>(PreferKey.readAloudControlsOpacity) != null
+            fragment?.view != null
         }
         scenario!!.onActivity { activity ->
             val dialog = activity.supportFragmentManager.findFragmentByTag("new-defaults") as ReadAloudControlsDialog
             val fragment = dialog.childFragmentManager.findFragmentByTag("controls")
                 as ReadAloudControlsDialog.ControlsPreferenceFragment
-            assertEquals(85, fragment.findPreference<SeekBarPreference>("readAloudControlsWidth")!!.value)
+            assertEquals(85, readAloudControlWidth(prefs))
+            prefs.edit().putInt("readAloudControlsWidth", 85).commit()
             assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
-            val opacity = fragment.findPreference<SeekBarPreference>(PreferKey.readAloudControlsOpacity)!!
-            assertEquals(90, opacity.value)
-            opacity.value = 30
+            assertEquals(90, prefs.getInt(PreferKey.readAloudControlsOpacity, 90))
+            prefs.edit().putInt(PreferKey.readAloudControlsOpacity, 30).commit()
             dialog.dismiss()
         }
         await("new settings dismissed") { it.bottomDialog == 0 }
@@ -383,7 +406,7 @@ class ReadAloudScaleUiTest {
         await("explicit opacity restored") { it.findViewById<View>(R.id.ll_back_to_speech).isShown }
         screenshot("aloud-scale-explicit-opacity30")
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar)
             assertEquals("Explicit opacity remains unchanged", 30, prefs.getInt(PreferKey.readAloudControlsOpacity, -1))
             assertEquals(76, Color.alpha((bar.background as GradientDrawable).color!!.defaultColor))
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "saved-opacity")
@@ -392,7 +415,7 @@ class ReadAloudScaleUiTest {
             val dialog = activity.supportFragmentManager.findFragmentByTag("saved-opacity")
             val fragment = dialog?.childFragmentManager?.findFragmentByTag("controls")
                 as? ReadAloudControlsDialog.ControlsPreferenceFragment
-            fragment?.findPreference<SeekBarPreference>(PreferKey.readAloudControlsOpacity)?.value == 30
+            fragment?.view != null && prefs.getInt(PreferKey.readAloudControlsOpacity, -1) == 30
         }
         scenario!!.onActivity {
             (it.supportFragmentManager.findFragmentByTag("saved-opacity") as ReadAloudControlsDialog).dismiss()

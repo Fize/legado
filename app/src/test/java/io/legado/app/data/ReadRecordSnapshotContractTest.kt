@@ -28,7 +28,7 @@ class ReadRecordSnapshotContractTest {
                 .contains("readRecord.updateSnapshot(currentBook, durChapterIndex, durChapterPos)")
         )
         assertTrue(
-            projectFile("src/main/java/io/legado/app/model/ReadManga.kt")
+            projectFile("src/main/java/io/legado/app/model/MangaReaderSession.kt")
                 .contains("readRecord.updateSnapshot(currentBook, durChapterIndex, durChapterPos)")
         )
         val audio = projectFile("src/main/java/io/legado/app/model/AudioPlay.kt")
@@ -40,8 +40,9 @@ class ReadRecordSnapshotContractTest {
     @Test
     fun `deletion snapshots bookshelf data and restore prefers latest record`() {
         val record = projectFile("src/main/java/io/legado/app/data/entities/ReadRecord.kt")
-        assertTrue(record.contains("fun Book.saveReadRecordSnapshot()"))
-        assertTrue(record.contains("appDb.readRecordDao.getRecord(AppConst.androidId, name, author)"))
+        assertTrue(record.contains("fun Book.saveReadRecordSnapshot(database: AppDatabase = appDb)"))
+        assertTrue(record.contains("database.readRecordDao.getRecord(AppConst.androidId, name, author)"))
+        assertTrue(record.contains("refreshChapterTitle(this@saveReadRecordSnapshot, database)"))
 
         val book = projectFile("src/main/java/io/legado/app/data/entities/Book.kt")
         assertTrue(book.contains("saveReadRecordSnapshot()"))

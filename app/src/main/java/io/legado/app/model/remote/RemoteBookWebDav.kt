@@ -21,6 +21,9 @@ import io.legado.app.model.localBook.findExactRemoteBook
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.isContentScheme
 import kotlinx.coroutines.runBlocking
+import io.legado.app.lib.webdav.WebDavContentMatch
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import java.io.File
 
 internal fun remoteBookUploadFileName(book: Book): String =
     if (book.isArchive) book.archiveName else book.originName
@@ -84,6 +87,12 @@ class RemoteBookWebDav(
     }
 
     suspend fun upload(book: Book, overwrite: Boolean) {
+        book.origin = uploadFile(book, overwrite)
+        book.update()
+    }
+
+    /** Transfer only; the calling repository commits metadata after the network succeeds. */
+    suspend fun uploadFile(book: Book, overwrite: Boolean): String {
         if (!NetworkUtils.isAvailable()) throw NoStackTraceException("网络不可用")
         val fileName = remoteBookUploadFileName(book)
         val localBookUri = if (book.isArchive) {
@@ -98,10 +107,22 @@ class RemoteBookWebDav(
         } else {
             webDav.upload(localBookUri.path!!, overwrite = overwrite)
         }
-        book.origin = BookType.webDavTag + CustomUrl(putUrl)
+        return BookType.webDavTag + CustomUrl(putUrl)
             .putAttribute("serverID", serverID)
             .toString()
-        book.update()
+    }
+
+    private fun snapshotUrl(fileName: String): String {
+        require(fileName.isNotBlank() && '/' !in fileName && '\\' !in fileName && fileName !in setOf(".", ".."))
+        return rootBookUrl.toHttpUrl().newBuilder().addPathSegment(fileName).build().toString()
+    }
+    fun snapshotOrigin(fileName: String): String = BookType.webDavTag + CustomUrl(snapshotUrl(fileName))
+        .putAttribute("serverID", serverID).toString()
+    suspend fun inspectSnapshot(fileName: String, sha256: String, size: Long): WebDavContentMatch =
+        WebDav(snapshotUrl(fileName), authorization).matchesContent(sha256, size)
+    suspend fun uploadSnapshot(fileName: String, file: File, overwrite: Boolean): String {
+        WebDav(snapshotUrl(fileName), authorization).upload(file, overwrite = overwrite)
+        return snapshotOrigin(fileName)
     }
 
     suspend fun delete(book: Book): Boolean {

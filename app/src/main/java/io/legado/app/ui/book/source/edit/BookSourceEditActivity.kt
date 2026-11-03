@@ -80,17 +80,21 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.ui.about.AppLogDialog
-import io.legado.app.ui.book.search.SearchActivity
+import io.legado.app.ui.about.openAppLogs
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.openBookSearch
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.compose.component.LegadoMenuAction
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.navigation.JavaScriptSourceEditRoute
+import io.legado.app.ui.navigation.SourceLoginRoute
+import io.legado.app.ui.navigation.SourceLoginTarget
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.code.EditSafety
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
-import io.legado.app.ui.widget.dialog.VariableDialog
+import io.legado.app.ui.variable.VariableEditorDialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
 import io.legado.app.ui.widget.text.EditEntity
 import io.legado.app.utils.GSON
@@ -109,8 +113,9 @@ import kotlinx.coroutines.withContext
 
 class BookSourceEditActivity :
     VMBaseComposeActivity<BookSourceEditViewModel>(),
-    KeyboardToolPop.CallBack,
-    VariableDialog.Callback {
+    KeyboardToolPop.CallBack {
+
+    override val guardsRestoreRecovery = true
 
     override val viewModel by viewModels<BookSourceEditViewModel>()
 
@@ -146,19 +151,22 @@ class BookSourceEditActivity :
     private val redoStacks = hashMapOf<String, ArrayDeque<String>>()
 
     private val jsSourceEdit = registerForActivityResult(
-        StartActivityContract(JsSourceEditActivity::class.java)
+        ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         setResult(result.resultCode, result.data)
         super.finish()
     }
 
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it ?: return@registerForActivityResult
         viewModel.importSource(it) { source ->
             upSourceView(source)
         }
     }
     private val selectDoc = registerForActivityResult(HandleFileContract()) {
+        if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
         it.uri?.let { uri ->
             if (uri.isContentScheme()) {
                 sendText(uri.toString())
@@ -173,6 +181,7 @@ class BookSourceEditActivity :
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (isRestoreRecoveryBlocked) { super.onCreate(savedInstanceState); return }
         pendingEditKey = savedInstanceState?.getString(STATE_PENDING_EDIT_KEY)
         pendingEditTabPosition = savedInstanceState?.getInt(STATE_PENDING_EDIT_TAB) ?: 0
         redirectJsSourceUrl = intent.getStringExtra("sourceUrl")
@@ -181,6 +190,7 @@ class BookSourceEditActivity :
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        if (isRestoreRecoveryBlocked) { super.onSaveInstanceState(outState); return }
         super.onSaveInstanceState(outState)
         outState.putString(STATE_PENDING_EDIT_KEY, pendingEditKey)
         outState.putInt(STATE_PENDING_EDIT_TAB, pendingEditTabPosition)
@@ -189,9 +199,9 @@ class BookSourceEditActivity :
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         redirectJsSourceUrl?.let { sourceUrl ->
             if (savedInstanceState == null) {
-                jsSourceEdit.launch {
-                    putExtra("sourceUrl", sourceUrl)
-                }
+                jsSourceEdit.launch(
+                    AppActivity.startIntent(this, JavaScriptSourceEditRoute(sourceUrl)),
+                )
             }
             return
         }
@@ -199,10 +209,14 @@ class BookSourceEditActivity :
         softKeyboardTool.attachToWindow(window)
         initView()
         viewModel.initData(intent) {
+            if (isRestoreRecoveryBlocked || isDestroyed) return@initData
             viewModel.bookSource?.takeIf { it.isJsSource() }?.let { source ->
-                jsSourceEdit.launch {
-                    putExtra("sourceUrl", source.bookSourceUrl)
-                }
+                jsSourceEdit.launch(
+                    AppActivity.startIntent(
+                        this,
+                        JavaScriptSourceEditRoute(source.bookSourceUrl),
+                    ),
+                )
                 return@initData
             }
             autoCompleteState = viewModel.autoComplete
@@ -212,6 +226,7 @@ class BookSourceEditActivity :
 
     private val textEditLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (redirectIfRestoreRecoveryRequired()) return@registerForActivityResult
             if (result.resultCode == RESULT_OK) {
                 pendingResultAvailable = true
                 pendingResultText = result.data?.getStringExtra("text")
@@ -283,7 +298,9 @@ class BookSourceEditActivity :
     }
 
     private fun saveSource(onSuccess: (BookSource) -> Unit) {
+        if (redirectIfRestoreRecoveryRequired()) return
         viewModel.save(getSource()) { source ->
+            if (redirectIfRestoreRecoveryRequired()) return@save
             setResult(RESULT_OK, Intent().putExtra("origin", source.bookSourceUrl))
             onSuccess(source)
         }
@@ -300,6 +317,11 @@ class BookSourceEditActivity :
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
     override fun Content() {
+        val editor by viewModel.variableEditor.state.collectAsStateWithLifecycle()
+        editor?.let {
+            VariableEditorDialog(it, viewModel.variableEditor::updateDraft, viewModel.variableEditor::save,
+                viewModel.variableEditor::dismiss, viewModel.variableEditor::retryLoad)
+        }
         @Suppress("UNUSED_VARIABLE")
         val refreshVer = editRefreshVersionState
         val currentTab = selectedTabPositionState
@@ -349,10 +371,15 @@ class BookSourceEditActivity :
                                     title = stringResource(R.string.login),
                                     onClick = {
                                         saveSource { source ->
-                                            startActivity<SourceLoginActivity> {
-                                                putExtra("type", "bookSource")
-                                                putExtra("key", source.bookSourceUrl)
-                                            }
+                                            startActivity(
+                                                AppActivity.startIntent(
+                                                    this@BookSourceEditActivity,
+                                                    SourceLoginRoute(
+                                                        SourceLoginTarget.BookSource,
+                                                        key = source.bookSourceUrl,
+                                                    ),
+                                                ),
+                                            )
                                         }
                                     },
                                 )
@@ -363,7 +390,7 @@ class BookSourceEditActivity :
                                 title = stringResource(R.string.search),
                                 onClick = {
                                     saveSource { source ->
-                                        SearchActivity.start(this@BookSourceEditActivity, source)
+                                        this@BookSourceEditActivity.openBookSearch(source)
                                     }
                                 },
                             )
@@ -429,7 +456,7 @@ class BookSourceEditActivity :
                         add(
                             LegadoMenuAction(
                                 title = stringResource(R.string.log),
-                                onClick = { showDialogFragment<AppLogDialog>() },
+                                onClick = { this@BookSourceEditActivity.openAppLogs() },
                             )
                         )
                     },
@@ -774,6 +801,7 @@ class BookSourceEditActivity :
     }
 
     override fun finish() {
+        if (isRestoreRecoveryBlocked) return super.finish()
         val source = getSource()
         if (!source.equal(viewModel.bookSource ?: BookSource())) {
             alert(R.string.exit) {
@@ -790,7 +818,7 @@ class BookSourceEditActivity :
 
     override fun onDestroy() {
         super.onDestroy()
-        softKeyboardTool.dismiss()
+        if (wasActivityContentCreated) softKeyboardTool.dismiss()
     }
 
     private fun setEditEntities(tabPosition: Int?) {
@@ -1244,25 +1272,7 @@ class BookSourceEditActivity :
     }
 
     private fun setSourceVariable() {
-        saveSource { source ->
-            lifecycleScope.launch {
-                val comment =
-                    source.getDisplayVariableComment("源变量可在js中通过source.getVariable()获取")
-                val variable = withContext(IO) { source.getVariable() }
-                showDialogFragment(
-                    VariableDialog(
-                        getString(R.string.set_source_variable),
-                        source.getKey(),
-                        variable,
-                        comment
-                    )
-                )
-            }
-        }
-    }
-
-    override fun setVariable(key: String, variable: String?) {
-        viewModel.bookSource?.setVariable(variable)
+        saveSource { source -> viewModel.variableEditor.openSource(source.getKey(), source.variableComment) }
     }
 
     @RequiresApi(Build.VERSION_CODES.M)

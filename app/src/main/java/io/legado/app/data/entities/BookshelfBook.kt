@@ -14,6 +14,7 @@ data class BookshelfBook(
     val durChapterTime: Long,
     val order: Int,
     val persistedCoverUrl: String? = null,
+    val customCoverSource: CoverSourceRef? = null,
 ) {
     val displayCover: String?
         get() = persistedCoverUrl?.takeIf { it.isNotEmpty() }
@@ -22,7 +23,7 @@ data class BookshelfBook(
 
     val coverSourceOrigin: String?
         get() = if (persistedCoverUrl.isNullOrEmpty()) {
-            coverSourceOrigin(origin, customCoverUrl)
+            coverSourceOrigin(origin, customCoverUrl, customCoverSource)
         } else {
             null
         }

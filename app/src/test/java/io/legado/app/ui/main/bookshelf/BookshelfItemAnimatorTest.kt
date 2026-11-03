@@ -9,8 +9,7 @@ class BookshelfItemAnimatorTest {
     @Test
     fun `bookshelf variants use stable keys for frequent item updates`() {
         val bookshelfSources = listOf(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style1/books/BooksFragment.kt",
-            "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt"
+            "src/main/java/io/legado/app/ui/main/bookshelf/BookshelfRootScreen.kt",
         )
 
         bookshelfSources.forEach { path ->

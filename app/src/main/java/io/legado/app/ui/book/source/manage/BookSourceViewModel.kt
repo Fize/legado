@@ -110,25 +110,27 @@ class BookSourceViewModel(application: Application) : BaseViewModel(application)
         }
     }
 
-    fun selectionAddToGroups(sources: List<BookSourcePart>, groups: String) {
-        execute {
-            val array = sources.map {
-                it.copy().apply {
-                    addGroup(groups)
-                }
-            }
-            appDb.bookSourceDao.upGroup(array)
-        }
+    fun selectionAddToGroups(sourceUrls: Collection<String>, groups: String) {
+        changeSelectedGroups(sourceUrls, groups, remove = false)
     }
 
-    fun selectionRemoveFromGroups(sources: List<BookSourcePart>, groups: String) {
+    fun selectionRemoveFromGroups(sourceUrls: Collection<String>, groups: String) {
+        changeSelectedGroups(sourceUrls, groups, remove = true)
+    }
+
+    private fun changeSelectedGroups(sourceUrls: Collection<String>, groups: String, remove: Boolean) {
+        val targets = sourceUrls.toSet()
         execute {
-            val array = sources.map {
-                it.copy().apply {
-                    removeGroup(groups)
+            appDb.runInTransaction {
+                // Resolve current rows by the saved operation targets, independently of
+                // the recreated screen's asynchronous list/filter loading.
+                val array = targets.mapNotNull { appDb.bookSourceDao.getBookSourcePart(it) }.map {
+                    it.copy().apply {
+                        if (remove) removeGroup(groups) else addGroup(groups)
+                    }
                 }
+                appDb.bookSourceDao.upGroup(array)
             }
-            appDb.bookSourceDao.upGroup(array)
         }
     }
 

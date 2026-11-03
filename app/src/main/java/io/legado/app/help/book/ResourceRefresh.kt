@@ -1,6 +1,8 @@
 package io.legado.app.help.book
 
 import io.legado.app.data.entities.Book
+import io.legado.app.data.cache.bookCacheKey
+import io.legado.app.data.cache.cacheResourceLeases
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
@@ -23,7 +25,8 @@ internal suspend fun refreshBookResources(
     generation: Long = ResourceThemeGeneration.current(),
     onPublished: (List<PendingResourceChapter>) -> Unit = {},
     canPublish: () -> Boolean = { true },
-): List<PendingResourceChapter> {
+): List<PendingResourceChapter> =
+    cacheResourceLeases().acquire(bookCacheKey(book), mutating = true).use {
     val tokens = chapters.associate { it.index to BookHelp.contentSaveToken(book, it) }
     val staging = BookHelp.resourceStagingDir(book)
     try {
@@ -48,7 +51,7 @@ internal suspend fun refreshBookResources(
             if (bytes == null || !BookHelp.checkImage(bytes)) throw NoStackTraceException("刷新图片失败：$src")
             src to File(staging, "image-$index").apply { writeBytes(bytes) }
         }
-        return withContext(Main) {
+        withContext(Main) {
             currentCoroutineContext().ensureActive()
             check(canPublish()) { "书籍或资源请求已变化，请重新刷新" }
             var published = emptyList<PendingResourceChapter>()

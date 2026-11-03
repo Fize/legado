@@ -19,6 +19,10 @@ import io.legado.app.exception.ContentEmptyException
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.IntentData
+import io.legado.app.help.storage.backupRestoreMutex
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
+import io.legado.app.help.storage.RestoreWriteGeneration
+import io.legado.app.help.storage.restoreWriteGeneration
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.help.source.SuppressSourceNavigation
@@ -34,6 +38,7 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
@@ -67,6 +72,7 @@ internal fun parseCheckSourceEndpoint(domain: String): Pair<String, Int>? {
  * 校验书源
  */
 class CheckSourceService : BaseService() {
+    override val guardsRestoreRecovery = true
     private data class CheckTarget(
         val selected: BookSourcePart,
         val source: BookSource,
@@ -77,9 +83,11 @@ class CheckSourceService : BaseService() {
         val message: String,
     )
 
-    private var threadCount = AppConfig.threadCount
-    private var searchCoroutine =
+    private val threadCount by lazy { AppConfig.threadCount }
+    private val searchDispatcher = lazy {
         Executors.newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+    }
+    private val searchCoroutine by searchDispatcher
     private var notificationMsg = appCtx.getString(R.string.service_starting)
     private var checkJob: Job? = null
     private var checkSessionId: Long? = null
@@ -105,6 +113,15 @@ class CheckSourceService : BaseService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val result = super.onStartCommand(intent, flags, startId)
+        if (result == START_NOT_STICKY) {
+            if (intent?.action == IntentAction.start) {
+                IntentData.get<Any>(intent.getStringExtra(CheckSource.EXTRA_SELECTED_SOURCES_KEY))
+                intent.getLongExtra(CheckSource.EXTRA_SESSION_ID, 0L).takeIf { it > 0L }
+                    ?.let(::finishCheckSession)
+            }
+            return result
+        }
         latestStartId = startId
         when (intent?.action) {
             IntentAction.start -> {
@@ -112,8 +129,12 @@ class CheckSourceService : BaseService() {
                 val selectedSources = IntentData.get<List<BookSourcePart>>(
                     intent.getStringExtra(CheckSource.EXTRA_SELECTED_SOURCES_KEY)
                 )
-                if (sessionId > 0L && selectedSources != null) {
-                    check(selectedSources, sessionId, startId)
+                val generation = restoreWriteGeneration.capture()
+                val currentRequest = !intent.hasExtra(CheckSource.EXTRA_RESTORE_SEQUENCE) ||
+                    (intent.getLongExtra(CheckSource.EXTRA_RESTORE_SEQUENCE, -1L) == generation.sequence &&
+                        intent.getStringExtra(CheckSource.EXTRA_RESTORE_PROCESS) == generation.processId)
+                if (sessionId > 0L && selectedSources != null && currentRequest) {
+                    check(selectedSources, sessionId, startId, generation)
                 } else {
                     if (sessionId > 0L) {
                         finishCheckSession(sessionId)
@@ -140,13 +161,20 @@ class CheckSourceService : BaseService() {
                 }
             }
         }
-        return super.onStartCommand(intent, flags, startId)
+        return result
+    }
+
+    override fun onRestoreRecoveryRequired() {
+        checkJob?.cancel()
+        acknowledgeRecoveryForegroundStart(NotificationId.CheckSourceService,
+            R.string.restore_recovery_background_stopped)
+        super.onRestoreRecoveryRequired()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         checkJob?.cancel()
-        searchCoroutine.close()
+        if (searchDispatcher.isInitialized()) searchCoroutine.close()
         notificationManager.cancel(NotificationId.CheckSourceService)
         serviceDestroyed = true
         finishCheckSessionIfComplete()
@@ -156,6 +184,7 @@ class CheckSourceService : BaseService() {
         selectedSources: List<BookSourcePart>,
         sessionId: Long,
         startId: Int,
+        generation: RestoreWriteGeneration.Token,
     ) {
         if (checkJob?.isActive == true) {
             toastOnUi("已有书源在校验,等完成后再试")
@@ -175,8 +204,17 @@ class CheckSourceService : BaseService() {
             }
         )
         val job = lifecycleScope.launch(searchCoroutine) {
+            try {
+                backupRestoreMutex.withLock {
+                    currentCoroutineContext().ensureActive()
+                    generation.requireCurrent()
+                }
+            } catch (required: RestoreRecoveryRequiredException) {
+                throw CancellationException("Source check stopped for data recovery").apply { initCause(required) }
+            }
             flow {
                 for (selected in selectedSources) {
+                    generation.requireCurrent()
                     val source = appDb.bookSourceDao.getBookSource(selected.bookSourceUrl)
                     when {
                         source == null -> Debug.recordCheckResult(
@@ -208,8 +246,10 @@ class CheckSourceService : BaseService() {
                 notificationMsg = getString(R.string.progress_show, "", 0, originSize)
                 upNotification()
             }.mapParallel(threadCount) {
+                generation.requireCurrent()
                 it to checkSource(it.source, sessionId)
             }.onEach { (target, outcome) ->
+                generation.requireCurrent()
                 val (selected, source) = target
                 finishCount++
                 notificationMsg = getString(
@@ -225,9 +265,17 @@ class CheckSourceService : BaseService() {
                     if (CheckSource.wSourceComment) source.bookSourceComment
                         ?.lineSequence()?.firstOrNull { it.startsWith("// Error: ") }.orEmpty() else "",
                 ).filter { it.isNotEmpty() }.distinct().joinToString(" | ")
-                val updated = appDb.bookSourceDao.completeCheck(
-                    selected, outcome.succeeded, detail, source.respondTime,
-                )
+                val updated = try {
+                    backupRestoreMutex.withLock {
+                        currentCoroutineContext().ensureActive()
+                        generation.requireCurrent()
+                        appDb.bookSourceDao.completeCheck(selected, outcome.succeeded, detail, source.respondTime)
+                    }
+                } catch (required: RestoreRecoveryRequiredException) {
+                    // A worker can reach the write guard before the main-thread gate collector
+                    // cancels it. Recovery rejection is an expected stop, not an uncaught failure.
+                    throw CancellationException("Source check stopped for data recovery").apply { initCause(required) }
+                }
                 if (!updated) {
                     val detail = "校验结果未写回：书源已变更或删除"
                     Debug.updateCheckMessage(

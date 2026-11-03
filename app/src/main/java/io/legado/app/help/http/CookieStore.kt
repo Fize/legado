@@ -17,6 +17,9 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.removeCookie
 import io.legado.app.utils.splitNotBlank
 
+/** The WebView cookie store could not be opened, so login data was not cleared. */
+class WebCookieUnavailableException(cause: RuntimeException) : Exception(cause)
+
 @Keep
 object CookieStore : CookieManagerInterface {
 
@@ -31,11 +34,13 @@ object CookieStore : CookieManagerInterface {
         }
     }
 
-    private fun saveCookie(url: String, cookie: String?) {
+    private fun saveCookie(url: String, cookie: String?, publishMemory: Boolean = true): Cookie {
         val domain = NetworkUtils.getSubDomain(url)
         val cookieValue = cookie ?: ""
-        appDb.cookieDao.insert(Cookie(domain, cookieValue))
-        CacheManager.putMemory("${domain}_cookie", cookieValue)
+        val saved = Cookie(domain, cookieValue)
+        appDb.cookieDao.insert(saved)
+        if (publishMemory) CacheManager.putMemory("${domain}_cookie", cookieValue)
+        return saved
     }
 
     fun setWebCookie(url: String, cookie: String) {
@@ -59,11 +64,19 @@ object CookieStore : CookieManagerInterface {
         setCookie(url, mergeCookie(url, cookie))
     }
 
-    internal fun restoreCookie(url: String, cookie: String) {
+    internal fun restoreCookie(url: String, cookie: String, publishMemory: Boolean = true): Cookie? {
         if (TextUtils.isEmpty(url) || TextUtils.isEmpty(cookie)) {
-            return
+            return null
         }
-        saveCookie(url, mergeCookie(url, cookie))
+        val merged = if (publishMemory) {
+            mergeCookie(url, cookie)
+        } else {
+            // A restore transaction may already have imported another URL of this domain.
+            // Read its uncommitted Room value rather than the intentionally unchanged cache.
+            val domain = NetworkUtils.getSubDomain(url)
+            mergeCookieValues(appDb.cookieDao.get(domain)?.cookie.orEmpty(), cookie)
+        }
+        return saveCookie(url, merged, publishMemory)
     }
 
     private fun mergeCookie(url: String, cookie: String): String {
@@ -108,11 +121,18 @@ object CookieStore : CookieManagerInterface {
     }
 
     override fun removeCookie(url: String) {
+        // Open the WebView store before modifying local cookies. Otherwise a missing
+        // provider leaves a partially cleared login and may expose old web cookies later.
+        val webCookies = try {
+            android.webkit.CookieManager.getInstance()
+        } catch (error: RuntimeException) {
+            throw WebCookieUnavailableException(error)
+        }
+        webCookies.removeCookie(url)
         val domain = NetworkUtils.getSubDomain(url)
         appDb.cookieDao.delete(domain)
         CacheManager.deleteMemory("${domain}_cookie")
         CacheManager.deleteMemory("${domain}_session_cookie")
-        android.webkit.CookieManager.getInstance().removeCookie(url)
     }
 
     override fun cookieToMap(cookie: String): MutableMap<String, String> {

@@ -30,10 +30,10 @@ internal fun pendingSpeechPageMoves(currentPageIndex: Int, targetPageIndex: Int)
 /**
  * 本地朗读
  */
-class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener {
+class TTSReadAloudService : BaseReadAloudService() {
 
     private var textToSpeech: TextToSpeech? = null
-    private var ttsInitFinish = false
+    private val ttsInitialization = TtsInitializationState()
     private val ttsUtteranceListener = TTSUtteranceListener()
     private var speakJob: Coroutine<*>? = null
     private val playbackSessionId = AtomicLong()
@@ -42,11 +42,17 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
     override fun onCreate() {
         super.onCreate()
+        if (isRestoreRecoveryBlocked) return
         kotlin.runCatching {
             initTts()
         }.onFailure {
             AppLog.put("${getString(R.string.tts_init_failed)}\n$it", it, true)
         }
+    }
+
+    override fun onRestoreRecoveryRequired() {
+        clearTTS()
+        super.onRestoreRecoveryRequired()
     }
 
     override fun onDestroy() {
@@ -56,13 +62,15 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
     @Synchronized
     private fun initTts() {
-        ttsInitFinish = false
+        if (stopIfRestoreRecoveryRequired()) return
+        val initialization = ttsInitialization.begin()
+        val listener = TextToSpeech.OnInitListener { status -> finishTtsInitialization(initialization, status) }
         val engine = GSON.fromJsonObject<SelectItem<String>>(ReadAloud.ttsEngine).getOrNull()?.value
         LogUtils.d(TAG, "initTts engine:$engine")
         textToSpeech = if (engine.isNullOrBlank()) {
-            TextToSpeech(this, this)
+            TextToSpeech(this, listener)
         } else {
-            TextToSpeech(this, this, engine)
+            TextToSpeech(this, listener, engine)
         }
         upSpeechRate()
     }
@@ -70,30 +78,54 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     @Synchronized
     fun clearTTS() {
         playbackSessionId.incrementAndGet()
+        ttsInitialization.clear()
         textToSpeech?.runCatching {
             stop()
             shutdown()
         }
         textToSpeech = null
-        ttsInitFinish = false
     }
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            textToSpeech?.let {
-                it.setOnUtteranceProgressListener(ttsUtteranceListener)
-                ttsInitFinish = true
-                play()
+    private fun finishTtsInitialization(initialization: Long, status: Int) {
+        if (isRestoreRecoveryBlocked) return
+        callbackHandler.post {
+            synchronized(this) {
+                if (isRestoreRecoveryBlocked) return@synchronized
+                val engine = textToSpeech ?: return@synchronized
+                when (ttsInitialization.complete(initialization, status == TextToSpeech.SUCCESS)) {
+                    TtsInitializationState.Completion.ReadyIdle -> engine.setOnUtteranceProgressListener(ttsUtteranceListener)
+                    TtsInitializationState.Completion.ReadyPlay -> {
+                        engine.setOnUtteranceProgressListener(ttsUtteranceListener)
+                        play()
+                    }
+                    TtsInitializationState.Completion.Failed -> toastOnUi(R.string.tts_init_failed)
+                    TtsInitializationState.Completion.Stale -> Unit
+                }
             }
-        } else {
-            toastOnUi(R.string.tts_init_failed)
         }
     }
 
     @Synchronized
+    private fun restartTtsIfCurrent(sessionId: Long) {
+        if (stopIfRestoreRecoveryRequired()) return
+        if (sessionId != playbackSessionId.get() || !ttsInitialization.wantsPlayback) return
+        restartTts()
+    }
+
+    @Synchronized
+    private fun restartTts() {
+        if (stopIfRestoreRecoveryRequired()) return
+        val resumeWhenReady = ttsInitialization.wantsPlayback
+        clearTTS()
+        if (resumeWhenReady) ttsInitialization.requestPlay()
+        initTts()
+    }
+
+    @Synchronized
     override fun play() {
+        if (stopIfRestoreRecoveryRequired()) return
         val sessionId = playbackSessionId.incrementAndGet()
-        if (!ttsInitFinish) return
+        if (!ttsInitialization.requestPlay()) return
         if (!requestFocus()) return
         if (contentList.isEmpty()) {
             AppLog.putDebug("朗读列表为空")
@@ -140,8 +172,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                     if (result == TextToSpeech.ERROR) {
                         if (!isAddedText) {
                             AppLog.put("tts出错 尝试重新初始化")
-                            clearTTS()
-                            initTts()
+                            restartTtsIfCurrent(sessionId)
                             return@execute
                         }
                         AppLog.put("tts朗读出错:$chunk")
@@ -165,6 +196,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     @Synchronized
     override fun playStop() {
         playbackSessionId.incrementAndGet()
+        ttsInitialization.stopPlayback()
         speakJob?.cancel()
         textToSpeech?.runCatching {
             stop()
@@ -175,10 +207,10 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
      * 更新朗读速度
      */
     override fun upSpeechRate(reset: Boolean) {
+        if (stopIfRestoreRecoveryRequired()) return
         if (AppConfig.ttsFlowSys) {
             if (reset) {
-                clearTTS()
-                initTts()
+                restartTts()
             }
         } else {
             val speechRate = (AppConfig.ttsSpeechRate + 5) / 10f
@@ -190,6 +222,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
      * 暂停朗读
      */
     override fun pauseReadAloud(abandonFocus: Boolean) {
+        if (stopIfRestoreRecoveryRequired()) return
         super.pauseReadAloud(abandonFocus)
         playStop()
     }
@@ -198,6 +231,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
      * 恢复朗读
      */
     override fun resumeReadAloud() {
+        if (stopIfRestoreRecoveryRequired()) return
         super.resumeReadAloud()
         play()
     }
@@ -324,7 +358,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     }
 
     private fun isCurrentPlayback(sessionId: Long): Boolean {
-        return sessionId == playbackSessionId.get()
+        return !isRestoreRecoveryBlocked && sessionId == playbackSessionId.get()
     }
 
     private fun dispatchCurrentCallback(utteranceId: String?, block: () -> Unit) {
@@ -335,10 +369,10 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
             ?.substringBefore(':')
             ?.toLongOrNull()
             ?: return
-        if (sessionId != playbackSessionId.get()) return
+        if (isRestoreRecoveryBlocked || sessionId != playbackSessionId.get()) return
         callbackHandler.post {
             synchronized(this) {
-                if (sessionId == playbackSessionId.get()) block()
+                if (!isRestoreRecoveryBlocked && sessionId == playbackSessionId.get()) block()
             }
         }
     }

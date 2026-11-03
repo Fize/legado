@@ -1,5 +1,7 @@
 package io.legado.app.ui.association
 
+import io.legado.app.data.repository.applyImportedReadConfig
+
 import io.legado.app.help.config.ReadBookConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

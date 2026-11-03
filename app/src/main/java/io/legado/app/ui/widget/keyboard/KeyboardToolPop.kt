@@ -31,6 +31,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
@@ -68,6 +71,7 @@ class KeyboardToolPop(
 
     init {
         contentView = ComposeView(context).apply {
+            contentDescription = "keyboardToolBarHost"
             setContent {
                 LegadoTheme {
                     val actions = buildList {
@@ -132,11 +136,18 @@ class KeyboardToolPop(
 
     fun attachToWindow(window: Window) {
         window.decorView.viewTreeObserver.addOnGlobalLayoutListener(this)
+        contentView.activity?.let { owner ->
+            contentView.setViewTreeLifecycleOwner(owner)
+            contentView.setViewTreeViewModelStoreOwner(owner)
+            contentView.setViewTreeSavedStateRegistryOwner(owner)
+        }
         contentView.activity?.observeEvent<Int>(PreferKey.showBoardLine) { rows ->
             rowCount = rows.coerceIn(1, 5)
+            height = desiredHeight()
+            if (isShowing) update()
             contentView.requestLayout()
         }
-        contentView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        height = desiredHeight()
     }
 
     override fun onGlobalLayout() {
@@ -144,11 +155,9 @@ class KeyboardToolPop(
         val wasShowing = softKeyboardShowing
         if (keyboardHeight > 0) {
             softKeyboardShowing = true
-            contentView.measure(
-                View.MeasureSpec.makeMeasureSpec(rootView.width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.UNSPECIFIED,
-            )
-            rootView.setPadding(0, 0, 0, initialPadding + contentView.measuredHeight)
+            val toolHeight = desiredHeight()
+            height = toolHeight
+            rootView.setPadding(0, 0, 0, initialPadding + toolHeight)
             if (!isShowing) showAtLocation(rootView, Gravity.BOTTOM, 0, 0)
         } else {
             softKeyboardShowing = false
@@ -156,6 +165,9 @@ class KeyboardToolPop(
             if (wasShowing) dismiss()
         }
     }
+
+    private fun desiredHeight(): Int =
+        ((rowCount * 42 + 10) * context.resources.displayMetrics.density).toInt()
 
     private fun resolveKeyboardHeight(): Int {
         ViewCompat.getRootWindowInsets(rootView)?.let { insets ->

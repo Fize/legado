@@ -112,14 +112,14 @@ object ImportOldData {
     }
 
     private fun importOldReplaceRule(json: String): Int {
-        val rules = ReplaceAnalyzer.jsonToReplaceRules(json).getOrNull()
-        rules?.let {
-            val insertedIds = appDb.replaceRuleDao.insert(*rules.toTypedArray())
-            ReplacePreviewConfig.saveImportedSamples(rules, insertedIds)
-            return rules.size
-        }
-        return 0
+        val rules = parseOldReplaceRules(json)
+        val insertedIds = appDb.replaceRuleDao.insert(*rules.toTypedArray())
+        ReplacePreviewConfig.saveImportedSamples(rules, insertedIds)
+        return rules.size
     }
+
+    internal fun parseOldReplaceRules(json: String) =
+        ReplaceAnalyzer.jsonToReplaceRules(json).getOrThrow()
 
     private fun fromOldBooks(json: String): List<Book> {
         val books = mutableListOf<Book>()
@@ -162,7 +162,7 @@ object ImportOldData {
         return books
     }
 
-    private fun fromOldBookSources(json: String): MutableList<BookSource> {
+    internal fun fromOldBookSources(json: String): MutableList<BookSource> {
         val sources = mutableListOf<BookSource>()
         val items: List<Map<String, Any>> = jsonPath.parse(json).read("$")
         for (item in items) {

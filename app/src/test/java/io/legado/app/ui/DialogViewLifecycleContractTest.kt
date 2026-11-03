@@ -13,19 +13,10 @@ class DialogViewLifecycleContractTest {
 
     @Test
     fun `dialog data loaders are cancelled with their views`() {
-        val cover = source("config/CoverRuleConfigDialog.kt")
-            .section("private fun initData()", "\n    }")
-        val search = source("book/search/SearchScopeDialog.kt")
+        val coverSettings = source("config/CoverSettingsScreen.kt")
+        assertTrue(coverSettings.contains("LaunchedEffect(Unit)"))
+        assertFalse(coverSettings.contains("CoverRuleConfigDialog"))
 
-        assertTrue(cover.contains("viewLifecycleOwner.lifecycleScope.launch"))
-        assertFalse(cover.contains("\n        lifecycleScope.launch"))
-
-        val initData = search.section("private fun initData()", "private fun upBookSource")
-        val upBookSource = search.section("private fun upBookSource", "interface Callback")
-        assertTrue(initData.contains("viewLifecycleOwner.lifecycleScope.launch"))
-        assertTrue(upBookSource.contains("viewLifecycleOwner.lifecycleScope.launch"))
-        assertTrue(upBookSource.contains("viewLifecycleOwner.lifecycle"))
-        assertFalse(upBookSource.contains("\n        sourceFlowJob = lifecycleScope.launch"))
     }
 
     @Test

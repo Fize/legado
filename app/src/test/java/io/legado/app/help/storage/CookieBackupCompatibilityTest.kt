@@ -70,8 +70,8 @@ class CookieBackupCompatibilityTest {
         val cookieStore = projectFile(
             "src/main/java/io/legado/app/help/http/CookieStore.kt"
         ).readText()
-        val mainActivity = projectFile(
-            "src/main/java/io/legado/app/ui/main/MainActivity.kt"
+        val appStartup = projectFile(
+            "src/main/java/io/legado/app/ui/AppStartupCoordinator.kt"
         ).readText()
         val mainViewModel = projectFile(
             "src/main/java/io/legado/app/ui/main/MainViewModel.kt"
@@ -81,14 +81,14 @@ class CookieBackupCompatibilityTest {
         ).readText()
         assertTrue(backup.contains("private suspend fun backup("))
         assertTrue(restore.contains("private suspend fun restore("))
-        assertTrue(mainActivity.contains("private fun backupSync()"))
+        assertTrue(appStartup.contains("private fun backupSync()"))
         assertTrue(mainViewModel.contains("fun restoreWebDav("))
         val backupFunction = backup.substringAfter("private suspend fun backup(")
             .substringBefore("private suspend fun writeListToJson")
         val restoreFunction = restore.substringAfter("private suspend fun restore(")
             .substringBefore("private inline fun <reified T> fileToListT")
-        val backupSync = mainActivity.substringAfter("private fun backupSync()")
-            .substringBefore("override fun onSaveInstanceState")
+        val backupSync = appStartup.substringAfter("private fun backupSync()")
+            .substringBefore("private fun scheduleSourceSharePassphraseRead")
         val autoRestore = mainViewModel.substringAfter("fun restoreWebDav(")
             .substringBefore("private fun deleteNotShelfBook")
         val contentIsEnabled = config.substringAfter("internal fun contentIsEnabled(")
@@ -107,7 +107,7 @@ class CookieBackupCompatibilityTest {
             restoreFunction.indexOf("val restoredCookies") <
                 restoreFunction.indexOf("fileToListT<Book>")
         )
-        assertTrue(restoreFunction.contains("CookieStore.restoreCookie(cookie.url, cookie.cookie)"))
+        assertTrue(restoreFunction.contains("CookieStore.restoreCookie(cookie.url, cookie.cookie"))
         assertTrue(cookieStore.contains("internal fun restoreCookie"))
         assertTrue(cookieStore.contains("private fun saveCookie"))
         val saveCookie = cookieStore.substringAfter("private fun saveCookie").substringBefore(
@@ -126,7 +126,7 @@ class CookieBackupCompatibilityTest {
                 "viewModel.restoreWebDav("
             )
         )
-        assertTrue(backupSync.contains("lastBackupFile.lastModify,"))
+        assertTrue(backupSync.contains("lastBackupFile.lastModify)"))
         assertTrue(autoRestore.contains("}.onSuccess {"))
         assertTrue(
             autoRestore.contains(

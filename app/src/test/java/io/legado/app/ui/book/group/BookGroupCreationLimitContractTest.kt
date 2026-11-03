@@ -1,34 +1,27 @@
 package io.legado.app.ui.book.group
 
-import org.junit.Assert.assertTrue
+import io.legado.app.data.entities.availableBookGroupId
+import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 
 class BookGroupCreationLimitContractTest {
-
-    @Test
-    fun `only 63 positive group ids can be created`() {
-        val daoSource = projectFile("src/main/java/io/legado/app/data/dao/BookGroupDao.kt")
-            .readText()
-        val manageSource = projectFile(
-            "src/main/java/io/legado/app/ui/book/group/GroupManageDialog.kt"
-        ).readText()
-        val editSource = projectFile(
-            "src/main/java/io/legado/app/ui/book/group/GroupEditDialog.kt"
-        ).readText()
-
-        assertTrue(
-            daoSource.contains(
-                "select count(*) < 63 from book_groups where groupId > 0"
-            )
-        )
-        assertTrue(manageSource.contains("分组已达上限(63个)"))
-        assertTrue(
-            editSource.contains("bookGroup == null && !appDb.bookGroupDao.canAddGroup")
-        )
-        assertTrue(editSource.contains("分组已达上限(63个)"))
+    @Test fun only63PositiveBitsCanBeAllocated() {
+        val groups = mutableListOf<Long>()
+        repeat(63) { bit ->
+            val id = availableBookGroupId(groups)
+            assertEquals(1L shl bit, id)
+            groups.add(checkNotNull(id))
+        }
+        assertNull(availableBookGroupId(groups))
+        assertFalse(groups.contains(Long.MIN_VALUE))
     }
-
-    private fun projectFile(pathInApp: String): File =
-        listOf(File(pathInApp), File("app/$pathInApp")).first { it.isFile }
+    @Test fun aRemovedBitCanBeReused() {
+        assertEquals(2L, availableBookGroupId(listOf(1L, 4L, 8L)))
+    }
+    @Test fun legacySignBitDoesNotOccupyThePositiveBits() {
+        assertEquals(1L, availableBookGroupId(listOf(Long.MIN_VALUE, -1L, -2L, -100L)))
+    }
+    @Test fun malformedLegacyCombinationsStillReserveAllTheirBits() {
+        assertEquals(4L, availableBookGroupId(listOf(3L)))
+    }
 }

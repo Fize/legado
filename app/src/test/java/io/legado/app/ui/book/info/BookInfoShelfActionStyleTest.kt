@@ -9,7 +9,7 @@ class BookInfoShelfActionStyleTest {
 
     @Test
     fun `shelf action uses tonal accent style in both orientations`() {
-        val source = readProjectFile("src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt")
+        val source = readProjectFile("src/main/java/io/legado/app/ui/book/info/BookInfoScreen.kt")
 
         assertTrue(source.contains("R.string.remove_from_bookshelf"))
         assertTrue(source.contains("R.string.add_to_bookshelf"))

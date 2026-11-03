@@ -7,13 +7,14 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.TypeConverters
 import androidx.room.Update
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
-import io.legado.app.data.entities.BookCacheCleanupSnapshot
+import io.legado.app.data.entities.CoverSourceRef
 import io.legado.app.data.entities.BookCacheInfo
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
@@ -25,7 +26,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 @Dao
+@TypeConverters(Book.Converters::class)
 interface BookDao {
+    @Query("SELECT bookUrl,origin,originName,name,author,type,charset,tocUrl,totalChapterNum,durChapterIndex,durChapterTime,latestChapterTime,`order` FROM books WHERE bookUrl=:url")
+    fun cacheIdentity(url: String): io.legado.app.data.entities.CacheShelfRecord?
+
+    @androidx.room.RawQuery(observedEntities=[Book::class,BookGroup::class])
+    fun flowCacheShelf(query: androidx.sqlite.db.SupportSQLiteQuery): Flow<List<io.legado.app.data.entities.CacheShelfRecord>>
+
+    @Query("SELECT * FROM books WHERE bookUrl=:bookUrl")
+    fun observeAnnotationBook(bookUrl: String): Flow<Book?>
+
 
     fun flowByGroup(groupId: Long): Flow<List<Book>> {
         return when (groupId) {
@@ -47,7 +58,7 @@ interface BookDao {
         """
         select * from books where type & ${BookType.text} > 0
         and type & ${BookType.local} = 0
-        and ((SELECT sum(groupId) FROM book_groups where groupId > 0) & `group`) = 0
+        and ((SELECT coalesce(sum(groupId), 0) FROM book_groups where groupId > 0 OR groupId = ${Long.MIN_VALUE}) & `group`) = 0
         and (select show from book_groups where groupId = ${BookGroup.IdNetNone}) != 1
         """
     )
@@ -59,9 +70,9 @@ interface BookDao {
     @Query(
         """
         SELECT bookUrl, origin, name, author, coverUrl, customCoverUrl, type, `group`,
-        ((SELECT coalesce(sum(groupId), 0) FROM book_groups WHERE groupId > 0) & `group`) != 0
+        ((SELECT coalesce(sum(groupId), 0) FROM book_groups WHERE groupId > 0 OR groupId = ${Long.MIN_VALUE}) & `group`) != 0
             AS hasUserGroup,
-        latestChapterTime, durChapterTime, `order`, persistedCoverUrl
+        latestChapterTime, durChapterTime, `order`, persistedCoverUrl, customCoverSource
         FROM books WHERE type & ${BookType.notShelf} = 0
         """
     )
@@ -82,7 +93,7 @@ interface BookDao {
     @Query(
         """
         select * from books where type & ${BookType.audio} = 0 and type & ${BookType.local} = 0 and type & ${BookType.video} = 0
-        and ((SELECT sum(groupId) FROM book_groups where groupId > 0) & `group`) = 0
+        and ((SELECT coalesce(sum(groupId), 0) FROM book_groups where groupId > 0 OR groupId = ${Long.MIN_VALUE}) & `group`) = 0
         """
     )
     fun flowNetNoGroup(): Flow<List<Book>>
@@ -90,12 +101,12 @@ interface BookDao {
     @Query(
         """
         select * from books where type & ${BookType.local} > 0
-        and ((SELECT sum(groupId) FROM book_groups where groupId > 0) & `group`) = 0
+        and ((SELECT coalesce(sum(groupId), 0) FROM book_groups where groupId > 0 OR groupId = ${Long.MIN_VALUE}) & `group`) = 0
         """
     )
     fun flowLocalNoGroup(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE (`group` & :group) > 0")
+    @Query("SELECT * FROM books WHERE (`group` & :group) != 0")
     fun flowByUserGroup(group: Long): Flow<List<Book>>
 
     @Query("SELECT * FROM books WHERE name like '%'||:key||'%' or author like '%'||:key||'%'")
@@ -104,7 +115,7 @@ interface BookDao {
     @Query("SELECT * FROM books where type & ${BookType.updateError} > 0 order by durChapterTime desc")
     fun flowUpdateError(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE (`group` & :group) > 0")
+    @Query("SELECT * FROM books WHERE (`group` & :group) != 0")
     fun getBooksByGroup(group: Long): List<Book>
 
     @Query("SELECT * FROM books WHERE `name` in (:names)")
@@ -159,13 +170,6 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE (type & ${BookType.image}) > 0")
     fun getCacheCleanupImageBooks(): List<Book>
 
-    @Transaction
-    fun getCacheCleanupSnapshot(includeImageBooks: Boolean): BookCacheCleanupSnapshot {
-        return BookCacheCleanupSnapshot(
-            books = getCacheCleanupBooks(),
-            imageBooks = if (includeImageBooks) getCacheCleanupImageBooks() else emptyList(),
-        )
-    }
 
     @Query("SELECT * FROM books where type & :type > 0 and type & ${BookType.local} = 0")
     fun getByTypeOnLine(type: Int): List<Book>
@@ -254,6 +258,9 @@ interface BookDao {
     @Query("select customCoverUrl from books where bookUrl = :bookUrl")
     fun getCustomCoverUrl(bookUrl: String): String?
 
+    @Query("select customCoverSource from books where bookUrl = :bookUrl")
+    fun getCustomCoverSource(bookUrl: String): CoverSourceRef?
+
     @Query("select persistedCoverUrl from books where bookUrl = :bookUrl")
     fun getPersistedCoverUrl(bookUrl: String): String?
 
@@ -263,6 +270,7 @@ interface BookDao {
             update(
                 book.copy(
                     customCoverUrl = getCustomCoverUrl(book.bookUrl),
+                    customCoverSource = getCustomCoverSource(book.bookUrl),
                     persistedCoverUrl = getPersistedCoverUrl(book.bookUrl),
                 )
             )
@@ -292,6 +300,7 @@ interface BookDao {
         and origin = :expectedOrigin
         and coverUrl is :expectedCoverUrl
         and customCoverUrl is :expectedCustomCoverUrl
+        and customCoverSource is :expectedCustomCoverSource
         and persistedCoverUrl is :expectedPersistedCoverUrl"""
     )
     fun updatePersistedCoverUrlIfUnchanged(
@@ -301,6 +310,7 @@ interface BookDao {
         expectedCustomCoverUrl: String?,
         expectedPersistedCoverUrl: String?,
         persistedCoverUrl: String?,
+        expectedCustomCoverSource: CoverSourceRef? = null,
     ): Int
 
     @Query(
@@ -313,15 +323,17 @@ interface BookDao {
     ): Int
 
     @Query(
-        """update books set customCoverUrl = null, persistedCoverUrl = null
+        """update books set customCoverUrl = null, persistedCoverUrl = null, customCoverSource = null
         where bookUrl = :bookUrl
         and customCoverUrl is :expectedCustomCoverUrl
+        and customCoverSource is :expectedCustomCoverSource
         and persistedCoverUrl is :expectedPersistedCoverUrl"""
     )
     fun clearCoverOverridesIfUnchanged(
         bookUrl: String,
         expectedCustomCoverUrl: String?,
         expectedPersistedCoverUrl: String?,
+        expectedCustomCoverSource: CoverSourceRef? = null,
     ): Int
 
     @Query("select readConfig from books where bookUrl = :bookUrl")
@@ -384,6 +396,7 @@ interface BookDao {
     @Transaction
     fun replace(oldBook: Book, newBook: Book) {
         val storedBookUrl = if (has(newBook.bookUrl)) newBook.bookUrl else oldBook.bookUrl
+        val customCoverSource = getCustomCoverSource(storedBookUrl)
         val customCoverUrl = getCustomCoverUrl(storedBookUrl)
         val persistedCoverUrl = getPersistedCoverUrl(storedBookUrl)
         val readConfig = oldBook.readConfig
@@ -392,6 +405,7 @@ interface BookDao {
         insert(
             newBook.copy(
                 customCoverUrl = customCoverUrl,
+                customCoverSource = customCoverSource,
                 persistedCoverUrl = persistedCoverUrl,
                 readConfig = readConfig,
             )
@@ -401,6 +415,19 @@ interface BookDao {
             deleteMemo(oldBook.bookUrl)
         }
     }
+
+    @Query("""UPDATE books SET lastCheckCount = 0, durChapterTime = :readAt,
+        durChapterIndex = :chapterIndex, durChapterPos = :position,
+        durChapterTitle = COALESCE(:title, durChapterTitle)
+        WHERE bookUrl = :bookUrl AND origin = :origin AND durChapterTime <= :readAt""")
+    fun updateReaderProgress(bookUrl: String, origin: String, chapterIndex: Int, position: Int,
+        title: String?, readAt: Long): Int
+
+    @Query("""UPDATE books SET syncTime = :syncedAt WHERE bookUrl = :bookUrl AND origin = :origin
+        AND name = :name AND author = :author AND durChapterIndex = :chapterIndex
+        AND durChapterPos = :position AND durChapterTime <= :readAt""")
+    fun markReaderProgressSynced(bookUrl: String, origin: String, name: String, author: String,
+        chapterIndex: Int, position: Int, readAt: Long, syncedAt: Long): Int
 
     @Query("update books set durChapterPos = :pos where bookUrl = :bookUrl")
     fun upProgress(bookUrl: String, pos: Int)
@@ -414,8 +441,10 @@ interface BookDao {
     @Query("update books set `group` = `group` | :groupId where bookUrl in (:bookUrls)")
     fun addGroup(bookUrls: List<String>, groupId: Long)
 
-    @Query("update books set `group` = `group` - :group where `group` & :group > 0")
-    fun removeGroup(group: Long)
+    fun removeGroup(group: Long) = clearGroupBit(group, group.inv())
+
+    @Query("update books set `group` = `group` & :keepMask where (`group` & :groupId) != 0")
+    fun clearGroupBit(groupId: Long, keepMask: Long)
 
     @Query("delete from books where type & ${BookType.notShelf} > 0")
     fun deleteNotShelfRows()

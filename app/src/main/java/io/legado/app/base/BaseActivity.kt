@@ -21,6 +21,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
+import io.legado.app.help.storage.RestoreActivityRecovery
+import io.legado.app.help.storage.RestoreRecoveryGate
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.Theme
@@ -58,6 +60,14 @@ abstract class BaseActivity(
 
     protected abstract val rootView: View
 
+    protected open val guardsRestoreRecovery: Boolean = false
+    private val restoreRecovery by lazy { RestoreActivityRecovery(this) { super.finish() } }
+    protected val isRestoreRecoveryBlocked get() = guardsRestoreRecovery && restoreRecovery.isBlocked
+    protected var wasActivityContentCreated = false
+        private set
+    protected fun redirectIfRestoreRecoveryRequired(): Boolean =
+        guardsRestoreRecovery && restoreRecovery.redirectIfRequired()
+
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
         get() {
@@ -69,7 +79,7 @@ abstract class BaseActivity(
         }
 
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(AppContextWrapper.wrap(newBase))
+        super.attachBaseContext(if (guardsRestoreRecovery && RestoreRecoveryGate.isQuarantined) newBase else AppContextWrapper.wrap(newBase))
     }
 
     override fun onCreateView(
@@ -78,20 +88,29 @@ abstract class BaseActivity(
         context: Context,
         attrs: AttributeSet
     ): View? {
-        if (AppConst.menuViewNames.contains(name) && parent?.parent is FrameLayout) {
+        if (!isRestoreRecoveryBlocked && AppConst.menuViewNames.contains(name) && parent?.parent is FrameLayout) {
             (parent.parent as View).setBackgroundColor(backgroundColor)
         }
         return super.onCreateView(parent, name, context, attrs)?.also { view ->
+            if (isRestoreRecoveryBlocked) return@also
             if (view is Toolbar) view.installMd3OverflowMenu()
         }
     }
 
     @SuppressLint("ObsoleteSdkInt")
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (isRestoreRecoveryBlocked) {
+            setTheme(R.style.AppTheme_Light)
+            super.onCreate(null)
+            redirectIfRestoreRecoveryRequired()
+            return
+        }
         window.decorView.disableAutoFill()
         initTheme()
         super.onCreate(savedInstanceState)
         if (!shouldCreateContentView()) return
+        wasActivityContentCreated = true
+        if (guardsRestoreRecovery) restoreRecovery.observe()
         setupSystemBar()
         setupPredictiveBack()
         setContentView(rootView)
@@ -122,6 +141,7 @@ abstract class BaseActivity(
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        if (isRestoreRecoveryBlocked) return
         findViewById<TitleBar>(R.id.title_bar)
             ?.onMultiWindowModeChanged(isInMultiWindowMode, fullScreen)
         setupSystemBar()
@@ -129,6 +149,7 @@ abstract class BaseActivity(
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        if (isRestoreRecoveryBlocked) return
         findViewById<TitleBar>(R.id.title_bar)
             ?.onMultiWindowModeChanged(isInMultiWindow, fullScreen)
         setupSystemBar()
@@ -141,6 +162,7 @@ abstract class BaseActivity(
     protected open fun shouldShowWindowBackground(): Boolean = true
 
     final override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        if (isRestoreRecoveryBlocked) return false
         val bool = onCompatCreateOptionsMenu(menu)
         val titleBar: TitleBar? = findViewById<TitleBar>(R.id.title_bar)
         menu.applyTint(

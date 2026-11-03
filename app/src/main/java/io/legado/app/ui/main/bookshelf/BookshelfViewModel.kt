@@ -1,11 +1,13 @@
 package io.legado.app.ui.main.bookshelf
 
-import android.app.Application
-import androidx.lifecycle.MutableLiveData
+import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.gson.JsonObject
 import com.google.gson.stream.JsonWriter
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.legado.app.R
-import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -16,7 +18,6 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.savePreservingCustomCoverUrl
 import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
@@ -35,25 +36,38 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
+import javax.inject.Inject
 
-class BookshelfViewModel(application: Application) : BaseViewModel(application) {
-    val addBookProgressLiveData = MutableLiveData(-1)
-    var addBookJob: Coroutine<*>? = null
+@HiltViewModel
+class BookshelfViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : ViewModel() {
+    private val _addBookProgress = MutableStateFlow(-1)
+    val addBookProgress: StateFlow<Int> = _addBookProgress
+    private var addBookJob: Job? = null
 
     fun addBookByUrl(bookUrls: String, groupId: Long) {
         var successCount = 0
-        addBookJob = execute {
+        addBookJob?.cancel()
+        addBookJob = viewModelScope.launch(IO) {
             val hasBookUrlPattern: List<BookSourcePart> by lazy {
                 appDb.bookSourceDao.hasBookUrlPattern
             }
-            val urls = bookUrls.split("\n")
-            for (url in urls) {
+            try {
+                for (url in bookUrls.split("\n")) {
                 val bookUrl = url.trim()
                 if (bookUrl.isEmpty()) continue
                 val existedBook = appDb.bookDao.getBook(bookUrl)
@@ -119,25 +133,26 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
                         it.savePreservingCustomCoverUrl()
                     }
                     successCount++
-                    addBookProgressLiveData.postValue(successCount)
+                    _addBookProgress.value = successCount
                 }
             }
-        }.onSuccess {
-            if (successCount > 0) {
-                context.toastOnUi(R.string.success)
-            } else {
-                context.toastOnUi("添加网址失败")
+                withContext(Main) {
+                    if (successCount > 0) context.toastOnUi(R.string.success)
+                    else context.toastOnUi("添加网址失败")
+                }
+            } catch (error: Throwable) {
+                currentCoroutineContext().ensureActive()
+                AppLog.put("添加网址出错\n${error.localizedMessage}", error, true)
+            } finally {
+                _addBookProgress.value = -1
             }
-        }.onError {
-            AppLog.put("添加网址出错\n${it.localizedMessage}", it, true)
-        }.onFinally {
-            addBookProgressLiveData.postValue(-1)
         }
     }
 
     fun exportBookshelf(books: List<Book>?, success: (file: File) -> Unit) {
-        execute {
-            books?.let {
+        viewModelScope.launch(IO) {
+            try {
+                val file = books?.let {
                 val path = "${context.filesDir}/books.json"
                 FileUtils.delete(path)
                 val file = FileUtils.createFileWithReplace(path)
@@ -156,47 +171,46 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
                     writer.close()
                 }
                 file
-            } ?: throw NoStackTraceException("书籍不能为空")
-        }.onSuccess {
-            success(it)
-        }.onError {
-            context.toastOnUi("导出书籍出错\n${it.localizedMessage}")
+                } ?: throw NoStackTraceException("书籍不能为空")
+                withContext(Main) { success(file) }
+            } catch (error: Throwable) {
+                currentCoroutineContext().ensureActive()
+                context.toastOnUi("导出书籍出错\n${error.localizedMessage}")
+            }
         }
     }
 
     fun importBookshelf(str: String, groupId: Long) {
-        execute {
+        viewModelScope.launch(IO) {
+            try {
+                importBookshelfContent(str, groupId)
+                context.toastOnUi(R.string.success)
+            } catch (error: Throwable) {
+                currentCoroutineContext().ensureActive()
+                AppLog.put("导入书单失败\n${error.localizedMessage}", error, true)
+            }
+        }
+    }
+
+    private suspend fun importBookshelfContent(str: String, groupId: Long) {
             val text = str.trim()
             when {
                 text.isAbsUrl() -> {
                     okHttpClient.newCallResponseBody {
                         url(text)
                     }.decompressed().text().let {
-                        importBookshelf(it, groupId)
+                        importBookshelfContent(it, groupId)
                     }
                 }
 
                 text.isJsonArray() -> {
-                    importBookshelfByJson(text, groupId)
+                    importBookshelfJson(text, groupId)
                 }
 
                 else -> {
                     throw NoStackTraceException("格式不对")
                 }
             }
-        }.onError {
-            context.toastOnUi(it.localizedMessage ?: "ERROR")
-        }
-    }
-
-    private fun importBookshelfByJson(json: String, groupId: Long) {
-        execute {
-            importBookshelfJson(json, groupId)
-        }.onError {
-            AppLog.put("导入书单失败\n${it.localizedMessage}", it, true)
-        }.onSuccess {
-            context.toastOnUi(R.string.success)
-        }
     }
 
 }
@@ -222,7 +236,7 @@ internal suspend fun importBookshelfJson(json: String, groupId: Long) = coroutin
                     val book = sources.firstNotNullOfOrNull { part ->
                         part.getBookSource()?.let { WebBook.preciseSearchAwait(it, name, author).getOrNull() }
                     } ?: throw NoStackTraceException("没有搜索到<$name>$author")
-                    if (groupId > 0) book.group = groupId
+                    if (groupId > 0 || groupId == Long.MIN_VALUE) book.group = groupId
                     book.savePreservingCustomCoverUrl()
                 }
             }.onFailure { currentCoroutineContext().ensureActive() }.exceptionOrNull()

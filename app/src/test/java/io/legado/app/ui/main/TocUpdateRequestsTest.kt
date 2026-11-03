@@ -187,16 +187,16 @@ class TocUpdateRequestsTest {
     @Test
     fun `management action is wired to the skip pre-download policy`() {
         val manageActivity = source(
-            "app/src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt"
+            "app/src/main/java/io/legado/app/ui/book/manage/BookshelfManageScreen.kt"
         )
-        val mainActivity = source("app/src/main/java/io/legado/app/ui/main/MainActivity.kt")
+        val appStartup = source("app/src/main/java/io/legado/app/ui/AppStartupCoordinator.kt")
 
         assertTrue(manageActivity.contains("R.string.update_book_info_toc"))
         assertTrue(manageActivity.contains("::updateBooksToc"))
         assertTrue(manageActivity.contains("postEvent(EventBus.UP_BOOKS_TOC, books)"))
-        assertTrue(mainActivity.contains("onlyUpdateRead = false"))
-        assertTrue(mainActivity.contains("policy = TocUpdatePolicy.SKIP_PRE_DOWNLOAD"))
-        assertTrue(mainActivity.contains("refreshBookInfo = true"))
+        assertTrue(appStartup.contains("onlyUpdateRead = false"))
+        assertTrue(appStartup.contains("policy = TocUpdatePolicy.SKIP_PRE_DOWNLOAD"))
+        assertTrue(appStartup.contains("refreshBookInfo = true"))
         assertTrue(manageActivity.contains("R.string.update_book_info_toc_submitted"))
     }
 

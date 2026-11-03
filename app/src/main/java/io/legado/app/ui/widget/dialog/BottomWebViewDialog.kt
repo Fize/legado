@@ -46,6 +46,9 @@ import io.legado.app.data.entities.BaseSource
 import android.view.LayoutInflater
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -64,7 +67,8 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.help.webView.shouldInjectPreloadJs
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.OnlineImportRoute
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.invisible
 import io.legado.app.utils.keepScreenOn
@@ -267,6 +271,7 @@ internal data class BrowserDialogRequest(
     val html: String?,
     val preloadJs: String?,
     val config: String?,
+    val ownerKey: String? = null,
 )
 
 class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callback {
@@ -318,9 +323,14 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
     private var pooledWebView: PooledWebView? = null
     private val currentWebView: WebView
         get() = checkNotNull(pooledWebView).realWebView
+
+    internal fun webViewForTest(): WebView = currentWebView
+
+    internal fun customWebViewChildCountForTest(): Int =
+        _binding?.customWebView?.childCount ?: 0
     private var source: BaseSource? = null
     private var preloadJs: String? = null
-    private var isFullScreen = false
+    private var isFullScreen by mutableStateOf(false)
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var originOrientation: Int? = null
     private var needClearHistory = true
@@ -340,6 +350,9 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
     internal var customButtonKey: String?
         get() = arguments?.getString("customButtonKey")
         set(value) { requireArguments().putString("customButtonKey", value) }
+    internal var ownerEntryKey: String?
+        get() = arguments?.getString("ownerEntryKey")
+        set(value) { requireArguments().putString("ownerEntryKey", value) }
 
     internal fun handlesCustomButton(key: String): Boolean =
         !dismissed && !isRemoving && customButtonKey == key
@@ -353,6 +366,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
                 it.getString("html"),
                 it.getString("preloadJs"),
                 it.getString("config"),
+                it.getString("ownerEntryKey"),
             )
         }
 
@@ -398,7 +412,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
                 if (request != null && manager.fragments.any {
                     it is BottomWebViewDialog && !it.dismissed && !it.isRemoving &&
                             (it.browserRequest == request ||
-                                customButtonKey?.let(it::handlesCustomButton) == true)
+                                (it.ownerEntryKey == ownerEntryKey && customButtonKey?.let(it::handlesCustomButton) == true))
                 }) return@runCatching
                 // Register synchronously so another queued script cannot add the same request.
                 dismissed = false
@@ -828,10 +842,14 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
                             modifier = Modifier.fillMaxSize(),
                             factory = { webContainer }
                         )
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { customContainer }
-                        )
+                        // An empty AndroidView above the page still participates in Compose's
+                        // hit testing. Only mount the fullscreen surface while it has content.
+                        if (isFullScreen) {
+                            AndroidView(
+                                modifier = Modifier.fillMaxSize(),
+                                factory = { customContainer }
+                            )
+                        }
                     }
                 }
             }
@@ -1052,11 +1070,15 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
     override fun onDestroyView() {
         bottomSheet?.removeOnLayoutChangeListener(sheetLayoutListener)
         customWebViewCallback?.onCustomViewHidden()
+        customWebViewCallback = null
+        isFullScreen = false
+        _binding?.customWebView?.removeAllViews()
         pooledWebView?.let(WebViewPool::release)
         pooledWebView = null
         originOrientation?.let {
             activity?.requestedOrientation = it
         }
+        originOrientation = null
         _binding = null
         super.onDestroyView()
     }
@@ -1257,9 +1279,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
             return when (url.scheme) {
                 "http", "https" -> false
                 "legado", "yuedu" -> {
-                    startActivity<OnLineImportActivity> {
-                        data = url
-                    }
+                    startActivity(AppActivity.startIntent(requireContext(), OnlineImportRoute(url.toString())))
                     true
                 }
 

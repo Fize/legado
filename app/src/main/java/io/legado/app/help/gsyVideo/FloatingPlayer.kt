@@ -95,7 +95,7 @@ class FloatingPlayer : StandardGSYVideoPlayer {
                 }
             )
             addView(
-                moe.codeest.enviews.ENPlayView(ctx).apply {
+                moe.codeest.enviews.ENPlayView(ctx, null).apply {
                     id = R.id.start
                     layoutParams = android.widget.RelativeLayout.LayoutParams(dp(35f), dp(35f)).apply {
                         addRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM)

@@ -92,10 +92,10 @@ class JsSourceDirectDebugTest {
             "app/src/main/java/io/legado/app/ui/code/CodeEditActivity.kt"
         ).readText()
         val sourceEditor = projectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditActivity.kt"
+            "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditScreen.kt"
         ).readText()
-        val editorLauncher = sourceEditor.indexOf("private val editorResult")
-        val loginLauncher = sourceEditor.indexOf("private val loginResult")
+        val editorLauncher = sourceEditor.indexOf("val editorResult")
+        val loginLauncher = sourceEditor.indexOf("val loginResult")
 
         assertTrue(codeEditor.contains("shouldShowLoginSourceAction("))
         assertTrue(codeEditor.contains("shouldShowJavaScriptSyntaxAction("))
@@ -108,12 +108,13 @@ class JsSourceDirectDebugTest {
             )
         )
         assertTrue(sourceEditor.contains("putExtra(CodeEditActivity.EXTRA_SHOW_LOGIN_SOURCE, true)"))
-        assertTrue(sourceEditor.contains("StartActivityContract(SourceLoginActivity::class.java)"))
+        assertTrue(sourceEditor.contains("SourceLoginRoute("))
         assertTrue(sourceEditor.contains("if (source.hasLogin())"))
         assertTrue(sourceEditor.contains("toastOnUi(R.string.source_no_login)"))
-        assertTrue(sourceEditor.contains("putExtra(\"type\", \"bookSource\")"))
-        assertTrue(sourceEditor.contains("putExtra(\"key\", sourceUrl)"))
-        assertTrue(sourceEditor.contains("outState.putString(STATE_STAGE, stage.name)"))
+        assertTrue(sourceEditor.contains("SourceLoginTarget.BookSource"))
+        assertTrue(sourceEditor.contains("key = openedSourceUrl"))
+        assertTrue(sourceEditor.contains("rememberSaveable(sourceUrl, stateSaver"))
+        assertTrue(sourceEditor.contains("it.stage.name"))
         assertTrue(sourceEditor.contains("catch (error: CancellationException)"))
         assertTrue(sourceEditor.contains("withStateAtLeast(Lifecycle.State.RESUMED)"))
     }

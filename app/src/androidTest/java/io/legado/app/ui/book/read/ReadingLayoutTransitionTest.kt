@@ -4,16 +4,17 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Rect
 import android.os.SystemClock
-import android.view.View
-import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.swipeUp
-import androidx.test.espresso.matcher.RootMatchers.withDecorView
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -31,14 +32,15 @@ import io.legado.app.ui.book.read.config.ReadStyleDialog
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
-import org.hamcrest.Matchers.sameInstance
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class ReadingLayoutTransitionTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
@@ -89,7 +91,7 @@ class ReadingLayoutTransitionTest {
                 .putExtra("bookUrl", book.bookUrl)).use { scenario ->
                 scenario.onActivity { activity ->
                     activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                        .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                        .forEach { it.dismissAllowingStateLoss() }
                 }
                 awaitReader(scenario, book.bookUrl, false)
                 val initial = capture(scenario, "layout-cover-before")
@@ -162,42 +164,16 @@ class ReadingLayoutTransitionTest {
         }
     }
 
+    @OptIn(ExperimentalTestApi::class)
     private fun switchStyle(scenario: ActivityScenario<ReadBookActivity>, index: Int) {
-        scenario.onActivity { ReadStyleDialog().showNow(it.supportFragmentManager, "layout-style") }
-        val bounds = Rect()
-        lateinit var styleView: View
-        lateinit var styleRoot: View
-        try {
-            await {
-                var visible = false
-                scenario.onActivity { activity ->
-                    val dialog = activity.supportFragmentManager.findFragmentByTag("layout-style") as? ReadStyleDialog
-                    val view = dialog?.view?.findViewById<RecyclerView>(R.id.rv_style)
-                        ?.findViewHolderForAdapterPosition(index)?.itemView
-                    visible = view?.getGlobalVisibleRect(bounds) == true &&
-                        bounds.width() > 20 && bounds.height() > 20
-                    if (visible && view != null) {
-                        styleView = view
-                        styleRoot = checkNotNull(dialog?.dialog?.window?.decorView)
-                    }
-                }
-                visible
-            }
-            // Espresso waits for the focused dialog and calculates the current screen coordinates.
-            // This remains a real touch, required by CircleImageView's circular hit area.
-            onView(sameInstance(styleView)).inRoot(withDecorView(sameInstance(styleRoot))).perform(click())
-            await { ReadBookConfig.styleSelect == index }
-        } finally {
-            scenario.onActivity { activity ->
-                val dialog = activity.supportFragmentManager.findFragmentByTag("layout-style") as? ReadStyleDialog
-                val list = dialog?.view?.findViewById<RecyclerView>(R.id.rv_style)
-                File(context.getExternalFilesDir("ui-regression"), "layout-style-window-$index.txt")
-                    .writeText("showing=${dialog?.dialog?.isShowing} state=${dialog?.lifecycle?.currentState} " +
-                        "focused=${dialog?.dialog?.window?.decorView?.hasWindowFocus()} " +
-                        "items=${list?.adapter?.itemCount} children=${list?.childCount} bounds=$bounds")
-            }
-            capture(scenario, "layout-style-selected-$index")
-        }
+        var styleLabel = ""
+        scenario.onActivity { styleLabel = ReadBookConfig.configList[index].name.ifBlank { "文字" } }
+        val styleDescription = "$styleLabel ${index + 1}"
+        scenario.onActivity { ReadStyleDialog().show(it.supportFragmentManager, "layout-style") }
+        compose.waitUntilAtLeastOneExists(hasContentDescription(styleDescription), 10_000)
+        compose.onNodeWithContentDescription(styleDescription).performClick()
+        await { ReadBookConfig.styleSelect == index }
+        capture(scenario, "layout-style-selected-$index")
         pressBack()
     }
 

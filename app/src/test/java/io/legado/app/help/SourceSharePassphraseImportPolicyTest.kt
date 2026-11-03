@@ -14,7 +14,7 @@ class SourceSharePassphraseImportPolicyTest {
     }
 
     @Test
-    fun focusRetryRequiresActiveMainActivity() {
+    fun focusRetryRequiresActiveAppActivity() {
         assertTrue(canAwaitWindowFocus())
         assertFalse(canAwaitWindowFocus(isResumed = false))
     }
@@ -32,16 +32,16 @@ class SourceSharePassphraseImportPolicyTest {
     @Test
     fun pausedActivityInvalidatesQueuedRead() {
         val source = sequenceOf(
-            File("src/main/java/io/legado/app/ui/main/MainActivity.kt"),
-            File("app/src/main/java/io/legado/app/ui/main/MainActivity.kt")
+            File("src/main/java/io/legado/app/ui/AppStartupCoordinator.kt"),
+            File("app/src/main/java/io/legado/app/ui/AppStartupCoordinator.kt")
         ).firstOrNull(File::isFile)?.readText().orEmpty()
         val onPause = source.section(
-            "override fun onPause()",
-            "override fun onWindowFocusChanged"
+            "fun onPause()",
+            "fun onWindowFocusChanged"
         )
         val delayedRead = source.section(
             "private fun readSourceSharePassphrase(",
-            "private fun upHomePage()"
+            "override fun openImportUi"
         )
 
         assertTrue(onPause.contains("pendingPassphraseRead = false"))

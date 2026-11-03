@@ -126,7 +126,9 @@ data class Book(
     @ColumnInfo(defaultValue = "0")
     var syncTime: Long = 0L,
     // 保存到本地的网络封面
-    var persistedCoverUrl: String? = null
+    var persistedCoverUrl: String? = null,
+    @ColumnInfo(defaultValue = "NULL")
+    var customCoverSource: CoverSourceRef? = null,
 ) : Parcelable, BaseBook {
 
     override fun equals(other: Any?): Boolean {
@@ -175,9 +177,9 @@ data class Book(
         ?: customCoverUrl?.takeIf { it.isNotEmpty() }
         ?: coverUrl
 
-    /** Source credentials are only reused for custom covers on the same network origin. */
+    /** Custom covers use explicitly selected source credentials, or the same-origin fallback. */
     fun getCoverSourceOrigin() = if (persistedCoverUrl.isNullOrEmpty()) {
-        coverSourceOrigin(origin, customCoverUrl)
+        coverSourceOrigin(origin, customCoverUrl, customCoverSource)
     } else {
         null
     }
@@ -454,6 +456,7 @@ data class Book(
         newBook.durChapterTime = durChapterTime
         newBook.group = group
         newBook.order = order
+        newBook.customCoverSource = customCoverSource
         newBook.customCoverUrl = customCoverUrl
         newBook.persistedCoverUrl = persistedCoverUrl
         newBook.customIntro = customIntro
@@ -522,6 +525,11 @@ data class Book(
     ) : Parcelable
 
     class Converters {
+        @TypeConverter
+        fun coverSourceToString(source: CoverSourceRef?): String? = source?.let { GSON.toJson(it) }
+        @TypeConverter
+        fun stringToCoverSource(json: String?): CoverSourceRef? = GSON.fromJsonObject<CoverSourceRef>(json).getOrNull()
+
 
         @TypeConverter
         fun readConfigToString(config: ReadConfig?): String = GSON.toJson(config)
@@ -531,8 +539,13 @@ data class Book(
     }
 }
 
-internal fun coverSourceOrigin(origin: String, customCoverUrl: String?): String? {
+@androidx.annotation.Keep
+@Parcelize
+data class CoverSourceRef(val url: String, val source: String) : Parcelable
+
+internal fun coverSourceOrigin(origin: String, customCoverUrl: String?, reference: CoverSourceRef? = null): String? {
     val customUrl = customCoverUrl?.takeIf { it.isNotEmpty() } ?: return origin
+    reference?.takeIf { it.url == customUrl && it.source.isNotBlank() }?.let { return it.source }
     val sourceOrigin = NetworkUtils.getBaseUrl(origin) ?: return null
     val coverOrigin = NetworkUtils.getBaseUrl(customUrl) ?: return null
     return origin.takeIf { sourceOrigin.equals(coverOrigin, ignoreCase = true) }

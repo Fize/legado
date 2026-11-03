@@ -4,6 +4,12 @@ import io.legado.app.data.dao.mergeImportedHighlightRules
 import io.legado.app.data.dao.reorderHighlightRules
 import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.HighlightRuleFile
+import io.legado.app.data.repository.jsonImportType
+import io.legado.app.data.repository.HighlightRuleImportItem
+import io.legado.app.data.repository.HighlightRuleImportStatus
+import io.legado.app.data.repository.compareImportedHighlightRules
+import io.legado.app.data.repository.parseHighlightRuleFile
+import io.legado.app.data.repository.validateHighlightRuleFile
 import io.legado.app.help.HighlightStyle
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -171,41 +177,47 @@ class HighlightRuleImportTest {
     }
 
     @Test
-    fun `file and online association both route typed highlight rules`() {
-        val base = projectFile(
-            "src/main/java/io/legado/app/ui/association/BaseAssociationViewModel.kt"
-        )
-        val file = projectFile(
-            "src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt"
-        )
-        val online = projectFile(
-            "src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt"
-        )
-
-        assertTrue(base.contains("map[\"type\"] == HighlightRuleFile.TYPE"))
-        assertTrue(
-            base.indexOf("map[\"type\"] == HighlightRuleFile.TYPE") <
-                base.indexOf("map.containsKey(\"pattern\")")
-        )
-        assertTrue(file.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)"))
-        assertTrue(online.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)"))
+    fun `typed highlight envelope takes precedence and raw rule categories stay distinct`() {
+        assertEquals("highlightRule", jsonImportType(mapOf(
+            "type" to HighlightRuleFile.TYPE, "rules" to emptyList<Any>(), "pattern" to "envelope metadata",
+        )))
+        assertEquals("highlightRule", jsonImportType(mapOf("pattern" to "x", "style" to "{}", "uuid" to UUID_A)))
+        assertEquals("replaceRule", jsonImportType(mapOf("pattern" to "x", "replacement" to "y")))
+        assertEquals(null, jsonImportType(mapOf("pattern" to "x", "style" to "{}", "replacement" to "y")))
     }
 
     @Test
-    fun `import is single flight and fragment observes view model state`() {
+    fun `import is single flight and route screen observes view model state`() {
         val viewModel = projectFile(
             "src/main/java/io/legado/app/ui/association/ImportHighlightRuleViewModel.kt"
         )
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/association/ImportHighlightRuleDialog.kt"
+        val screen = projectFile(
+            "src/main/java/io/legado/app/ui/association/HighlightRuleImportScreen.kt"
         )
 
-        assertTrue(viewModel.contains("if (importingLiveData.value == true) return"))
-        assertTrue(viewModel.contains("importingLiveData.value = true"))
-        assertFalse(viewModel.contains("fun importSelected(callback:"))
-        assertTrue(dialog.contains("importingLiveData.observe(viewLifecycleOwner)"))
-        assertTrue(dialog.contains("importSuccessLiveData.observe(viewLifecycleOwner)"))
-        assertTrue(dialog.contains("supportFragmentManager.findFragmentByTag(tag) == null"))
+        assertTrue(viewModel.contains("if(uiState.value.selectedCount==0) return"))
+        assertTrue(viewModel.contains("it.copy(importing=true,error=false)"))
+        assertTrue(screen.contains("LaunchedEffect(state.completed)"))
+        assertTrue(screen.contains("highlightRuleImportDialog"))
+        assertFalse(File("src/main/java/io/legado/app/ui/association/ImportHighlightRuleDialog.kt").exists())
+    }
+
+    @Test fun `comparison normalizes implicit style defaults without mutating the local entity`() {
+        val local=HighlightRule(id=1,uuid=UUID_A,pattern="same",style="")
+        val incoming=local.copy(id=99,scope=null).normalizeForRestore()
+        assertEquals(HighlightRuleImportStatus.EXISTING,compareImportedHighlightRules(listOf(incoming),listOf(local)).single().status)
+        assertEquals("",local.style); assertEquals(null,local.scope)
+    }
+
+    @Test fun `comparison preserves meaningful group scope and timeout differences`() {
+        listOf(
+            HighlightRule(uuid=UUID_A,pattern="same",group=" Group "),
+            HighlightRule(uuid=UUID_A,pattern="same",scope=" "),
+            HighlightRule(uuid=UUID_A,pattern="same",timeoutMillisecond=0),
+        ).forEach { local ->
+            val incoming=parseHighlightRuleFile(GSON.toJson(HighlightRuleFile(HighlightRuleFile.TYPE,listOf(local)))).single()
+            assertEquals(HighlightRuleImportStatus.UPDATE,compareImportedHighlightRules(listOf(incoming),listOf(local)).single().status)
+        }
     }
 
     private fun projectFile(pathInApp: String): String =

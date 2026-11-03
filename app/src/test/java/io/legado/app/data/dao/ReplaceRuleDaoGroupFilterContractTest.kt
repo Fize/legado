@@ -11,8 +11,8 @@ class ReplaceRuleDaoGroupFilterContractTest {
         normalizedSource("src/main/java/io/legado/app/data/dao/ReplaceRuleDao.kt")
     }
 
-    private val activitySource by lazy {
-        normalizedSource("src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt")
+    private val repositorySource by lazy {
+        normalizedSource("src/main/java/io/legado/app/data/repository/ReplaceRuleRepository.kt")
     }
 
     private val groupQuery by lazy {
@@ -56,12 +56,13 @@ class ReplaceRuleDaoGroupFilterContractTest {
         assertFalse(groupFilter.contains(" like ", ignoreCase = true))
 
         assertTrue(
-            activitySource.contains("val groupName = searchKey.substringAfter(\"group:\")")
+            repositorySource.contains("query.substringAfter(\"group:\")")
         )
-        assertTrue(activitySource.contains("replaceRuleDao.flowGroupSearch(groupName)"))
-        assertFalse(activitySource.contains("flowGroupSearch(\"%"))
+        assertTrue(repositorySource.contains("replaceRuleDao.flowGroupSearch(query.substringAfter(\"group:\"))"))
+        assertFalse(repositorySource.contains("flowGroupSearch(\"%"))
         assertTrue(
-            activitySource.contains("updateSearchQuery(\"group:\$group\")")
+            normalizedSource("src/main/java/io/legado/app/ui/replace/ReplaceRuleScreen.kt")
+                .contains("viewModel.setQuery(\"group:\$group\")")
         )
     }
 

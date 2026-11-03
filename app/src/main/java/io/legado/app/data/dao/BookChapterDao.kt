@@ -10,6 +10,9 @@ import io.legado.app.data.entities.BookChapter
 @Dao
 interface BookChapterDao {
 
+    @Query("SELECT url,title,`index`,isVolume FROM chapters WHERE bookUrl=:url ORDER BY `index`")
+    fun flowCacheCatalog(url: String): kotlinx.coroutines.flow.Flow<List<io.legado.app.data.entities.CacheCatalogEntry>>
+
     @Query("SELECT * FROM chapters where bookUrl = :bookUrl and title like '%'||:key||'%' order by `index`")
     fun search(bookUrl: String, key: String): List<BookChapter>
 

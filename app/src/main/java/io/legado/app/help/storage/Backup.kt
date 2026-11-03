@@ -4,10 +4,15 @@ import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
+import dagger.hilt.android.EntryPointAccessors
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import io.legado.app.data.preferences.CacheExportPreferencesEntryPoint
+import io.legado.app.data.preferences.toLegacyPreferenceMap
+import io.legado.app.data.repository.MangaReaderPreferencesEntryPoint
+import io.legado.app.data.repository.toLegacyPreferenceMap
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.DirectLinkUpload
@@ -314,6 +319,13 @@ object Backup {
         }
         currentCoroutineContext().ensureActive()
         val preferenceSnapshot = HashMap<String, Any?>(appCtx.defaultSharedPreferences.all)
+        val mangaPreferences = EntryPointAccessors.fromApplication(
+            appCtx,
+            MangaReaderPreferencesEntryPoint::class.java,
+        ).mangaReaderPreferencesStore().current()
+        preferenceSnapshot.putAll(mangaPreferences.toLegacyPreferenceMap())
+        preferenceSnapshot.putAll(EntryPointAccessors.fromApplication(appCtx,CacheExportPreferencesEntryPoint::class.java)
+            .cacheExportPreferences().current().toLegacyPreferenceMap())
         (preferenceSnapshot[PreferKey.coverFont] as? String)?.takeIf { it.isNotBlank() }?.let {
             if (!File(it).exists()) preferenceSnapshot[PreferKey.coverFont] = ""
         }

@@ -99,6 +99,11 @@ internal class CodeTextActions(private val editor: CodeEditor) : ActionMode.Call
         }
     }
 
+    internal fun showForTest() {
+        nativeRequested = true
+        show()
+    }
+
     fun dismiss(): Boolean {
         nativeRequested = false
         insertionActions.isEnabled = true

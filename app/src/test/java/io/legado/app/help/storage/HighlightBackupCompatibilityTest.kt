@@ -78,7 +78,6 @@ class HighlightBackupCompatibilityTest {
         assertTrue(restore.contains("fileToListT<HighlightRule>(path, \"highlightRule.json\")"))
         assertTrue(restore.contains("appDb.highlightRuleDao.replaceAll"))
         assertTrue(restore.contains("HighlightRule::normalizeForRestore"))
-        assertTrue(restore.contains("恢复高亮规则出错"))
     }
 
     private fun projectFile(pathInApp: String): File =

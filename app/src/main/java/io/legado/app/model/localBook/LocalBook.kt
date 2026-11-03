@@ -53,7 +53,6 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isDataUrl
 import io.legado.app.utils.printOnDebug
 import kotlinx.coroutines.runBlocking
-import org.apache.commons.text.StringEscapeUtils
 import splitties.init.appCtx
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -241,10 +240,7 @@ object LocalBook {
         }
         if (book.isEpub) {
             content ?: return null
-            if (content.indexOf('&') > -1) {
-                content = content.replace("&lt;img", "&lt; img", true)
-                return StringEscapeUtils.unescapeHtml4(content)
-            }
+            content = epubCacheText(content)
         }
 
         if (content.isNullOrEmpty() && !chapter.isVolume) {

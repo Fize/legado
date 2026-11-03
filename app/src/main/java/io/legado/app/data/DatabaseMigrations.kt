@@ -1,6 +1,9 @@
 package io.legado.app.data
 
 import androidx.room.DeleteColumn
+import androidx.room.DeleteTable
+import androidx.room.ProvidedAutoMigrationSpec
+import androidx.room.RoomDatabase
 import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -12,6 +15,18 @@ import io.legado.app.help.book.isLegacyPersistedCoverPath
 import java.util.UUID
 
 object DatabaseMigrations {
+
+    val autoMigrationSpecs: Array<AutoMigrationSpec> = arrayOf(
+        Migration_54_55(),
+        Migration_64_65(),
+        Migration_80_81(),
+        Migration_83_84(),
+        Migration_84_85(),
+        Migration_96_97(),
+        Migration_98_99(),
+        Migration_101_102(),
+        Migration_110_111(),
+    )
 
     val migrations: Array<Migration> by lazy {
         arrayOf(
@@ -25,7 +40,7 @@ object DatabaseMigrations {
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_100_101, migration_104_105, migration_105_106, migration_106_107,
             migration_107_108, migration_108_109, migration_109_110,
-            migration_111_112, migration_112_113,
+            migration_111_112, migration_112_113, migration_113_114, migration_114_115, migration_117_118,
         )
     }
 
@@ -424,6 +439,7 @@ object DatabaseMigrations {
 
 
     @Suppress("ClassName")
+    @ProvidedAutoMigrationSpec
     class Migration_54_55 : AutoMigrationSpec {
 
         override fun onPostMigrate(db: SupportSQLiteDatabase) {
@@ -467,9 +483,11 @@ object DatabaseMigrations {
         tableName = "book_sources",
         columnName = "enabledReview"
     )
+    @ProvidedAutoMigrationSpec
     class Migration_64_65 : AutoMigrationSpec
 
     @Suppress("ClassName")
+    @ProvidedAutoMigrationSpec
     class Migration_80_81 : AutoMigrationSpec {
         override fun onPostMigrate(db: SupportSQLiteDatabase) {
             db.execSQL("""
@@ -503,6 +521,7 @@ object DatabaseMigrations {
         tableName = "rssArticles",
         columnName = "ratio"
     )
+    @ProvidedAutoMigrationSpec
     class Migration_83_84 : AutoMigrationSpec
 
     @Suppress("ClassName")
@@ -514,9 +533,11 @@ object DatabaseMigrations {
         tableName = "chapters",
         columnName = "reviewImg"
     )
+    @ProvidedAutoMigrationSpec
     class Migration_84_85 : AutoMigrationSpec
 
     @Suppress("ClassName")
+    @ProvidedAutoMigrationSpec
     class Migration_96_97 : AutoMigrationSpec {
         override fun onPostMigrate(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -544,6 +565,7 @@ object DatabaseMigrations {
     }
 
     @Suppress("ClassName")
+    @ProvidedAutoMigrationSpec
     class Migration_98_99 : AutoMigrationSpec {
         override fun onPostMigrate(db: SupportSQLiteDatabase) {
             //书名唯一对应一个作者时用书架数据补全阅读记录的作者,有歧义的保持为空
@@ -564,6 +586,7 @@ object DatabaseMigrations {
     }
 
     @Suppress("ClassName")
+    @ProvidedAutoMigrationSpec
     class Migration_101_102 : AutoMigrationSpec {
         override fun onPostMigrate(db: SupportSQLiteDatabase) {
             val update = db.compileStatement(
@@ -588,6 +611,16 @@ object DatabaseMigrations {
         }
     }
 
+    @Suppress("ClassName")
+    @ProvidedAutoMigrationSpec
+    @DeleteTable.Entries(
+        DeleteTable(tableName = "rssArticles"),
+        DeleteTable(tableName = "rssReadRecords"),
+        DeleteTable(tableName = "rssSources"),
+        DeleteTable(tableName = "rssStars"),
+    )
+    class Migration_110_111 : AutoMigrationSpec
+
     val migration_111_112 = object : Migration(111, 112) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("DROP TABLE IF EXISTS rssSources")
@@ -602,4 +635,56 @@ object DatabaseMigrations {
             db.execSQL("DROP TABLE IF EXISTS auto_task_rules")
         }
     }
+
+    val migration_114_115 = object : Migration(114, 115) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE books ADD COLUMN customCoverSource TEXT DEFAULT NULL")
+        }
+    }
+
+    // 117 was exercised by development builds before the book deletion constraints were final.
+    // Rebuild the two new child tables so both development shapes upgrade without touching library data.
+    val migration_117_118 = object : Migration(117, 118) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""CREATE TABLE reader_book_owners_new (
+                bookUrl TEXT NOT NULL, sessionId TEXT NOT NULL, ownerToken TEXT NOT NULL,
+                PRIMARY KEY(bookUrl),
+                FOREIGN KEY(sessionId) REFERENCES reader_sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY(bookUrl) REFERENCES books(bookUrl) ON DELETE CASCADE)""")
+            db.execSQL("""INSERT INTO reader_book_owners_new
+                SELECT o.bookUrl, o.sessionId, o.ownerToken FROM reader_book_owners o
+                JOIN reader_sessions s ON s.id = o.sessionId AND s.ownerToken = o.ownerToken AND s.bookUrl = o.bookUrl
+                JOIN books b ON b.bookUrl = o.bookUrl""")
+            db.execSQL("DROP TABLE reader_book_owners")
+            db.execSQL("ALTER TABLE reader_book_owners_new RENAME TO reader_book_owners")
+            db.execSQL("CREATE INDEX index_reader_book_owners_sessionId ON reader_book_owners(sessionId)")
+            db.execSQL("""CREATE TABLE reader_catalog_requests_new (
+                id TEXT NOT NULL, sessionId TEXT NOT NULL, bookUrl TEXT NOT NULL, revision INTEGER NOT NULL,
+                chapterIndex INTEGER, pageIndex INTEGER, consumed INTEGER NOT NULL, PRIMARY KEY(id),
+                FOREIGN KEY(sessionId) REFERENCES reader_sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY(bookUrl) REFERENCES books(bookUrl) ON DELETE CASCADE)""")
+            db.execSQL("""INSERT INTO reader_catalog_requests_new
+                SELECT c.id, c.sessionId, c.bookUrl, c.revision, c.chapterIndex, c.pageIndex, c.consumed
+                FROM reader_catalog_requests c JOIN reader_sessions s ON s.id = c.sessionId
+                JOIN books b ON b.bookUrl = c.bookUrl""")
+            db.execSQL("DROP TABLE reader_catalog_requests")
+            db.execSQL("ALTER TABLE reader_catalog_requests_new RENAME TO reader_catalog_requests")
+            db.execSQL("CREATE INDEX index_reader_catalog_requests_sessionId ON reader_catalog_requests(sessionId)")
+            db.execSQL("CREATE INDEX index_reader_catalog_requests_bookUrl ON reader_catalog_requests(bookUrl)")
+        }
+    }
+
+    val migration_113_114 = object : Migration(113, 114) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE book_groups ADD COLUMN generation TEXT DEFAULT NULL")
+            db.execSQL("UPDATE book_groups SET generation = lower(hex(randomblob(16))) WHERE generation IS NULL")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_book_groups_generation ON book_groups(generation)")
+        }
+    }
+}
+
+fun <T : RoomDatabase> RoomDatabase.Builder<T>.addLegadoMigrations(): RoomDatabase.Builder<T> {
+    addMigrations(*DatabaseMigrations.migrations)
+    DatabaseMigrations.autoMigrationSpecs.forEach { addAutoMigrationSpec(it) }
+    return this
 }

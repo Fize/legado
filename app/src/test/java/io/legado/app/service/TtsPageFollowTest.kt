@@ -40,8 +40,8 @@ class TtsPageFollowTest {
         assertTrue(service.contains("TextToSpeech.QUEUE_FLUSH"))
         assertTrue(service.contains("utteranceId(sessionId, index, position, last)"))
         assertTrue(service.contains("callbackHandler.post"))
-        assertTrue(service.contains("if (sessionId != playbackSessionId.get()) return"))
-        assertTrue(service.contains("if (sessionId == playbackSessionId.get()) block()"))
+        assertTrue(service.contains("if (isRestoreRecoveryBlocked || sessionId != playbackSessionId.get()) return"))
+        assertTrue(service.contains("if (!isRestoreRecoveryBlocked && sessionId == playbackSessionId.get()) block()"))
         assertTrue(
             service.substringAfter("private fun dispatchCurrentCallback")
                 .contains("synchronized(this)")

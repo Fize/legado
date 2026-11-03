@@ -1,6 +1,7 @@
 package io.legado.app.ui.login
 
 import android.os.CountDownTimer
+import android.os.SystemClock
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,18 +65,30 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class SourceLoginV2Delegate(
+/** In-memory only: login form contents are never added to saved instance state. */
+internal data class SourceLoginV2Snapshot(
+    val stateJson: String,
+    val form: Map<String, String>,
+    val editors: Map<String, TextFieldValue>,
+    val errors: Map<String, String>,
+    val countdownDeadlines: Map<String, Long>,
+)
+
+internal class SourceLoginV2Delegate(
     private val fragment: SourceLoginDialog,
     private val source: BaseSource,
     private val book: Book?,
     private val chapter: BookChapter?,
+    private val restored: SourceLoginV2Snapshot? = null,
 ) {
 
-    private var stateJson = "{}"
+    private var stateJson = restored?.stateJson ?: "{}"
     private var renderJob: Job? = null
     private var actionJob: Job? = null
     private var firstRender = true
-    private val sessionValues = linkedMapOf<String, String>()
+    private val sessionValues = linkedMapOf<String, String>().apply { putAll(restored?.form.orEmpty()) }
+    private val editorValues = mutableStateMapOf<String, TextFieldValue>().apply { putAll(restored?.editors.orEmpty()) }
+    private var pendingCountdowns = restored?.countdownDeadlines.orEmpty()
 
     var isLoading by mutableStateOf(false)
         private set
@@ -90,12 +105,25 @@ class SourceLoginV2Delegate(
     private val buttonLabels = mutableStateMapOf<String, String>()
     private val buttonDisplayTexts = mutableStateMapOf<String, String>()
     private val countdownLeft = hashMapOf<String, Int>()
+    private val countdownDeadlines = hashMapOf<String, Long>()
     private val countdownTimers = hashMapOf<String, CountDownTimer>()
 
     private val scope get() = fragment.viewLifecycleOwner.lifecycleScope
 
     fun start() {
-        render()
+        render(errors = restored?.errors)
+    }
+
+    internal fun snapshot(): SourceLoginV2Snapshot {
+        collectForm()
+        return SourceLoginV2Snapshot(
+            stateJson = stateJson,
+            form = sessionValues.toMap(),
+            editors = editorValues.mapValues { (_, value) -> value.copy(composition = null) },
+            errors = if (rowsState.isEmpty()) restored?.errors.orEmpty() else fieldErrors.toMap(),
+            countdownDeadlines = (pendingCountdowns + countdownDeadlines)
+                .filterValues { it > SystemClock.elapsedRealtime() },
+        )
     }
 
     fun destroy() {
@@ -195,6 +223,12 @@ class SourceLoginV2Delegate(
         countdownLeft.forEach { (action, left) ->
             if (left > 0) applyCountdown(action, left)
         }
+        val now = SystemClock.elapsedRealtime()
+        pendingCountdowns.forEach { (action, deadline) ->
+            val remaining = deadline - now
+            if (remaining > 0) startCountdownMillis(action, remaining)
+        }
+        pendingCountdowns = emptyMap()
     }
 
     private fun addField(row: RowUi, stored: Map<String, String>, password: Boolean) {
@@ -331,10 +365,16 @@ class SourceLoginV2Delegate(
     }
 
     private fun startCountdown(action: String, seconds: Int) {
+        startCountdownMillis(action, seconds * 1000L)
+    }
+
+    private fun startCountdownMillis(action: String, durationMillis: Long) {
         countdownTimers.remove(action)?.cancel()
+        countdownDeadlines[action] = SystemClock.elapsedRealtime() + durationMillis
+        val seconds = ((durationMillis + 999) / 1000).toInt()
         countdownLeft[action] = seconds
         applyCountdown(action, seconds)
-        countdownTimers[action] = object : CountDownTimer(seconds * 1000L, 1000L) {
+        countdownTimers[action] = object : CountDownTimer(durationMillis, 1000L) {
             override fun onTick(millisUntilFinished: Long) {
                 val left = ((millisUntilFinished + 999) / 1000).toInt()
                 countdownLeft[action] = left
@@ -343,6 +383,7 @@ class SourceLoginV2Delegate(
 
             override fun onFinish() {
                 countdownLeft.remove(action)
+                countdownDeadlines.remove(action)
                 countdownTimers.remove(action)
                 actionEnabled[action] = true
                 buttonDisplayTexts[action] = buttonLabels[action].orEmpty()
@@ -397,11 +438,15 @@ class SourceLoginV2Delegate(
                                 val isPassword = row.type == RowUi.Type.password
                                 var passwordVisible by remember(key) { mutableStateOf(false) }
                                 val errorMsg = fieldErrors[key]
+                                val text = fieldValues[key].orEmpty()
+                                val editorValue = editorValues[key]?.takeIf { it.text == text }
+                                    ?: TextFieldValue(text, selection = TextRange(text.length))
                                 OutlinedTextField(
-                                    value = fieldValues[key].orEmpty(),
-                                    onValueChange = {
-                                        fieldValues[key] = it
-                                        fieldErrors.remove(key)
+                                    value = editorValue,
+                                    onValueChange = { value ->
+                                        editorValues[key] = value
+                                        fieldValues[key] = value.text
+                                        if (value.text != text) fieldErrors.remove(key)
                                     },
                                     label = { Text(row.name) },
                                     placeholder = row.hint?.let { hintText -> { Text(hintText) } },

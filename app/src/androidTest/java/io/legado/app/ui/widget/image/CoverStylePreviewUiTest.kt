@@ -1,16 +1,14 @@
 package io.legado.app.ui.widget.image
 
-import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.os.SystemClock
-import android.view.View
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
+import io.legado.app.ui.compose.component.CoverImageStatus
+import org.junit.Rule
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
@@ -18,12 +16,10 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.BookCover
-import io.legado.app.ui.config.ConfigActivity
-import io.legado.app.ui.config.ConfigTag
-import io.legado.app.ui.config.CoverFontConfigFragment
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.SettingsRoute
+import io.legado.app.ui.navigation.SettingsSection
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.externalFiles
 import org.junit.After
@@ -35,17 +31,14 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class CoverStylePreviewUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val preferences = context.defaultSharedPreferences
     private val saved = HashMap(preferences.all)
     private val savedNight = AppConfig.isNightTheme
     private val files = mutableListOf<File>()
-    private val styleKeys = listOf(PreferKey.coverHorizontal, PreferKey.coverTitleAdaptive,
-        PreferKey.coverKeepPunctuation, PreferKey.coverFont, PreferKey.coverCustomFontSize,
-        PreferKey.coverTitleLargeSize, PreferKey.coverTitleSmallSize,
-        PreferKey.coverAuthorLargeSize, PreferKey.coverAuthorSmallSize)
-
+    private var previewCapture = 0
     @After
     fun tearDown() {
         preferences.edit().clear().apply {
@@ -67,37 +60,28 @@ class CoverStylePreviewUiTest {
         files.forEach(File::delete)
     }
 
-    private fun launch(): ActivityScenario<ConfigActivity> {
+    private fun launch(): ActivityScenario<AppActivity> {
         preferences.edit().putBoolean(PreferKey.coverShowName, true)
             .putBoolean(PreferKey.coverShowAuthor, true)
             .putBoolean(PreferKey.coverShowNameN, true)
             .putBoolean(PreferKey.coverShowAuthorN, true).commit()
         instrumentation.runOnMainSync { BookCover.upDefaultCover() }
-        return ActivityScenario.launch(Intent(context, ConfigActivity::class.java)
-            .putExtra("configTag", ConfigTag.COVER_FONT_CONFIG))
+        return ActivityScenario.launch(AppActivity.startIntent(context, SettingsRoute(SettingsSection.CoverFont)))
     }
 
     @Test
-    fun orderedScrollableSettingsUpdateRealPreviewsAndSurviveRecreation() {
+    fun settingsUpdateRealPreviewsAndSurviveRecreation() {
         preferences.edit().putBoolean(PreferKey.coverHorizontal, false)
             .putBoolean(PreferKey.coverTitleAdaptive, true)
             .putBoolean(PreferKey.coverKeepPunctuation, false)
             .putBoolean(PreferKey.coverCustomFontSize, false).putString(PreferKey.coverFont, "").commit()
         launch().use { settings ->
-            settings.onActivity { activity ->
-                val screen = fragment(activity).preferenceScreen
-                assertEquals(styleKeys + "coverPreview", (0 until screen.preferenceCount)
-                    .map { screen.getPreference(it).key })
-            }
             val before = previews(settings)
-            settings.onActivity { assertTrue("small screens scroll through all options",
-                fragment(it).listView.canScrollVertically(-1)) }
-            for ((key, label) in listOf(PreferKey.coverHorizontal to R.string.cover_horizontal,
+            for ((_, label) in listOf(PreferKey.coverHorizontal to R.string.cover_horizontal,
                 PreferKey.coverTitleAdaptive to R.string.cover_title_adaptive,
                 PreferKey.coverKeepPunctuation to R.string.cover_keep_punctuation,
                 PreferKey.coverCustomFontSize to R.string.cover_custom_font_size)) {
-                scroll(settings, key)
-                onView(withText(label)).perform(click())
+                clickLabel(settings, label)
             }
             val after = previews(settings)
             assertFalse("real cover pixels update without leaving settings", before[1].contentEquals(after[1]))
@@ -142,20 +126,10 @@ class CoverStylePreviewUiTest {
             }
             launch().use { settings ->
                 val background = previews(settings)
-                background.forEach { assertEquals("current custom background is rendered", color, it[0]) }
-                scroll(settings, PreferKey.coverFont)
-                onView(withText(R.string.cover_font_select)).perform(click())
-                waitUntil {
-                    var found = false
-                    settings.onActivity { activity ->
-                        val matches = arrayListOf<View>()
-                        fragment(activity).childFragmentManager.fragments.firstOrNull()?.view
-                            ?.findViewsWithText(matches, font.name, View.FIND_VIEWS_WITH_TEXT)
-                        found = matches.isNotEmpty()
-                    }
-                    found
-                }
-                onView(withText(context.getString(R.string.font_item_private, font.name))).perform(click())
+                background.forEach { assertEquals("current custom background is rendered", color, it[kotlin.math.sqrt(it.size * .75).toInt().let { width -> width * 8 + width / 2 }]) }
+                clickLabel(settings, R.string.cover_font_select)
+                compose.onAllNodes(hasScrollToIndexAction()).onLast().performScrollToNode(hasText(font.name))
+                compose.onNodeWithText(font.name).performClick()
                 waitUntil { preferences.getString(PreferKey.coverFont, "") == font.path }
                 assertNotNull(BookCover.fontTypeface)
                 assertEquals(readerFont, ReadBookConfig.textFont)
@@ -166,9 +140,10 @@ class CoverStylePreviewUiTest {
                 settings.recreate()
                 previews(settings)
                 assertEquals(font.path, preferences.getString(PreferKey.coverFont, ""))
-                scroll(settings, PreferKey.coverFont)
-                onView(withText(R.string.cover_font_select)).perform(click())
-                onView(withId(R.id.menu_default)).perform(click())
+                clickLabel(settings, R.string.cover_font_select)
+                var defaultLabel = ""
+                settings.onActivity { defaultLabel = it.getString(R.string.default_font) }
+                compose.onNodeWithText(defaultLabel).performClick()
                 assertEquals("", preferences.getString(PreferKey.coverFont, ""))
                 assertNull(BookCover.fontTypeface)
                 assertEquals(systemFont, AppConfig.systemTypefaces)
@@ -178,61 +153,36 @@ class CoverStylePreviewUiTest {
         }
     }
 
-    private fun fragment(activity: ConfigActivity) = activity.supportFragmentManager
-        .findFragmentByTag(ConfigTag.COVER_FONT_CONFIG) as CoverFontConfigFragment
+    private fun clickLabel(settings: ActivityScenario<AppActivity>, id: Int) {
+        var label = ""
+        settings.onActivity { label = it.getString(id) }
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(label))
+        compose.onNodeWithText(label).performScrollTo().assertIsDisplayed().performClick()
+    }
 
-    private fun scroll(settings: ActivityScenario<ConfigActivity>, key: String) {
-        settings.onActivity { fragment(it).scrollToPreference(key) }
-        instrumentation.waitForIdleSync()
-        if (key == "coverPreview") {
-            settings.onActivity {
-                val list = fragment(it).listView
-                list.scrollBy(0, list.computeVerticalScrollRange())
+    private fun previews(settings: ActivityScenario<AppActivity>): List<IntArray> {
+        var labels = emptyList<String>()
+        settings.onActivity { labels = listOf(it.getString(R.string.cover_preview_short), it.getString(R.string.cover_preview_long)) }
+        return labels.map { label ->
+            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription(label))
+            // The preview is the last item. Use the same absolute screen origin before
+            // comparing pixels: API37 dithers the background at screen coordinates.
+            compose.onNode(hasScrollToIndexAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription(label).performScrollTo().assertIsDisplayed()
+                .assert(SemanticsMatcher.expectValue(CoverImageStatus, "default"))
+            val bitmap = compose.onNodeWithContentDescription(label).captureToImage().asAndroidBitmap()
+            val capture = ++previewCapture
+            File(context.cacheDir, "cover-preview-$capture.png").outputStream().use {
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
-            instrumentation.waitForIdleSync()
+            val bounds = compose.onNodeWithContentDescription(label).fetchSemanticsNode().boundsInRoot
+            File(context.cacheDir, "cover-preview-$capture.txt").writeText("${bitmap.width}x${bitmap.height} $bounds")
+            IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height) }
         }
     }
 
-    private fun previews(settings: ActivityScenario<ConfigActivity>): List<IntArray> {
-        scroll(settings, "coverPreview")
-        var result: List<IntArray>? = null
-        waitUntil {
-            settings.onActivity { activity ->
-                val ids = listOf(R.id.cover_preview_short, R.id.cover_preview_long)
-                val titles = listOf("开源阅读", "开源阅读可以看小说、看漫画、听书")
-                val authors = listOf("开源阅读LegadoTeam", "开源阅读")
-                val views = ids.map { activity.findViewById<CoverImageView>(it) }
-                if (views.any { it == null || it.width <= 0 || it.drawable == null }) return@onActivity
-                val field = CoverImageView::class.java.getDeclaredField("currentNameBitmap").apply { isAccessible = true }
-                val frames = views.map { view ->
-                    Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
-                }
-                val ready = views.withIndex().all { (index, view) ->
-                    val expected = coverBitmapCacheKey(normalizeCoverText(titles[index], BookCover.keepPunctuation)!!,
-                        normalizeCoverText(authors[index], BookCover.keepPunctuation), view.width, view.height,
-                        BookCover.drawBookNameHorizontal, BookCover.drawBookAuthor,
-                        context.backgroundColor, context.accentColor, BookCover.adaptiveTitleSize,
-                        BookCover.fontSizes, BookCover.fontCacheKey)
-                    (field.get(view) as? Pair<*, *>)?.first == expected
-                }
-                if (ready) result = frames.map { bitmap ->
-                    IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height) }
-                }
-                frames.forEach(Bitmap::recycle)
-            }
-            result != null
-        }
-        return result!!
-    }
-
-    private fun waitUntil(predicate: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 5000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (predicate()) return
-            SystemClock.sleep(50)
-        }
-        error("cover style UI did not reach requested state")
-    }
+    private fun waitUntil(predicate: () -> Boolean) = compose.waitUntil(10_000, predicate)
 
     private fun screenshot(name: String) {
         val file = File(context.getExternalFilesDir(null), "ui-regression/$name.png")
@@ -242,4 +192,5 @@ class CoverStylePreviewUiTest {
             recycle()
         }
     }
+
 }

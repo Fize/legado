@@ -1,6 +1,8 @@
 package io.legado.app.ui.association
 
 import io.legado.app.data.entities.ReplaceRule
+import io.legado.app.data.repository.REPLACE_RULE_QUERY_CHUNK_SIZE
+import io.legado.app.data.repository.compareImportedReplaceRules
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

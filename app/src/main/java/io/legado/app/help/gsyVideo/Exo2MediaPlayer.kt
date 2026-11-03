@@ -31,6 +31,16 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     }
     private val window = Timeline.Window()
 
+    // Media3's second onPlayWhenReadyChanged argument is a reason, not a playback state.
+    // The upstream adapter treats it as a state, so forward the player's actual state instead.
+    override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+        super.onPlayWhenReadyChanged(playWhenReady, mInternalPlayer?.playbackState ?: lastReportedPlaybackState)
+    }
+
+    override fun onPlaybackStateChanged(playbackState: Int) {
+        super.onPlayWhenReadyChanged(mInternalPlayer?.playWhenReady ?: isLastReportedPlayWhenReady, playbackState)
+    }
+
     /**
      * 上一集
      */

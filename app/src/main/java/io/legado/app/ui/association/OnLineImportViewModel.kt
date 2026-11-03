@@ -1,128 +1,103 @@
 package io.legado.app.ui.association
 
-import android.app.Application
-import androidx.core.net.toUri
-import androidx.lifecycle.MutableLiveData
-import io.legado.app.R
-import io.legado.app.constant.AppConst
-import io.legado.app.help.DefaultData
-import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.help.http.decompressed
-import io.legado.app.help.http.newCallResponseBody
-import io.legado.app.help.http.okHttpClient
-import io.legado.app.help.http.text
-import io.legado.app.utils.FileUtils
-import io.legado.app.utils.externalCache
-import okhttp3.MediaType.Companion.toMediaType
-import splitties.init.appCtx
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import io.legado.app.constant.AppLog
+import io.legado.app.data.repository.OnlineImportRepository
+import io.legado.app.data.repository.OnlineImportResolution
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
+data class OnlineImportUiState(
+    val loading: Boolean = true,
+    val importing: Boolean = false,
+    val confirmReadConfig: Boolean = false,
+    val destination: OnlineImportResolution.Destination? = null,
+    val errorMessage: String? = null,
+    val importComplete: Boolean = false,
+    val finished: Boolean = false,
+)
 
-    val readConfigLive = MutableLiveData<ByteArray?>()
-    var intentHandled = false
+@HiltViewModel
+class OnLineImportViewModel @Inject constructor(
+    private val repository: OnlineImportRepository,
+    private val savedState: SavedStateHandle,
+) : ViewModel() {
+    private val _uiState = MutableStateFlow(OnlineImportUiState())
+    val uiState = _uiState.asStateFlow()
+    private var initialized = false
+    private var pendingKey: String?
+        get() = savedState["pendingReadConfigKey"]
+        set(value) { savedState["pendingReadConfigKey"] = value }
 
-    fun getText(url: String, success: (text: String) -> Unit) {
-        execute {
-            okHttpClient.newCallResponseBody {
-                if (url.endsWith("#requestWithoutUA")) {
-                    url(url.substringBeforeLast("#requestWithoutUA"))
-                    header(AppConst.UA_NAME, "null")
-                } else {
-                    url(url)
+    fun initialize(link: String) {
+        if (initialized) return
+        initialized = true
+        viewModelScope.launch {
+            try {
+                val previous = pendingKey
+                if (previous != null && repository.canRestore(previous)) {
+                    _uiState.update { it.copy(loading = false, confirmReadConfig = true) }
+                    return@launch
                 }
-            }.decompressed().text("utf-8")
-        }.onSuccess {
-            success.invoke(it)
-        }.onError {
-            errorLive.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
+                pendingKey = null
+                when (val result = repository.resolve(link)) {
+                    is OnlineImportResolution.Destination ->
+                        _uiState.update { it.copy(loading = false, destination = result) }
+                    is OnlineImportResolution.ReadConfiguration -> {
+                        pendingKey = result.key
+                        _uiState.update { it.copy(loading = false, confirmReadConfig = true) }
+                    }
+                    OnlineImportResolution.Empty -> _uiState.update { it.copy(loading = false, finished = true) }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) { fail(error) }
         }
     }
 
-    fun getReadConfig(url: String) {
-        execute {
-            okHttpClient.newCallResponseBody {
-                if (url.endsWith("#requestWithoutUA")) {
-                    url(url.substringBeforeLast("#requestWithoutUA"))
-                    header(AppConst.UA_NAME, "null")
-                } else {
-                    url(url)
-                }
-            }.bytes()
-        }.onSuccess {
-            readConfigLive.value = it
-        }.onError {
-            errorLive.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
-        }
-    }
+    fun consumeDestination() = _uiState.update { it.copy(destination = null) }
 
     fun importReadConfig() {
-        val bytes = readConfigLive.value ?: return
-        readConfigLive.value = null
-        execute {
-            val config = ReadBookConfig.import(bytes)
-            applyImportedReadConfig(
-                configs = ReadBookConfig.configList,
-                imported = config,
-                defaultConfigs = { DefaultData.readConfigs },
-                save = ReadBookConfig::saveNow,
-                transactionLock = ReadBookConfig,
-            )
-        }.onSuccess {
-            successLive.value = "readConfig" to context.getString(R.string.read_config_import_success)
-        }.onError {
-            errorLive.value =
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
+        val key = pendingKey ?: return
+        if (uiState.value.importing || !uiState.value.confirmReadConfig) return
+        _uiState.update { it.copy(confirmReadConfig = false, importing = true) }
+        viewModelScope.launch {
+            try {
+                repository.importReadConfiguration(key)
+                _uiState.update { it.copy(importComplete = true) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) { fail(error) }
+            finally {
+                pendingKey = null
+                runCatching { repository.discard(key) }.onFailure { AppLog.put("清理在线导入缓存失败", it) }
+                _uiState.update { it.copy(importing = false) }
+            }
         }
     }
 
     fun cancelReadConfigImport() {
-        readConfigLive.value = null
-    }
-
-    fun determineType(url: String) {
-        execute {
-            val rs = okHttpClient.newCallResponseBody {
-                if (url.endsWith("#requestWithoutUA")) {
-                    url(url.substringBeforeLast("#requestWithoutUA"))
-                    header(AppConst.UA_NAME, "null")
-                } else {
-                    url(url)
-                }
-            }
-            when (rs.contentType()) {
-                "application/zip".toMediaType(),
-                "application/octet-stream".toMediaType() -> {
-                    rs.bytes()
-                }
-                else -> {
-                    val inputStream = rs.byteStream()
-                    val file = FileUtils.createFileIfNotExist(
-                        appCtx.externalCache,
-                        "download",
-                        "scheme_import_cache.json"
-                    )
-                    file.outputStream().use { out ->
-                        inputStream.use {
-                            it.copyTo(out)
-                        }
-                    }
-                    importJson(file.toUri())
-                    null
-                }
-            }
-        }.onSuccess {
-            if (it != null) {
-                readConfigLive.value = it
-            }
-        }.onError {
-            errorLive.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
+        if (uiState.value.importing || uiState.value.finished) return
+        val key = pendingKey
+        pendingKey = null
+        _uiState.update { it.copy(confirmReadConfig = false) }
+        viewModelScope.launch {
+            try { if (key != null) repository.discard(key) }
+            finally { _uiState.update { it.copy(finished = true) } }
         }
     }
 
+    fun dismissResult() = _uiState.update { it.copy(errorMessage = null, importComplete = false, finished = true) }
+
+    private fun fail(error: Throwable) {
+        AppLog.put("在线导入失败\n${error.localizedMessage}", error)
+        _uiState.update { it.copy(loading = false, errorMessage = repository.errorMessage(error)) }
+    }
 }

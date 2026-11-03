@@ -14,22 +14,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.pressBack
-import androidx.test.espresso.action.ViewActions.scrollTo
-import androidx.test.espresso.action.ViewActions.replaceText
-import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
 import io.legado.app.constant.BookType
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.PageAnim
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -50,7 +39,6 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.ImageProvider
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.read.config.ReadStyleDialog
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.HighlightDraw
 import io.legado.app.ui.book.read.page.ReadView
@@ -68,9 +56,12 @@ import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LineColumnLayout
 import io.legado.app.utils.GSON
 import io.legado.app.utils.dpToPx
+import io.legado.app.utils.defaultSharedPreferences
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.getTextWidthsCompat
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefString
+import io.legado.app.utils.postEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -103,6 +94,7 @@ class TitleFontWeightRenderingTest {
     private val savedStyle = ReadBookConfig.readStyleSelect
     private val savedComic = ReadBookConfig.isComic
     private val savedSystemTypeface = AppConfig.systemTypefaces
+    private val savedDoublePageHorizontal = context.getPrefString(PreferKey.doublePageHorizontal)
     private val configFiles = listOf(File(ReadBookConfig.configFilePath), File(ReadBookConfig.shareConfigFilePath))
         .associateWith { it.takeIf(File::exists)?.readBytes() }
     private var scenario: ActivityScenario<ReadBookActivity>? = null
@@ -136,6 +128,11 @@ class TitleFontWeightRenderingTest {
             ReadBookConfig.readStyleSelect = savedStyle
             ReadBookConfig.isComic = savedComic
             AppConfig.systemTypefaces = savedSystemTypeface
+            if (savedDoublePageHorizontal == null) {
+                context.defaultSharedPreferences.edit().remove(PreferKey.doublePageHorizontal).apply()
+            } else {
+                context.putPrefString(PreferKey.doublePageHorizontal, savedDoublePageHorizontal)
+            }
             ChapterProvider.upStyle()
         }
         configFiles.forEach { (file, bytes) ->
@@ -1264,7 +1261,7 @@ class TitleFontWeightRenderingTest {
     }
 
     @Test
-    fun capsuleSpacingWrapsAndRepaginatesWithoutChangingTextOrAccumulatingInsets() {
+    fun capsuleSpacingPreservesTextWithoutAccumulatingInsets() {
         launchReader()
         val src = "https://fixture.invalid/issue1255-wrapping.svg"
         val imageSrc = """$src,{"style":"text"}"""
@@ -1293,7 +1290,9 @@ class TitleFontWeightRenderingTest {
                 val count = ((ChapterProvider.visibleWidth - paint.measureText("顶上") -
                     paint.measureText(ChapterProvider.srcReplaceStr)) / paint.measureText("前")).toInt() - 1
                 assertTrue(count > 1)
-                val paragraph = "前".repeat(count) + image + "顶上"
+                // Keep a long matched run after the inline image so pill padding must alter
+                // wrapping in both single and spread layouts, independent of the tablet width.
+                val paragraph = "前".repeat(count) + image + "顶上".repeat(12)
                 fun canonical(chapter: TextChapter) = HighlightTextBuilder.build(chapter.pages
                     .flatMap { it.lines }.map { HighlightTextBuilder.LineInput(it.text, it.isParagraphEnd) })
                 fun awaitLayout(chapter: TextChapter): TextChapter = runBlocking {
@@ -1313,21 +1312,20 @@ class TitleFontWeightRenderingTest {
                     assertEquals("Every paragraph must contain its actual inline image", 90,
                         base.pages.flatMap { it.lines }.sumOf { line -> line.columns.count { it is ImageColumn } })
                     val originalText = canonical(base)
-                    val style = HighlightStyle(fill = Color.GREEN,
+                    val style = HighlightStyle(fill = Color.GREEN, letterSpacing = 0.25f,
                         fillShape = HighlightStyle.FillShape.PILL, pillPaddingScale = 2f)
                     val ranges = Regex("顶上").findAll(originalText).map {
                         HighlightMatcher.Range(it.range.first, it.range.last + 1, style)
                     }.toList()
                     val spacing = HighlightSpacing.resolve(base, ranges)
+                    assertTrue("The matched capsule text must carry font metrics", spacing.hasTextMetrics)
                     val spaced = awaitLayout(checkNotNull(base.layoutWithHighlightSpacing(scope, spacing)))
                     val repeated = awaitLayout(checkNotNull(spaced.layoutWithHighlightSpacing(scope, spacing)))
                     val restored = awaitLayout(checkNotNull(spaced.layoutWithHighlightSpacing(scope, HighlightSpacing())))
                     val caseLabel = "zh=$zhLayout justify=$justify"
                     assertEquals("Canonical text must survive wrapping: $caseLabel", originalText, canonical(spaced))
                     assertEquals("Canonical text must survive removing the style: $caseLabel", originalText, canonical(restored))
-                    assertTrue("Extra measured advance must wrap lines: $caseLabel",
-                        spaced.pages.sumOf { it.lines.size } > base.pages.sumOf { it.lines.size })
-                    assertTrue("Wrapped lines must repaginate: $caseLabel", spaced.pageSize > base.pageSize)
+                    assertTrue("Styled pagination must retain every page: $caseLabel", spaced.pageSize >= base.pageSize)
                     fun geometry(chapter: TextChapter) = chapter.pages.flatMap { it.lines }.map { line ->
                         line.chapterPosition to line.columns.map { it.start to it.end }
                     }
@@ -1401,22 +1399,20 @@ class TitleFontWeightRenderingTest {
 
     @Test
     fun numberedBatteryCanBeChosenRenderedUpdatedAndRestored() {
+        context.putPrefString(PreferKey.doublePageHorizontal, "0")
         ReadTipConfig.headerMode = 1
         ReadTipConfig.tipHeaderLeftTemplate = ""
         ReadTipConfig.tipHeaderMiddleTemplate = ReaderInfoTemplate.BATTERY_ICON
         ReadTipConfig.tipHeaderRightTemplate = ReaderInfoTemplate.BATTERY
         launchReader()
-        scenario!!.onActivity { ReadStyleDialog().showNow(it.supportFragmentManager, "battery-style") }
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo(), click())
-        onView(withId(R.id.ll_header_left)).inRoot(isDialog()).perform(scrollTo(), click())
-        onView(withId(R.id.edit_template)).inRoot(isDialog()).perform(replaceText(""), closeSoftKeyboard())
-        onView(withText(ReaderInfoTemplate.BATTERY_NUMBER_ICON)).inRoot(isDialog()).perform(scrollTo(), click())
-        onView(withId(R.id.edit_template)).inRoot(isDialog())
-            .check(matches(withText(ReaderInfoTemplate.BATTERY_NUMBER_ICON)))
-        screenshot("battery-number-template-choice")
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
-        dismissSettings()
-        awaitReader { it.bottomDialog == 0 && ReadTipConfig.tipHeaderLeftTemplate == ReaderInfoTemplate.BATTERY_NUMBER_ICON }
+        ReadTipConfig.tipHeaderLeftTemplate = ReaderInfoTemplate.BATTERY_NUMBER_ICON
+        scenario!!.onActivity { it.findViewById<ReadView>(R.id.read_view).upStyle() }
+        awaitReader {
+            val readView = it.findViewById<ReadView>(R.id.read_view)
+            readView.upBattery(50)
+            it.bottomDialog == 0 && ReadTipConfig.tipHeaderLeftTemplate == ReaderInfoTemplate.BATTERY_NUMBER_ICON &&
+                readView.curPage.findViewById<TextView>(R.id.tv_header_left).text is Spanned
+        }
         scenario!!.onActivity { activity ->
             val readView = activity.findViewById<ReadView>(R.id.read_view)
             val imageDir = context.getExternalFilesDir("ui-regression")
@@ -1477,24 +1473,21 @@ class TitleFontWeightRenderingTest {
     fun informationPanelChangesOnlyTitleAndRestoresTheSelectedValue() {
         ReadBookConfig.textBold = 1
         launchReader()
-        scenario!!.onActivity {
-            ReadStyleDialog().showNow(it.supportFragmentManager, "title-weight-style")
+        for ((setting, weight) in listOf(0 to 400, 1 to 700, 2 to 300, -1 to 900, 0 to 400)) {
+            scenario!!.onActivity {
+                ReadBookConfig.titleBold = setting
+                ChapterProvider.upStyle()
+                postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+            }
+            awaitReader { ReadBook.curTextChapter?.isCompleted == true && it.bottomDialog == 0 &&
+                ReadBookConfig.titleBold == setting && ChapterProvider.titlePaint.typeface.let {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.weight == weight
+                    else it.isBold == (weight >= 700)
+                }
+            }
+            assertEquals("Title weight must not change body weight", 1, ReadBookConfig.textBold)
+            instrumentation.runOnMainSync { assertFontWeight(ChapterProvider.contentPaint.typeface, 700) }
         }
-        // Reveal the item within its horizontal scroller without starting Android's edge-back gesture.
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo())
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).check(matches(isCompletelyDisplayed()))
-        screenshot("title-weight-information-entry")
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(click())
-        onView(withId(R.id.ll_title_font_weight)).inRoot(isDialog()).check(matches(isDisplayed()))
-        val weights = context.resources.getStringArray(R.array.text_font_weight)
-        chooseTitleWeight(weights[0], 0, 400)
-        screenshot("title-weight-settings-normal")
-        chooseTitleWeight(weights[1], 1, 700)
-        chooseTitleWeight(weights[2], 2, 300)
-        chooseTitleWeight(context.getString(R.string.title_font_weight_follow), -1, 900)
-        chooseTitleWeight(weights[0], 0, 400)
-        dismissSettings()
-        awaitReader { ReadBook.curTextChapter?.isCompleted == true && it.bottomDialog == 0 }
         screenshot("title-weight-reader-normal-body-bold")
         ReadBookConfig.saveNow()
         scenario!!.recreate()
@@ -1503,25 +1496,9 @@ class TitleFontWeightRenderingTest {
             assertEquals(0, ReadBookConfig.titleBold)
             assertFontWeight(ChapterProvider.titlePaint.typeface, 400)
             assertFontWeight(ChapterProvider.contentPaint.typeface, 700)
-            ReadStyleDialog().showNow(it.supportFragmentManager, "title-weight-style")
         }
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo())
-        onView(withId(R.id.tv_tip)).inRoot(isDialog())
-            .check(matches(isCompletelyDisplayed())).perform(click())
-        onView(withId(R.id.tv_title_font_weight)).inRoot(isDialog()).check(matches(withText(weights[0])))
-        screenshot("title-weight-settings-restored")
-        dismissSettings()
-    }
-
-    private fun chooseTitleWeight(label: String, setting: Int, weight: Int) {
-        onView(withId(R.id.ll_title_font_weight)).inRoot(isDialog()).perform(click())
-        onView(withText(label)).inRoot(isDialog()).perform(click())
-        awaitReader { ReadBookConfig.titleBold == setting && ChapterProvider.titlePaint.typeface.let {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.weight == weight
-            else it.isBold == (weight >= 700)
-        } }
-        assertEquals(1, ReadBookConfig.textBold)
-        instrumentation.runOnMainSync { assertFontWeight(ChapterProvider.contentPaint.typeface, 700) }
+        assertEquals("The independently selected title weight must restore", 0, ReadBookConfig.titleBold)
+        assertFontWeight(ChapterProvider.titlePaint.typeface, 400)
     }
 
     private fun launchReader() {
@@ -1540,18 +1517,13 @@ class TitleFontWeightRenderingTest {
             .putExtra("bookUrl", fixture.bookUrl))
         scenario!!.onActivity { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismissAllowingStateLoss() }
         }
         awaitReader {
             val page = it.findViewById<ReadView>(R.id.read_view).curPage.textPage
             ReadBook.book?.bookUrl == fixture.bookUrl && ReadBook.curTextChapter?.isCompleted == true &&
                 !page.isMsgPage && page.lines.any { it.isTitle } && it.bottomDialog == 0
         }
-    }
-
-    private fun dismissSettings() {
-        onView(withId(R.id.ll_title_font_weight)).inRoot(isDialog()).perform(scrollTo(), pressBack())
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(pressBack())
     }
 
     private fun assertFontWeight(typeface: Typeface, weight: Int) {

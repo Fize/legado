@@ -1,0 +1,6 @@
+<resources>
+    <string name="book_upload_pending">Upload is pending or in progress.</string>
+    <string name="book_upload_failed">Upload failed. You can cancel the task and try again.</string>
+    <string name="book_upload_cancel">Cancel upload</string>
+    <string name="book_upload_cancel_failed">Unable to cancel upload. Please try again.</string>
+</resources>

@@ -61,6 +61,12 @@
 -keep class * extends io.legado.app.help.JsExtensions{*;}
 # 数据类
 -keep class **.data.entities.**{*;}
+# Proto Lite resolves generated storage fields by their original names at runtime.
+# Keep the fields (including future schema fields), while allowing class shrinking.
+# https://github.com/protocolbuffers/protobuf/blob/main/java/lite/proguard.pgcfg
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
+    <fields>;
+}
 # HighlightStyle is serialized outside data.entities; keep nested enum names for Gson.
 -keep class io.legado.app.help.HighlightStyle { *; }
 -keep class io.legado.app.help.HighlightStyle$** { *; }

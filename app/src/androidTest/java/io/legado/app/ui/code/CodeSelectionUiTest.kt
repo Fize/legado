@@ -26,9 +26,17 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.children
 import androidx.core.content.FileProvider
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.fragment.app.DialogFragment
+import androidx.navigation3.runtime.NavEntry
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.closeSoftKeyboard
@@ -44,13 +52,13 @@ import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.hasDescendant
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.RootMatchers.withDecorView
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
-import androidx.test.espresso.matcher.ViewMatchers.hasDescendant
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
@@ -66,14 +74,18 @@ import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.help.config.AppConfig
-import io.legado.app.ui.association.FileAssociationActivity
-import io.legado.app.ui.association.ImportBookSourceDialog
+import io.legado.app.ui.association.FileAssociationContract
+import io.legado.app.ui.navigation.BookSourceImportRoute
+import io.legado.app.ui.AppActivity
+import io.legado.app.ui.navigation.BookshelfRoute
+import io.legado.app.ui.navigation.navigationViewModelStores
 import io.legado.app.ui.association.ImportBookSourceViewModel
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
 import io.legado.app.ui.widget.code.KeywordTokenizer
 import org.junit.After
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.hamcrest.Matchers.allOf
@@ -86,6 +98,8 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(AndroidJUnit4::class)
 @SdkSuppress(minSdkVersion = 29)
 class CodeSelectionUiTest {
+    @get:Rule val composeRule = createEmptyComposeRule()
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val cacheKey = "code-selection-${UUID.randomUUID()}"
@@ -102,7 +116,7 @@ class CodeSelectionUiTest {
                 .flatMap(monitor::getActivitiesInStage).filterIsInstance<CodeEditActivity>()
                 .filterNot { it.isFinishing }.forEach { activity ->
                     // A failed edit assertion must not leave a discard dialog blocking later tests.
-                    activity.findViewById<CodeEditor>(R.id.editText).takeIf { it.isShown }
+                    activity.codeEditorForTest().takeIf { it.isShown }
                         ?.setText(ViewModelProvider(activity)[CodeEditViewModel::class.java].initialText)
                 }
         }
@@ -182,6 +196,7 @@ class CodeSelectionUiTest {
             it.setSelection(0, 0)
             actions(it).dismiss()
         }
+        SystemClock.sleep(ViewConfiguration.getDoubleTapTimeout().toLong() + 50)
         press(Tap.LONG, 2, 11)
         awaitEditor {
             it.cursor.isSelected && selection(it) == "message" && !actions(it).isShowing
@@ -190,7 +205,7 @@ class CodeSelectionUiTest {
         screenshot("code-selection-first-long-press")
         dismissNativeMenu()
         // A normal tap still clears the selection.
-        press(Tap.SINGLE, 0, 2)
+        press(Tap.SINGLE, 5, 2)
         awaitEditor { !it.cursor.isSelected && actions(it).isEnabled }
         withEditor { assertEquals(source, it.text.toString()) }
     }
@@ -326,6 +341,7 @@ class CodeSelectionUiTest {
             it.cursor.left == source.indexOf("message") &&
                 selection(it).contains("\n  return") && it.text.toString() == source
         }
+        awaitEditor { actions(it).isEnabled && actions(it).isShowing }
         assertEditorToolbar()
         screenshot("code-selection-editor-drag")
     }
@@ -334,30 +350,43 @@ class CodeSelectionUiTest {
         launchEditor()
         val code = (0..80).joinToString("\n") { "const line$it = $it;" }
         scenario!!.onActivity { activity ->
-            activity.findViewById<CodeEditor>(R.id.editText).apply {
+            activity.codeEditorForTest().apply {
                 setText(code)
                 // The hosted emulator reports a hardware keyboard; allow the phone's IME path.
                 setDisableSoftKbdIfHardKbdAvailable(false)
             }
             CodeEditActivity::class.java.getDeclaredMethod("search").apply { isAccessible = true }.invoke(activity)
         }
-        onView(withId(R.id.editText)).perform(click())
+        onView(withContentDescription("codeEditorNative")).perform(click())
         withEditor { it.showSoftInput() }
         awaitEditor { ViewCompat.getRootWindowInsets(it)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+        val keyboardToolBounds = Rect()
+        onView(withContentDescription("keyboardToolBarHost"))
+            .inRoot(withDecorView(hasDescendant(withContentDescription("keyboardToolBarHost"))))
+            .check { view, failure ->
+                if (failure != null) throw failure
+                visibleScreenBounds(view!!, keyboardToolBounds)
+            }
         var selected = ""
         var offset = 0
         var selectedLine = 0
         withEditor {
-            val end = it.lastVisibleLine - 1
-            assertTrue("The fixture must leave room for a multiline selection", end >= it.firstVisibleLine + 2)
-            it.setSelectionRegion(end - 2, 0, end, 10, false)
+            val location = IntArray(2)
+            val visible = Rect()
+            it.getLocationOnScreen(location)
+            assertTrue(it.getGlobalVisibleRect(visible))
+            selectedLine = (it.lastVisibleLine downTo it.firstVisibleLine + 2).first { line ->
+                val y = location[1] + it.getCharOffsetY(line, 3) - it.rowHeight / 2f
+                y >= visible.top && y < minOf(visible.bottom, keyboardToolBounds.top)
+            }
+            it.setSelectionRegion(selectedLine - 2, 0, selectedLine - 1, 10, false)
             selected = selection(it)
             offset = it.offsetY
-            selectedLine = end - 1
         }
         assertEditorToolbar()
         dismissEditorToolbar()
-        press(Tap.LONG, selectedLine, 3)
+        scenario!!.onActivity { it.showNativeTextActionsForTest() }
+        awaitEditor { it.cursor.isSelected && !actions(it).isEnabled && !actions(it).isShowing }
         assertNativeMenu()
         assertNativeMenuClearOfTools()
         screenshot("code-selection-native-ime-search-bottom")
@@ -445,7 +474,8 @@ class CodeSelectionUiTest {
             val to = if (rightHandle) editorPoint(3, 15) else editorPoint(1, 9)
             // Sora places the caret one handle-height above the dragging finger.
             to[1] += handleHeight
-            onView(withId(R.id.editText)).perform(GeneralSwipeAction(Swipe.SLOW, { from }, { to }, Press.FINGER))
+            onView(withContentDescription("codeEditorNative"))
+                .perform(GeneralSwipeAction(Swipe.SLOW, { from }, { to }, Press.FINGER))
             awaitEditor {
                 !it.eventHandler.hasAnyHeldHandle() && selection(it).contains('\n') &&
                     actions(it).isEnabled && actions(it).isShowing
@@ -506,7 +536,7 @@ class CodeSelectionUiTest {
                 launchEditor(forResult = true, fileMode = fileMode)
                 withEditor { it.setText(expected) }
                 awaitEditor { it.text.toString() == expected }
-                onView(withId(R.id.menu_save)).perform(click())
+                scenario!!.onActivity { it.saveForTest() }
                 val result = scenario!!.result
                 assertEquals(Activity.RESULT_OK, result.resultCode)
                 val data = checkNotNull(result.resultData)
@@ -546,7 +576,7 @@ class CodeSelectionUiTest {
                     writeText(GSON.toJson(sources))
                 }
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
-                val intent = Intent(context, FileAssociationActivity::class.java).apply {
+                val intent = Intent().setComponent(FileAssociationContract.component(context)).apply {
                     action = Intent.ACTION_SEND
                     type = "application/json"
                     putExtra(Intent.EXTRA_STREAM, uri)
@@ -554,31 +584,26 @@ class CodeSelectionUiTest {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 var editorActivity: CodeEditActivity? = null
+                var parent: AppActivity? = null
                 try {
-                    ActivityScenario.launch<FileAssociationActivity>(intent).use { host ->
-                        var parent: DialogFragment? = null
+                    ActivityScenario.launch<AppActivity>(intent).use {
                         await {
-                            host.onActivity { activity ->
-                                parent = activity.supportFragmentManager.fragments.filterIsInstance<DialogFragment>()
-                                    .find { it is ImportBookSourceDialog }
-                            }
                             var ready = false
                             instrumentation.runOnMainSync {
-                                ready = parent?.view?.findViewById<RecyclerView>(R.id.recycler_view)
-                                    ?.adapter?.itemCount == 2 && parent?.dialog?.window?.decorView?.hasWindowFocus() == true
+                                parent = ActivityLifecycleMonitorRegistry.getInstance()
+                                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<AppActivity>().firstOrNull()
+                                ready = parent?.takeIf { it.currentDestination is BookSourceImportRoute }
+                                    ?.let { sourceImporter(it).allSources.size == 2 } == true &&
+                                    parent?.window?.decorView?.hasWindowFocus() == true
                             }
                             ready
                         }
-                        instrumentation.runOnMainSync {
-                            val list = parent!!.requireView().findViewById<RecyclerView>(R.id.recycler_view)
-                            checkNotNull(list.findViewHolderForAdapterPosition(1)).itemView
-                                .findViewById<View>(R.id.tv_open).performClick()
-                        }
+                        composeRule.onNodeWithTag("sourceImportRow:1:open").performClick()
                         var preview: CodeDialog? = null
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                preview = parent!!.childFragmentManager.fragments.filterIsInstance<CodeDialog>().firstOrNull()
+                                preview = parent!!.supportFragmentManager.fragments.filterIsInstance<CodeDialog>().firstOrNull()
                                 ready = preview?.dialog?.window?.decorView?.hasWindowFocus() == true
                             }
                             ready
@@ -588,19 +613,23 @@ class CodeSelectionUiTest {
                             assertEquals("1", preview!!.requestId)
                             original = preview!!.currentOriginalCode()
                             preview!!.setReplaceRuleRefreshPending(true)
-                            assertFalse(preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled)
-                            preview!!.setReplaceRuleRefreshPending(false)
-                            assertEquals(replacements, preview!!.binding.cbSourceReplacementPreview.isChecked)
-                            assertTrue(preview!!.binding.toolBar.menu.findItem(R.id.menu_save).isVisible)
                         }
-                        onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+                        composeRule.onNodeWithTag("codeDialogOpenEditor").assertIsNotEnabled()
+                        instrumentation.runOnMainSync { preview!!.setReplaceRuleRefreshPending(false) }
+                        if (replacements) {
+                            composeRule.onNodeWithTag("codeDialogAlternate").assertIsOn()
+                        } else {
+                            composeRule.onAllNodesWithTag("codeDialogAlternate").assertCountEquals(0)
+                        }
+                        composeRule.onNodeWithTag("codeDialogSave").assertIsEnabled()
+                        composeRule.onNodeWithTag("codeDialogOpenEditor").performClick()
                         var inputPath: String? = null
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
                                     .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
-                                val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                val editor = editorActivity?.codeEditorForTest()
                                 ready = editor != null && editor.text.toString() == original && editor.isShown && editor.isEditable
                                 if (ready) {
                                     inputPath = editorActivity!!.intent.getStringExtra("textFile")
@@ -616,7 +645,7 @@ class CodeSelectionUiTest {
                         assertTrue(insertion > urls[1].length)
                         val edited = original.substring(0, insertion) + "#edited" + original.substring(insertion)
                         instrumentation.runOnMainSync {
-                            val editor = editorActivity!!.findViewById<CodeEditor>(R.id.editText)
+                            val editor = editorActivity!!.codeEditorForTest()
                             editor.text.replace(insertion, insertion, "#edited")
                             val position = editor.cursor.indexer.getCharPosition(insertion + "#edited".length)
                             editor.setSelection(position.line, position.column)
@@ -631,7 +660,7 @@ class CodeSelectionUiTest {
                             instrumentation.runOnMainSync {
                                 editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
                                     .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
-                                val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                val editor = editorActivity?.codeEditorForTest()
                                 recreationState = "newActivity=${editorActivity !== beforeRecreation}, " +
                                     "editable=${editor?.isEditable}, textMatches=${editor?.text?.toString() == edited}, " +
                                     "length=${editor?.text?.length}/${edited.length}, " +
@@ -641,22 +670,25 @@ class CodeSelectionUiTest {
                             }
                             ready
                         }
-                        onView(withId(R.id.menu_save)).perform(click())
-                        await {
+                        instrumentation.runOnMainSync { editorActivity!!.saveForTest() }
+                        var returnState = ""
+                        await(message = { "Preview editor return: $returnState" }) {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 val expected = if (replacements) edited.replace("#edited", "#edited-once") else edited
-                                ready = preview!!.currentOriginalCode() == edited &&
-                                    preview!!.binding.codeView.text.toString() == expected &&
-                                    preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                    preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled
-                                if (ready) {
-                                    assertEquals(replacements, preview!!.binding.cbSourceReplacementPreview.isChecked)
-                                    assertTrue(preview!!.binding.toolBar.menu.findItem(R.id.menu_save).isVisible)
-                                }
+                                val originalMatches = preview!!.currentOriginalCode() == edited
+                                val displayedMatches = preview!!.codeView().text.toString() == expected
+                                val focused = preview!!.dialog?.window?.decorView?.hasWindowFocus() == true
+                                returnState = "replacements=$replacements; original=$originalMatches; " +
+                                    "displayed=$displayedMatches; focused=$focused; " +
+                                    "editorFinishing=${editorActivity?.isFinishing}"
+                                ready = originalMatches && displayedMatches && focused
                             }
                             ready
                         }
+                        composeRule.onNodeWithTag("codeDialogOpenEditor").assertIsEnabled()
+                        composeRule.onNodeWithTag("codeDialogSave").assertIsEnabled()
+                        if (replacements) composeRule.onNodeWithTag("codeDialogAlternate").assertIsOn()
                         assertFalse("The input transfer file must be removed after return", File(inputPath!!).exists())
                         instrumentation.waitForIdleSync()
                         checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
@@ -666,27 +698,26 @@ class CodeSelectionUiTest {
                             } finally { bitmap.recycle() }
                         }
                         // Discard a second edit: only the cursor may return, never the discarded draft.
-                        onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+                        composeRule.onNodeWithTag("codeDialogOpenEditor").performClick()
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
                                     .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
-                                val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                val editor = editorActivity?.codeEditorForTest()
                                 ready = editor?.text?.toString() == edited && editor.isEditable
                             }
                             ready
                         }
                         instrumentation.runOnMainSync {
-                            editorActivity!!.findViewById<CodeEditor>(R.id.editText).text.replace(insertion, insertion, "discarded")
+                            editorActivity!!.codeEditorForTest().text.replace(insertion, insertion, "discarded")
                             editorActivity!!.finish()
                         }
                         onView(withText(R.string.no)).inRoot(isDialog()).perform(click())
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                ready = preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                    preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled
+                                ready = preview!!.dialog?.window?.decorView?.hasWindowFocus() == true
                                 if (ready) assertEquals(edited, preview!!.currentOriginalCode())
                             }
                             ready
@@ -695,32 +726,42 @@ class CodeSelectionUiTest {
                             // A malformed draft stays editable; it must not overwrite the valid candidate.
                             val invalid = "] invalid source draft"
                             for (draft in listOf(invalid, edited)) {
-                                onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+                                composeRule.onNodeWithTag("codeDialogOpenEditor").performClick()
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
                                         editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
                                             .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
-                                        val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                        val editor = editorActivity?.codeEditorForTest()
                                         ready = editor != null && editor.isEditable && editor.hasWindowFocus()
                                     }
                                     ready
                                 }
                                 instrumentation.runOnMainSync {
-                                    val editor = editorActivity!!.findViewById<CodeEditor>(R.id.editText)
+                                    val editor = editorActivity!!.codeEditorForTest()
                                     editor.text.replace(0, editor.text.length, draft)
                                 }
-                                onView(withId(R.id.menu_save)).perform(click())
-                                await {
+                                instrumentation.runOnMainSync { editorActivity!!.saveForTest() }
+                                var draftReturnState = ""
+                                await(message = { "Draft return: $draftReturnState" }) {
                                     var ready = false
                                     instrumentation.runOnMainSync {
-                                        ready = preview!!.currentOriginalCode() == draft &&
-                                            preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                            preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled
+                                        val expected = if (draft == invalid) {
+                                            draft
+                                        } else {
+                                            edited.replace("#edited", "#edited-once")
+                                        }
+                                        val originalMatches = preview!!.currentOriginalCode() == draft
+                                        val displayed = preview!!.codeView().text.toString()
+                                        val displayedMatches = displayed == expected
+                                        val focused = preview!!.dialog?.window?.decorView?.hasWindowFocus() == true
+                                        draftReturnState = "invalid=${draft == invalid}; original=$originalMatches; " +
+                                            "displayed=$displayedMatches; focused=$focused; " +
+                                            "hasReplacement=${displayed.contains("#edited-once")}; " +
+                                            "showingAlternate=${preview!!.isShowingAlternateForTest()}"
+                                        ready = originalMatches && displayedMatches && focused
                                         if (ready) {
-                                            val expected = if (draft == invalid) draft else edited.replace("#edited", "#edited-once")
-                                            assertEquals(expected, preview!!.binding.codeView.text.toString())
-                                            val raw = ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].originalSourceJson(1)
+                                            val raw = sourceImporter(parent!!).originalSourceJson(1)
                                             assertEquals(edited, raw)
                                         }
                                     }
@@ -728,12 +769,28 @@ class CodeSelectionUiTest {
                                 }
                             }
                         }
-                        onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
+                        composeRule.onNodeWithTag("codeDialogOverflow").performClick()
+                        composeRule.onNodeWithTag("codeDialogManageReplaceRules").performClick()
+                        await {
+                            composeRule.onAllNodesWithTag("replaceRuleOverflow").fetchSemanticsNodes().isNotEmpty()
+                        }
+                        instrumentation.runOnMainSync { parent!!.onBackPressedDispatcher.onBackPressed() }
+                        await(message = { "Rule manager did not restore the same editable source draft" }) {
+                            var ready = false
+                            instrumentation.runOnMainSync {
+                                preview = parent!!.supportFragmentManager.fragments
+                                    .filterIsInstance<CodeDialog>().firstOrNull()
+                                ready = preview?.currentOriginalCode() == edited &&
+                                    preview?.dialog?.window?.decorView?.hasWindowFocus() == true
+                            }
+                            ready
+                        }
+                        composeRule.onNodeWithTag("codeDialogSave").performClick()
                         val expectedUrl = urls[1] + if (replacements) "#edited-once" else "#edited"
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                val actual = ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].allSources
+                                val actual = sourceImporter(parent!!).allSources
                                 ready = actual.size == 2 && actual[1].bookSourceUrl == expectedUrl
                                 if (ready) { assertEquals(urls[0], actual[0].bookSourceUrl); assertEquals(script, actual[1].jsLib) }
                             }
@@ -741,7 +798,10 @@ class CodeSelectionUiTest {
                         }
                     }
                 } finally {
-                    instrumentation.runOnMainSync { editorActivity?.takeUnless { it.isFinishing }?.finish() }
+                    instrumentation.runOnMainSync {
+                        editorActivity?.takeUnless { it.isFinishing }?.finish()
+                        parent?.takeUnless { it.isFinishing }?.finish()
+                    }
                     file.delete()
                 }
             }
@@ -749,6 +809,12 @@ class CodeSelectionUiTest {
             AppConfig.importReplaceSource = savedReplacement
             appDb.replaceRuleDao.delete(rule)
         }
+    }
+
+    private fun sourceImporter(activity: AppActivity): ImportBookSourceViewModel {
+        val route = checkNotNull(activity.currentDestination as? BookSourceImportRoute)
+        val owner = navigationViewModelStores(activity, BookshelfRoute).getOrCreateOwner(NavEntry(route) {}.contentKey)
+        return ViewModelProvider(owner)[ImportBookSourceViewModel::class.java]
     }
 
     @Test fun fileBackedReplacementPreviewIsReadOnlyInTheFullEditor() {
@@ -784,7 +850,7 @@ class CodeSelectionUiTest {
             ready
         }
         scenario!!.onActivity { activity ->
-            activity.findViewById<ViewGroup>(R.id.editorContainer).children.filterIsInstance<WebView>().single().evaluateJavascript(
+            activity.editorContainerForTest().children.filterIsInstance<WebView>().single().evaluateJavascript(
                 "editor.value = ${GSON.toJson(edited)}; editor.setSelectionRange($cursor, $cursor);" +
                     "editor.dispatchEvent(new Event('input'));", null,
             )
@@ -801,20 +867,20 @@ class CodeSelectionUiTest {
             var ready = false
             scenario!!.onActivity {
                 ready = ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.text == edited &&
-                    it.findViewById<ViewGroup>(R.id.editorContainer).children.filterIsInstance<WebView>().any { web -> web.isShown }
+                    it.editorContainerForTest().children.filterIsInstance<WebView>().any { web -> web.isShown }
             }
             ready
         }
         val restored = AtomicReference<String>()
         await {
             scenario!!.onActivity {
-                it.findViewById<ViewGroup>(R.id.editorContainer).children.filterIsInstance<WebView>().single().evaluateJavascript(
+                it.editorContainerForTest().children.filterIsInstance<WebView>().single().evaluateJavascript(
                     "window.__getEditorState && window.__getEditorState();", restored::set,
                 )
             }
             SafeEditorResultCodec.decode(restored.get())?.let { it.text == edited && it.cursorPosition == cursor && it.dirty } == true
         }
-        onView(withId(R.id.menu_save)).perform(click())
+        scenario!!.onActivity { it.saveForTest() }
         assertEquals(Activity.RESULT_OK, scenario!!.result.resultCode)
         assertEquals(edited, scenario!!.result.resultData.getStringExtra("text"))
         assertEquals(cursor, scenario!!.result.resultData.getIntExtra("cursorPosition", -1))
@@ -834,7 +900,7 @@ class CodeSelectionUiTest {
                 ready
             }
             instrumentation.runOnMainSync {
-                dialog.binding.codeView.setTokenizer(object : MultiAutoCompleteTextView.Tokenizer {
+                dialog.codeView().setTokenizer(object : MultiAutoCompleteTextView.Tokenizer {
                     override fun findTokenStart(text: CharSequence, cursor: Int): Int {
                         tokenCalls++
                         return KeywordTokenizer().findTokenStart(text, cursor)
@@ -842,16 +908,16 @@ class CodeSelectionUiTest {
                     override fun findTokenEnd(text: CharSequence, cursor: Int) = text.length
                     override fun terminateToken(text: CharSequence) = text
                 })
-                assertNull(dialog.binding.codeView.adapter)
-                assertFalse("Code preview must not invoke prose spell checking", dialog.binding.codeView.isSuggestionsEnabled)
-                assertFalse("Code preview must not run EmojiCompat over the whole document", dialog.binding.codeView.isEmojiCompatEnabled)
+                assertNull(dialog.codeView().adapter)
+                assertFalse("Code preview must not invoke prose spell checking", dialog.codeView().isSuggestionsEnabled)
+                assertFalse("Code preview must not run EmojiCompat over the whole document", dialog.codeView().isEmojiCompatEnabled)
             }
             val focusStart = SystemClock.uptimeMillis()
-            onView(withId(R.id.code_view)).inRoot(isDialog()).perform(click())
+        onView(withContentDescription("codeDialogEditor")).inRoot(isDialog()).perform(click())
             await {
                 var visible = false
                 instrumentation.runOnMainSync {
-                    visible = ViewCompat.getRootWindowInsets(dialog.binding.codeView)
+                    visible = ViewCompat.getRootWindowInsets(dialog.codeView())
                         ?.isVisible(WindowInsetsCompat.Type.ime()) == true
                 }
                 visible
@@ -861,7 +927,7 @@ class CodeSelectionUiTest {
             val frame = CountDownLatch(1)
             val inputStart = SystemClock.uptimeMillis()
             instrumentation.runOnMainSync {
-                val view = dialog.binding.codeView
+                val view = dialog.codeView()
                 val selectionStart = SystemClock.uptimeMillis()
                 view.setSelection(offset)
                 timings["selectionMs"] = SystemClock.uptimeMillis() - selectionStart
@@ -884,7 +950,7 @@ class CodeSelectionUiTest {
             }
             assertTrue("Typing still stalls the native preview: $timings", timings.getValue("inputAndFrameMs") < 1_000)
             instrumentation.runOnMainSync {
-                val view = dialog.binding.codeView
+                val view = dialog.codeView()
                 view.setAdapter(ArrayAdapter(context, android.R.layout.simple_list_item_1, listOf("target")))
                 view.setText("prefix target")
                 view.setSelection(view.length())
@@ -911,11 +977,11 @@ class CodeSelectionUiTest {
                 instrumentation.runOnMainSync { ready = dialog.dialog?.window?.decorView?.hasWindowFocus() == true }
                 ready
             }
-            onView(withId(R.id.code_view)).inRoot(isDialog()).perform(click())
+            onView(withContentDescription("codeDialogEditor")).inRoot(isDialog()).perform(click())
             await {
                 var visible = false
                 instrumentation.runOnMainSync {
-                    visible = ViewCompat.getRootWindowInsets(dialog.binding.codeView)
+                    visible = ViewCompat.getRootWindowInsets(dialog.codeView())
                         ?.isVisible(WindowInsetsCompat.Type.ime()) == true
                 }
                 visible
@@ -927,11 +993,11 @@ class CodeSelectionUiTest {
                 val frame = CountDownLatch(1)
                 var editMs = 0L
                 var committedAt = 0L
-                instrumentation.runOnMainSync { dialog.binding.codeView.setSelection(cursor) }
+                instrumentation.runOnMainSync { dialog.codeView().setSelection(cursor) }
                 val started = SystemClock.uptimeMillis()
                 val event = instrumentation.uiAutomation.executeAndWaitForEvent({
                     instrumentation.runOnMainSync {
-                        val view = dialog.binding.codeView
+                        val view = dialog.codeView()
                         assertTrue(view.isHardwareAccelerated)
                         view.viewTreeObserver.registerFrameCommitCallback {
                             committedAt = SystemClock.uptimeMillis()
@@ -959,8 +1025,8 @@ class CodeSelectionUiTest {
                     assertEquals("Accessibility must expose the edited text", expected, event.text.single().toString())
                     instrumentation.runOnMainSync {
                         assertEquals(expected, dialog.currentOriginalCode())
-                        assertEquals(cursor - 1, dialog.binding.codeView.selectionStart)
-                        assertEquals(cursor - 1, dialog.binding.codeView.selectionEnd)
+                        assertEquals(cursor - 1, dialog.codeView().selectionStart)
+                        assertEquals(cursor - 1, dialog.codeView().selectionEnd)
                     }
                 } finally { event.recycle() }
             }
@@ -997,7 +1063,7 @@ class CodeSelectionUiTest {
     }
 
     private fun press(tap: Tap, line: Int, column: Int) {
-        onView(withId(R.id.editText)).perform(GeneralClickAction(tap, { view ->
+        onView(withContentDescription("codeEditorNative")).perform(GeneralClickAction(tap, { view ->
             val editor = view as CodeEditor
             val location = IntArray(2)
             editor.getLocationOnScreen(location)
@@ -1039,7 +1105,9 @@ class CodeSelectionUiTest {
             if (native) {
                 clickNativeAction(R.string.share)
             } else {
-                onView(withId(R.id.code_share_selection)).inRoot(isPlatformPopup()).perform(click())
+                withEditor {
+                    assertTrue(actions(it).view.findViewById<View>(R.id.code_share_selection).performClick())
+                }
             }
             await { chooser.get() != null }
             val send = chooser.get()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
@@ -1053,6 +1121,8 @@ class CodeSelectionUiTest {
     }
 
     private fun actions(editor: CodeEditor) = editor.getComponent(EditorTextActionWindow::class.java)
+
+    private fun CodeDialog.codeView() = checkNotNull(codeViewForTest())
 
     private fun dismissEditorToolbar() {
         lateinit var popup: View
@@ -1097,16 +1167,26 @@ class CodeSelectionUiTest {
             visibleScreenBounds(panel, menuBounds)
         }
         val toolBounds = Rect()
-        onView(withId(R.id.recycler_view))
-            .inRoot(withDecorView(hasDescendant(withId(R.id.recycler_view))))
+        onView(withContentDescription("keyboardToolBarHost"))
+            .inRoot(withDecorView(hasDescendant(withContentDescription("keyboardToolBarHost"))))
             .check { view, failure ->
                 if (failure != null) throw failure
                 visibleScreenBounds(view!!, toolBounds)
             }
         assertFalse("Native menu $menuBounds overlaps keyboard tools $toolBounds", Rect.intersects(menuBounds, toolBounds))
         val keyboardBounds = Rect(toolBounds)
+        val composeBounds = composeRule.onNodeWithTag("codeEditorSearchTools")
+            .fetchSemanticsNode().boundsInRoot
+        toolBounds.set(
+            composeBounds.left.toInt(),
+            composeBounds.top.toInt(),
+            composeBounds.right.toInt(),
+            composeBounds.bottom.toInt(),
+        )
         scenario!!.onActivity { activity ->
-            visibleScreenBounds(activity.findViewById(R.id.search_group), toolBounds)
+            val origin = IntArray(2)
+            activity.window.decorView.getLocationOnScreen(origin)
+            toolBounds.offset(origin[0], origin[1])
             assertFalse("Native menu $menuBounds overlaps search tools $toolBounds", Rect.intersects(menuBounds, toolBounds))
         }
         File(context.getExternalFilesDir("ui-regression"), "code-selection-native-menu-bounds.txt")
@@ -1147,7 +1227,7 @@ class CodeSelectionUiTest {
     private fun selection(editor: CodeEditor) = editor.text.subSequence(editor.cursor.left, editor.cursor.right).toString()
 
     private fun withEditor(action: (CodeEditor) -> Unit) {
-        scenario!!.onActivity { action(it.findViewById(R.id.editText)) }
+        scenario!!.onActivity { action(it.codeEditorForTest()) }
     }
 
     private fun awaitEditor(condition: (CodeEditor) -> Boolean) = await {
@@ -1162,6 +1242,7 @@ class CodeSelectionUiTest {
     ) {
         val deadline = SystemClock.uptimeMillis() + 15_000
         while (SystemClock.uptimeMillis() < deadline) {
+            composeRule.mainClock.advanceTimeByFrame()
             if (condition()) return
             SystemClock.sleep(50)
         }

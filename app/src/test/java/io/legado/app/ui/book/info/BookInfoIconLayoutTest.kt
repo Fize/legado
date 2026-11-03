@@ -9,7 +9,7 @@ class BookInfoIconLayoutTest {
     @Test
     fun metadataIconsUseFixedSizeAndLogicalSpacing() {
         val source = projectFile(
-            "src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
+            "src/main/java/io/legado/app/ui/book/info/BookInfoScreen.kt"
         ).readText()
 
         assertTrue(source.contains("BookHeaderSection"))

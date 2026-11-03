@@ -5,21 +5,30 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,6 +48,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,13 +56,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.script.rhino.runScriptWithContext
@@ -62,10 +78,11 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.rule.RowUi
 import io.legado.app.data.entities.rule.RowUi.Type
+import io.legado.app.help.http.WebCookieUnavailableException
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.jsSource.JsSourceEngine
-import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.about.openAppLogs
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.utils.GSON
 import io.legado.app.utils.buildMainHandler
@@ -105,6 +122,8 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
     private var renderJob: Job? = null
     private var isRenderingLoginUi by mutableStateOf(false)
     private var isLoginUiV2 by mutableStateOf(false)
+    private var initializedSource: BaseSource? = null
+    private var savedEditorSelections: Bundle? = null
     private var v2Delegate by mutableStateOf<SourceLoginV2Delegate?>(null)
     private val sourceLoginJsExtensions by lazy {
         SourceLoginJsExtensions(
@@ -397,8 +416,13 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
             R.string.sure_del
         ) {
             yesButton {
+                try {
+                    source.removeLoginHeader()
+                } catch (error: WebCookieUnavailableException) {
+                    context?.toastOnUi(R.string.web_cookie_unavailable)
+                    return@yesButton
+                }
                 source.removeLoginInfo()
-                source.removeLoginHeader()
                 viewModel.loginInfo.clear()
                 oKToClose = true
                 context?.toastOnUi(R.string.success)
@@ -409,7 +433,24 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        if (savedInstanceState != null) {
+            hasChange = savedInstanceState.getBoolean("loginFormHasChange", hasChange)
+            savedEditorSelections = savedInstanceState.getBundle("loginFormSelections")
+        }
         val source = viewModel.source ?: return
+        if (initializedSource === source) return
+        initializedSource = source
+        savedEditorSelections?.let { selections ->
+            selections.keySet().forEach { name ->
+                val saved = selections.getIntArray(name) ?: return@forEach
+                val current = viewModel.loginEditorValues[name] ?: return@forEach
+                if (saved.size == 3 && current.text == viewModel.loginInfo[name] && current.text.length == saved[2] &&
+                    saved[0] in 0..saved[2] && saved[1] in 0..saved[2]) {
+                    viewModel.loginEditorValues[name] = current.copy(selection = TextRange(saved[0], saved[1]), composition = null)
+                }
+            }
+        }
+        savedEditorSelections = null
         loginUrl = source.getLoginJs()
         val loginUiStr = source.loginUi ?: return
         isLoginUiV2 = source.isLoginUiV2()
@@ -419,7 +460,9 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
                 source,
                 viewModel.book,
                 viewModel.chapter,
+                viewModel.loginV2Snapshot,
             )
+            viewModel.loginV2Snapshot = null
         } else {
             val codeStr = source.getLoginUiJs()
             if (codeStr != null) {
@@ -432,6 +475,21 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
         v2Delegate?.start()
     }
 
+    internal fun onSourceAvailable() {
+        view?.let { onFragmentCreated(it, null) }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("loginFormHasChange", hasChange)
+        if (isLoginUiV2) v2Delegate?.let { viewModel.loginV2Snapshot = it.snapshot() }
+        outState.putBundle("loginFormSelections", Bundle().apply {
+            viewModel.loginEditorValues.forEach { (name, value) ->
+                putIntArray(name, intArrayOf(value.selection.start, value.selection.end, value.text.length))
+            }
+        })
+        super.onSaveInstanceState(outState)
+    }
+
     @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
     @Composable
     override fun Content() {
@@ -439,23 +497,29 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
         var showMenu by remember { mutableStateOf(false) }
         val cfg = LocalConfiguration.current
         val isTwoPane = shouldUseTwoPane(cfg.screenWidthDp, cfg.screenHeightDp)
+        val shortLandscape = cfg.screenHeightDp < 360 && cfg.screenWidthDp >= 600
+        SideEffect {
+            dialog?.window?.setSoftInputMode(
+                if (shortLandscape) WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+                else WindowManager.LayoutParams.SOFT_INPUT_ADJUST_UNSPECIFIED
+            )
+        }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize().then(if (shortLandscape) Modifier.imePadding() else Modifier),
             contentAlignment = Alignment.Center
         ) {
+            val compactHeight = maxHeight < 200.dp
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = if (compactHeight) 0.dp else 16.dp)
+                    .widthIn(max = 720.dp)
+                    .fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 4.dp
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    LegadoTopAppBar(
-                        title = stringResource(R.string.login_source, source.getTag()),
-                        actions = {
+                val headerActions: @Composable RowScope.() -> Unit = {
                             if (!isLoginUiV2) {
                                 IconButton(
                                     onClick = {
@@ -505,7 +569,11 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
                                         },
                                         onClick = {
                                             showMenu = false
-                                            source.removeLoginHeader()
+                                            try {
+                                                source.removeLoginHeader()
+                                            } catch (error: WebCookieUnavailableException) {
+                                                context?.toastOnUi(R.string.web_cookie_unavailable)
+                                            }
                                         }
                                     )
                                     DropdownMenuItem(
@@ -531,14 +599,46 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
                                         },
                                         onClick = {
                                             showMenu = false
-                                            showDialogFragment<AppLogDialog>()
+                                            requireContext().openAppLogs()
                                         }
                                     )
                                 }
                             }
+                }
+                val header: @Composable (Modifier) -> Unit = { headerModifier ->
+                    if (shortLandscape) {
+                        Column(modifier = headerModifier) {
+                            val titleScroll = rememberScrollState()
+                            Text(
+                                text = stringResource(R.string.login_source, source.getTag()),
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(titleScroll).padding(horizontal = 8.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1
+                            )
+                            if (titleScroll.maxValue > 0 && titleScroll.maxValue < Int.MAX_VALUE) {
+                                val indicator = MaterialTheme.colorScheme.onSurfaceVariant
+                                val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                                Canvas(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(2.dp)) {
+                                    val viewport = titleScroll.viewportSize.toFloat()
+                                    val range = titleScroll.maxValue.toFloat()
+                                    val thumb = (size.width * viewport / (viewport + range)).coerceIn(8.dp.toPx().coerceAtMost(size.width), size.width)
+                                    val progress = titleScroll.value / range
+                                    val left = (size.width - thumb) * if (rtl) 1f - progress else progress
+                                    drawRect(indicator.copy(alpha = 0.2f))
+                                    drawRect(indicator, topLeft = Offset(left, 0f), size = Size(thumb, size.height))
+                                }
+                            }
+                            Row(content = headerActions)
                         }
-                    )
-
+                    } else {
+                        LegadoTopAppBar(
+                            title = stringResource(R.string.login_source, source.getTag()),
+                            modifier = headerModifier,
+                            actions = headerActions
+                        )
+                    }
+                }
+                val form: @Composable () -> Unit = {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -574,13 +674,18 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
                                         Type.text, Type.password -> {
                                             val isPassword = rowUi.type == Type.password
                                             var passwordVisible by remember(name) { mutableStateOf(false) }
+                                            val text = fieldValues[name].orEmpty()
+                                            val editorValue = viewModel.loginEditorValues[name]?.takeIf { it.text == text }
+                                                ?: TextFieldValue(text, selection = TextRange(text.length))
                                             OutlinedTextField(
-                                                value = fieldValues[name].orEmpty(),
-                                                onValueChange = { newText ->
+                                                value = editorValue,
+                                                onValueChange = { newValue ->
+                                                    viewModel.loginEditorValues[name] = newValue
+                                                    val newText = newValue.text
                                                     val oldText = fieldValues[name]
                                                     fieldValues[name] = newText
                                                     viewModel.loginInfo[name] = newText
-                                                    hasChange = true
+                                                    if (newText != oldText) hasChange = true
                                                     rowUi.action?.let { jsStr ->
                                                         if (newText != oldText) {
                                                             textDebounceRunnables[name]?.let(handler::removeCallbacks)
@@ -715,6 +820,7 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
                                             }
                                             Surface(
                                                 modifier = rowModifier.combinedClickable(
+                                                    enabled = chars.isNotEmpty(),
                                                     onClick = {
                                                         val now = System.currentTimeMillis()
                                                         if (now - lastClickTime >= 200) {
@@ -763,6 +869,17 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
                         }
                     }
                 }
+                if (shortLandscape) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        header(Modifier.width(160.dp))
+                        Box(modifier = Modifier.weight(1f)) { form() }
+                    }
+                } else {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        header(if (compactHeight) Modifier.height(48.dp) else Modifier)
+                        form()
+                    }
+                }
             }
         }
     }
@@ -804,6 +921,7 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
     }
 
     override fun onDestroyView() {
+        initializedSource = null
         v2Delegate?.destroy()
         v2Delegate = null
         renderJob?.cancel()
@@ -887,6 +1005,10 @@ class SourceLoginDialog : BaseComposeDialogFragment(true),
     }
 
     override fun onDismiss(dialog: DialogInterface) {
+        if (activity?.isChangingConfigurations == true) {
+            super.onDismiss(dialog)
+            return
+        }
         if (!isLoginUiV2 && !oKToClose && hasChange) {
             val loginInfo = viewModel.loginInfo
             if (loginInfo.isEmpty()) {

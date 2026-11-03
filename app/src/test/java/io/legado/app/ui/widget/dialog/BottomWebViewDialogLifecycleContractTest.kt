@@ -36,6 +36,18 @@ class BottomWebViewDialogLifecycleContractTest {
     }
 
     @Test
+    fun `fullscreen surface exists only while in use and is cleared with the view`() {
+        val create = section("override fun onCreateView", "override fun onViewCreated")
+        assertTrue(create.contains("if (isFullScreen) {"))
+        assertTrue(source.contains("private var isFullScreen by mutableStateOf(false)"))
+        val destroy = section("override fun onDestroyView", "override fun onConfigurationChanged")
+        assertTrue(destroy.contains("customWebViewCallback = null"))
+        assertTrue(destroy.contains("isFullScreen = false"))
+        assertTrue(destroy.contains("_binding?.customWebView?.removeAllViews()"))
+        assertTrue(destroy.contains("originOrientation = null"))
+    }
+
+    @Test
     fun `pooled webview follows the view lifecycle`() {
         val fields = section("private var pooledWebView", "private var source")
         val onViewCreated = section("override fun onViewCreated", "private fun initWebView")

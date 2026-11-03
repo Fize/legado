@@ -8,6 +8,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface BookmarkDao {
 
+    @Query("SELECT * FROM bookmarks WHERE time=:time")
+    fun get(time: Long): Bookmark?
+    @Query("SELECT MAX(time) FROM bookmarks")
+    fun latestTime(): Long?
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    fun insertNew(value: Bookmark)
+
+
     @get:Query(
         """
         select * from bookmarks order by bookName collate localized, bookAuthor collate localized, chapterIndex, chapterPos

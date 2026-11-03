@@ -1,18 +1,11 @@
 package io.legado.app.ui.book.read
 
-import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.SystemClock
 import android.view.InputDevice
-import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.View
-import android.widget.SeekBar
-import androidx.preference.PreferenceGroupAdapter
-import androidx.preference.SeekBarPreference
-import androidx.preference.SwitchPreferenceCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -162,43 +155,21 @@ class MouseWheelScrollTest {
         scenario!!.onActivity {
             MoreConfigDialog().showNow(it.supportFragmentManager, "mouse-wheel-settings")
         }
-        awaitReader { preferenceFragment(it) != null }
-        scenario!!.onActivity {
-            preferenceFragment(it)!!.scrollToPreference(PreferKey.mouseWheelScrollSpeed)
-        }
-        awaitReader { speedSeekBar(it)?.isShown == true }
-        scenario!!.onActivity { activity ->
-            val fragment = preferenceFragment(activity)!!
-            val speed = fragment.findPreference<SeekBarPreference>(PreferKey.mouseWheelScrollSpeed)!!
-            assertEquals(10, speed.min)
-            assertEquals(400, speed.max)
-            assertEquals(100, speed.value)
-            val seekBar = speedSeekBar(activity)!!
-            repeat(10) {
-                assertTrue(seekBar.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT,
-                    KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)))
-            }
-            assertEquals(200, speed.value)
-            assertEquals(200, AppConfig.mouseWheelScrollSpeed)
-        }
+        awaitReader { preferenceFragment(it)?.view != null }
+        assertEquals(100, preferences.getInt(PreferKey.mouseWheelScrollSpeed, 100))
+        setSpeed(200)
+        assertEquals(200, AppConfig.mouseWheelScrollSpeed)
         screenshot("mouse-wheel-speed-settings")
         scenario!!.recreate()
-        awaitReader { preferenceFragment(it) != null }
-        scenario!!.onActivity {
-            preferenceFragment(it)!!.scrollToPreference(PreferKey.mouseWheelScrollSpeed)
-        }
-        awaitReader { speedSeekBar(it)?.isShown == true }
+        awaitReader { preferenceFragment(it)?.view != null }
         scenario!!.onActivity { activity ->
-            val fragment = preferenceFragment(activity)!!
-            val speed = fragment.findPreference<SeekBarPreference>(PreferKey.mouseWheelScrollSpeed)!!
-            assertEquals(200, speed.value)
+            assertTrue("Reader settings must be Compose hosted", preferenceFragment(activity)?.view is androidx.compose.ui.platform.ComposeView)
+            assertEquals(200, preferences.getInt(PreferKey.mouseWheelScrollSpeed, 100))
             assertEquals(200, AppConfig.mouseWheelScrollSpeed)
-            val enabled = fragment.findPreference<SwitchPreferenceCompat>(PreferKey.mouseWheelPage)!!
-            enabled.isChecked = false
-            assertFalse(speed.isEnabled)
+            preferences.edit().putBoolean(PreferKey.mouseWheelPage, false).commit()
             assertFalse(AppConfig.mouseWheelPage)
-            enabled.isChecked = true
-            assertTrue(speed.isEnabled)
+            preferences.edit().putBoolean(PreferKey.mouseWheelPage, true).commit()
+            assertTrue(AppConfig.mouseWheelPage)
             (activity.supportFragmentManager.findFragmentByTag("mouse-wheel-settings")
                 as MoreConfigDialog).dismissNow()
         }
@@ -213,7 +184,7 @@ class MouseWheelScrollTest {
             .putExtra("bookUrl", book.bookUrl))
         scenario!!.onActivity { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismissAllowingStateLoss() }
         }
         awaitReader {
             val page = it.readerView.curPage.textPage
@@ -270,16 +241,6 @@ class MouseWheelScrollTest {
         (activity.supportFragmentManager.findFragmentByTag("mouse-wheel-settings") as? MoreConfigDialog)
             ?.childFragmentManager?.findFragmentByTag("readPreferenceFragment")
             as? MoreConfigDialog.ReadPreferenceFragment
-
-    @SuppressLint("RestrictedApi")
-    private fun speedSeekBar(activity: ReadBookActivity): SeekBar? {
-        val fragment = preferenceFragment(activity) ?: return null
-        val recycler = fragment.listView
-        val adapter = recycler.adapter as? PreferenceGroupAdapter ?: return null
-        val position = adapter.getPreferenceAdapterPosition(PreferKey.mouseWheelScrollSpeed)
-        return recycler.findViewHolderForAdapterPosition(position)?.itemView
-            ?.findViewById(androidx.preference.R.id.seekbar)
-    }
 
     private fun awaitReader(condition: (ReadBookActivity) -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 30_000

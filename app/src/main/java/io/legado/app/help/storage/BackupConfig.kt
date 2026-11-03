@@ -57,19 +57,19 @@ object BackupConfig {
         runtimeSourceCacheContentKey,
     )
 
-    val contentTitles = arrayOf(
-        appCtx.getString(R.string.backup_content_bookshelf),
-        appCtx.getString(R.string.backup_content_annotations),
-        appCtx.getString(R.string.backup_content_sources),
-        appCtx.getString(R.string.backup_content_rules),
-        appCtx.getString(R.string.backup_content_history),
-        appCtx.getString(R.string.backup_content_read_record_covers),
-        appCtx.getString(R.string.backup_content_settings),
-        appCtx.getString(R.string.backup_content_persisted_covers),
-        appCtx.getString(R.string.backup_content_other_covers),
-        appCtx.getString(R.string.backup_content_backgrounds),
-        appCtx.getString(R.string.backup_content_cookies),
-        appCtx.getString(R.string.backup_content_source_variables),
+    val contentTitleIds = intArrayOf(
+        R.string.backup_content_bookshelf,
+        R.string.backup_content_annotations,
+        R.string.backup_content_sources,
+        R.string.backup_content_rules,
+        R.string.backup_content_history,
+        R.string.backup_content_read_record_covers,
+        R.string.backup_content_settings,
+        R.string.backup_content_persisted_covers,
+        R.string.backup_content_other_covers,
+        R.string.backup_content_backgrounds,
+        R.string.backup_content_cookies,
+        R.string.backup_content_source_variables,
     )
 
     //配置忽略key
@@ -86,16 +86,16 @@ object BackupConfig {
     )
 
     //配置忽略标题
-    val ignoreTitle = arrayOf(
-        appCtx.getString(R.string.read_config),
-        appCtx.getString(R.string.theme_mode),
-        appCtx.getString(R.string.theme_config),
-        appCtx.getString(R.string.cover_config),
-        appCtx.getString(R.string.bookshelf_layout),
-        appCtx.getString(R.string.thread_count),
-        appCtx.getString(R.string.local_book),
-        appCtx.getString(R.string.backup_content_cookies),
-        appCtx.getString(R.string.backup_content_source_variables),
+    val ignoreTitleIds = intArrayOf(
+        R.string.read_config,
+        R.string.theme_mode,
+        R.string.theme_config,
+        R.string.cover_config,
+        R.string.bookshelf_layout,
+        R.string.thread_count,
+        R.string.local_book,
+        R.string.backup_content_cookies,
+        R.string.backup_content_source_variables,
     )
 
     //自动忽略keys
@@ -118,6 +118,21 @@ object BackupConfig {
         PreferKey.readStyleSelect,
         PreferKey.comicStyleSelect,
         PreferKey.mangaRightToLeft,
+        PreferKey.disableMangaScale,
+        PreferKey.mangaLongClickSaveImage,
+        PreferKey.disableMangaPageAnim,
+        PreferKey.mangaPreDownloadNum,
+        PreferKey.disableClickScroll,
+        PreferKey.mangaAutoPageSpeed,
+        PreferKey.mangaFooterConfig,
+        PreferKey.enableMangaHorizontalScroll,
+        PreferKey.enableMangaDoublePage,
+        PreferKey.mangaColorFilter,
+        PreferKey.hideMangaTitle,
+        PreferKey.enableMangaEInk,
+        PreferKey.mangaEInkThreshold,
+        PreferKey.disableHorizontalPageSnap,
+        PreferKey.enableMangaGray,
         PreferKey.showBookMemo,
         PreferKey.shareLayout,
         PreferKey.hideStatusBar,

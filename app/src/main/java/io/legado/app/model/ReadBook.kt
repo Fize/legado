@@ -1,5 +1,6 @@
 package io.legado.app.model
 
+import io.legado.app.help.storage.RestoreRecoveryGate
 import android.util.Log
 import io.legado.app.BuildConfig
 import io.legado.app.constant.AppConst
@@ -43,7 +44,6 @@ import io.legado.app.help.globalExecutor
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
-import io.legado.app.service.CacheBookService
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.page.entities.TextPage
@@ -849,6 +849,7 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     fun upReadTime() {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (!AppConfig.enableReadRecord) {
             return
         }
@@ -867,6 +868,7 @@ object ReadBook : CoroutineScope by MainScope() {
             Triple(readRecord.copy(), currentBook, elapsed)
         }
         executor.execute {
+            if (RestoreRecoveryGate.isQuarantined) return@execute
             record.saveWithCover(currentBook, elapsed)
         }
     }
@@ -1049,11 +1051,13 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    fun skipToPage(index: Int, success: (() -> Unit)? = null) {
+    fun skipToPage(index: Int, chapterPosition: Int? = null, success: (() -> Unit)? = null) {
         if (BaseReadAloudService.isRun) {
             ReadAloud.detachReadAloudFollow()
         }
-        durChapterPos = curTextChapter?.getReadLength(index) ?: index
+        // Search results supply the actual match offset so that a later
+        // re-layout keeps the match visible even if page boundaries move.
+        durChapterPos = chapterPosition ?: curTextChapter?.getReadLength(index) ?: index
         callBack?.upContent {
             success?.invoke()
         }
@@ -1234,21 +1238,22 @@ object ReadBook : CoroutineScope by MainScope() {
         readPositionVersion: Long? = null,
         success: (() -> Unit)? = null,
     ) {
+        val positionVersion = readPositionVersion ?: if (resetPageOffset) callBack?.readPositionVersion() else null
         loadContent(
             durChapterIndex,
             resetPageOffset = resetPageOffset,
-            readPositionVersion = readPositionVersion,
+            readPositionVersion = positionVersion,
             success = { success?.invoke() },
         )
         loadContent(
             durChapterIndex + 1,
             resetPageOffset = resetPageOffset,
-            readPositionVersion = readPositionVersion,
+            readPositionVersion = positionVersion,
         )
         loadContent(
             durChapterIndex - 1,
             resetPageOffset = resetPageOffset,
-            readPositionVersion = readPositionVersion,
+            readPositionVersion = positionVersion,
         )
     }
 
@@ -1361,6 +1366,7 @@ object ReadBook : CoroutineScope by MainScope() {
         readPositionVersion: Long? = null,
         success: (() -> Unit)? = null,
     ) {
+        val positionVersion = readPositionVersion ?: if (resetPageOffset) callBack?.readPositionVersion() else null
         val requestBook = book ?: return
         Coroutine.async {
             val book = requestBook
@@ -1374,7 +1380,7 @@ object ReadBook : CoroutineScope by MainScope() {
                         it,
                         upContent,
                         resetPageOffset,
-                        readPositionVersion = readPositionVersion,
+                        readPositionVersion = positionVersion,
                         contentToken = contentToken,
                         success = success
                     )
@@ -1382,7 +1388,7 @@ object ReadBook : CoroutineScope by MainScope() {
                     downloadScope,
                     chapter,
                     resetPageOffset,
-                    readPositionVersion = readPositionVersion,
+                    readPositionVersion = positionVersion,
                     success = success,
                 )
             }
@@ -1397,29 +1403,36 @@ object ReadBook : CoroutineScope by MainScope() {
         resetPageOffset: Boolean = false,
         readPositionVersion: Long? = null,
         success: (() -> Unit)? = null,
-    ) = withContext(IO) {
-        val book = book ?: return@withContext
-        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@withContext
-        val contentToken = BookHelp.contentSaveToken(book, chapter)
-        if (addLoading(index)) {
-            try {
-                val content = BookHelp.getContent(book, chapter) ?: downloadAwait(chapter)
-                contentLoadFinishAwait(
-                    book,
-                    chapter,
-                    content,
-                    upContent,
-                    resetPageOffset,
-                    readPositionVersion,
-                    contentToken,
-                )
-                if (BookHelp.isContentSaveCurrent(contentToken)) success?.invoke()
-            } catch (e: Exception) {
-                AppLog.put("加载正文出错\n${e.localizedMessage}")
-            } finally {
-                synchronized(this@ReadBook) {
-                    if (ReadBook.book?.bookUrl == book.bookUrl && BookHelp.isContentSaveCurrent(contentToken)) {
-                        removeLoading(index)
+    ) {
+        val requestBook = book ?: return
+        val requestSource = bookSource
+        val positionVersion = readPositionVersion ?: if (resetPageOffset) callBack?.readPositionVersion() else null
+        withContext(IO) {
+            val book = requestBook
+            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@withContext
+            val contentToken = BookHelp.contentSaveToken(book, chapter)
+            if (addLoading(index)) {
+                try {
+                    val content = BookHelp.getContent(book, chapter) ?: downloadAwait(book, requestSource, chapter)
+                    contentLoadFinishAwait(
+                        book,
+                        chapter,
+                        content,
+                        upContent,
+                        resetPageOffset,
+                        positionVersion,
+                        contentToken,
+                    )
+                    if (BookHelp.isContentSaveCurrent(contentToken)) success?.invoke()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (e: Exception) {
+                    AppLog.put("加载正文出错\n${e.localizedMessage}")
+                } finally {
+                    synchronized(this@ReadBook) {
+                        if (ReadBook.book?.bookUrl == book.bookUrl && BookHelp.isContentSaveCurrent(contentToken)) {
+                            removeLoading(index)
+                        }
                     }
                 }
             }
@@ -1482,9 +1495,7 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    private suspend fun downloadAwait(chapter: BookChapter): String {
-        val book = book!!
-        val bookSource = bookSource
+    private suspend fun downloadAwait(book: Book, bookSource: BookSource?, chapter: BookChapter): String {
         if (bookSource != null) {
             return CacheBook.getOrCreate(bookSource, book).downloadAwait(chapter)
         } else {
@@ -1578,7 +1589,8 @@ object ReadBook : CoroutineScope by MainScope() {
                     if (upContent) {
                         callBack?.upContent(
                             offset,
-                            restoredAnchor || (!available && shouldResetPageOffset),
+                            restoredAnchor || (!available && shouldResetPageOffset) ||
+                                (isScroll && shouldResetPageOffset),
                             readPositionVersion = readPositionVersion,
                         )
                     }
@@ -1815,6 +1827,7 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     fun saveRead(pageChanged: Boolean = false) {
+        if (RestoreRecoveryGate.isQuarantined) return
         if (pendingPdfJump?.let { it.bookUrl == book?.bookUrl && it.chapterIndex == durChapterIndex } == true) return
         if (hasPendingHighlightJump()) return
         val book = book ?: return
@@ -1824,6 +1837,7 @@ object ReadBook : CoroutineScope by MainScope() {
         val bookSource = bookSource
         val durTime = System.currentTimeMillis()
         executor.execute {
+            if (RestoreRecoveryGate.isQuarantined) return@execute
             kotlin.runCatching {
                 book.lastCheckCount = 0
                 book.durChapterTime = durTime
@@ -2142,9 +2156,7 @@ object ReadBook : CoroutineScope by MainScope() {
         coroutineContext.cancelChildren()
         ImageProvider.clear()
         clearExpiredChapterLoadingJob(true)
-        if (!CacheBookService.isRun) {
-            CacheBook.close()
-        }
+        CacheBook.close()
     }
 
     interface CallBack : LayoutProgressListener {

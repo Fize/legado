@@ -76,6 +76,6 @@ class BookInfoEditLayoutTest {
     }
 
     private companion object {
-        const val ACTIVITY_PATH = "app/src/main/java/io/legado/app/ui/book/info/edit/BookInfoEditActivity.kt"
+        const val ACTIVITY_PATH = "app/src/main/java/io/legado/app/ui/book/info/edit/BookInfoEditScreen.kt"
     }
 }

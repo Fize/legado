@@ -35,12 +35,10 @@ class BookshelfManageOrderTest {
     @Test
     fun `bookshelf drag writes only shelf order fields`() {
         val dao = projectFile("src/main/java/io/legado/app/data/dao/BookDao.kt").readText()
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt"
-        ).readText()
-        val viewModel = projectFile(
+        val viewModelSource = projectFile(
             "src/main/java/io/legado/app/ui/book/manage/BookshelfManageViewModel.kt"
-        ).readText().substringAfter("fun updateBookOrder").substringBefore("fun deleteBook")
+        ).readText()
+        val viewModel = viewModelSource.substringAfter("fun updateBookOrder").substringBefore("fun deleteBook")
 
         assertTrue(
             dao.contains(
@@ -48,11 +46,25 @@ class BookshelfManageOrderTest {
             )
         )
         assertTrue(dao.contains("UPDATE books SET `order` = :order WHERE bookUrl = :bookUrl"))
-        assertTrue(activity.contains("viewModel.updateBookOrder(books, resetAll)"))
+        assertTrue(viewModelSource.contains("fun updateBookOrder(books: List<Book>, resetAll: Boolean)"))
         assertTrue(viewModel.contains("appDb.runInTransaction"))
         assertTrue(viewModel.contains("appDb.bookDao.allShelfByOrder"))
         assertTrue(viewModel.contains("appDb.bookDao.updateOrder(reordered)"))
         assertFalse(viewModel.contains("updatePreservingCustomCoverUrl"))
+    }
+
+    @Test
+    fun `bookshelf management operation status has a single state flow source`() {
+        val viewModel = projectFile(
+            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageViewModel.kt"
+        ).readText()
+
+        assertTrue(viewModel.contains("val uiState: StateFlow<BookshelfManageUiState>"))
+        assertTrue(viewModel.contains("batchChangeSourceProgress ="))
+        assertTrue(viewModel.contains("batchPersistCoverProgress ="))
+        assertFalse(viewModel.contains("MutableLiveData"))
+        assertFalse(viewModel.contains("batchChangeSourceProcessLiveData"))
+        assertFalse(viewModel.contains("batchPersistCoverProcess"))
     }
 
     private data class Item(val key: String, val value: String)

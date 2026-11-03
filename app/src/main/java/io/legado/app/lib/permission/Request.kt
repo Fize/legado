@@ -1,6 +1,8 @@
 package io.legado.app.lib.permission
 
 import android.annotation.SuppressLint
+import io.legado.app.help.storage.RestoreRecoveryGate
+import io.legado.app.help.storage.RestoreRecoveryRequiredException
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
@@ -55,6 +57,7 @@ internal class Request : OnRequestPermissionsResultCallback {
     @SuppressLint("ObsoleteSdkInt")
     fun start() {
         RequestPlugins.setOnRequestPermissionsCallback(this)
+        if (rejectForRecovery()) return
 
         val deniedPermissions = deniedPermissions
         val rationale = this.rationale
@@ -148,21 +151,23 @@ internal class Request : OnRequestPermissionsResultCallback {
     }
 
     private fun onPermissionsGranted() {
+        if (rejectForRecovery()) return
         try {
             grantedCallback?.onPermissionsGranted()
         } catch (ignore: Exception) {
         }
 
-        RequestPlugins.sResultCallback?.onPermissionsGranted()
+        complete { it.onPermissionsGranted() }
     }
 
     private fun onPermissionsDenied(deniedPermissions: Array<String>) {
+        if (rejectForRecovery()) return
         try {
             deniedCallback?.onPermissionsDenied(deniedPermissions)
         } catch (ignore: Exception) {
         }
 
-        RequestPlugins.sResultCallback?.onPermissionsDenied(deniedPermissions)
+        complete { it.onPermissionsDenied(deniedPermissions) }
     }
 
     private fun toSetting() {
@@ -216,6 +221,7 @@ internal class Request : OnRequestPermissionsResultCallback {
         permissions: Array<String>,
         grantResults: IntArray
     ) {
+        if (rejectForRecovery()) return
         val deniedPermissions = getDeniedPermissions(permissions)
         if (deniedPermissions != null) {
             onPermissionsDenied(deniedPermissions)
@@ -225,6 +231,7 @@ internal class Request : OnRequestPermissionsResultCallback {
     }
 
     override fun onSettingActivityResult() {
+        if (rejectForRecovery()) return
         val deniedPermissions = deniedPermissions
         if (deniedPermissions == null) {
             onPermissionsGranted()
@@ -234,8 +241,19 @@ internal class Request : OnRequestPermissionsResultCallback {
     }
 
     override fun onError(e: Exception) {
-        errorCallback?.onError(e)
-        RequestPlugins.sResultCallback?.onError(e)
+        try { errorCallback?.onError(e) } catch (_: Exception) { }
+        complete { it.onError(e) }
+    }
+
+    private inline fun complete(dispatch: (OnPermissionsResultCallback) -> Unit) {
+        val listener = RequestPlugins.sResultCallback ?: return
+        if (listener === RequestManager) RequestManager.complete(this) else dispatch(listener)
+    }
+
+    private fun rejectForRecovery(): Boolean {
+        if (!RestoreRecoveryGate.isQuarantined) return false
+        onError(RestoreRecoveryRequiredException())
+        return true
     }
 
     companion object {

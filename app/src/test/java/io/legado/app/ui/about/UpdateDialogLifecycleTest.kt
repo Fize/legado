@@ -10,8 +10,8 @@ class UpdateDialogLifecycleTest {
     @Test
     fun `update callbacks skip dialogs after fragment state is saved`() {
         val main = functionBody(
-            "src/main/java/io/legado/app/ui/main/MainActivity.kt",
-            "private fun upVersion()",
+            "src/main/java/io/legado/app/ui/AppStartupCoordinator.kt",
+            "private fun updateVersion()",
             "private fun notifyAppCrash()"
         )
         val shared = projectFile(
@@ -21,12 +21,12 @@ class UpdateDialogLifecycleTest {
         assertGuardBeforeDialog(main, "supportFragmentManager.isStateSaved")
         assertGuardBeforeDialog(shared, "isAdded && !childFragmentManager.isStateSaved")
         assertTrue(shared.contains("!isFinishing && !supportFragmentManager.isStateSaved"))
-        val about = projectFile("src/main/java/io/legado/app/ui/about/AboutActivity.kt").readText()
-        assertTrue(about.contains("onClick = { checkAppUpdate() }"))
-        assertTrue(about.contains("onClick = { checkAppUpdate(true) }"))
-        val my = projectFile("src/main/java/io/legado/app/ui/main/my/MyFragment.kt").readText()
-        assertTrue(my.contains("\"check_update\" -> checkAppUpdate()"))
-        assertTrue(my.contains("\"check_beta_update\" -> checkAppUpdate(beta = true)"))
+        val about = projectFile("src/main/java/io/legado/app/ui/about/AboutActions.kt").readText()
+        assertTrue(about.contains("AboutAction.CheckUpdate -> activity.checkAppUpdate()"))
+        assertTrue(about.contains("AboutAction.CheckBetaUpdate -> activity.checkAppUpdate(beta = true)"))
+        val app = projectFile("src/main/java/io/legado/app/ui/navigation/LegadoApp.kt").readText()
+        assertTrue(app.contains("MyAction.CheckUpdate -> (context as? AppCompatActivity)?.checkAppUpdate()"))
+        assertTrue(app.contains("MyAction.CheckBetaUpdate -> (context as? AppCompatActivity)?.checkAppUpdate(beta = true)"))
     }
 
     @Test

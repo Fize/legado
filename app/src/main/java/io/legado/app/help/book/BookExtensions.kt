@@ -3,6 +3,7 @@
 package io.legado.app.help.book
 
 import android.net.Uri
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import androidx.core.net.toUri
 import com.script.buildScriptBindings
 import com.script.rhino.RhinoScriptEngine
@@ -92,10 +93,10 @@ val Book.archiveName: String
         if (!isArchive) throw NoStackTraceException("Book is not deCompressed from archive")
         // local_book::archive.rar
         // webDav::https://...../archive.rar
-        val archivePath = origin.substringAfter("::").let {
-            if (origin.startsWith(BookType.webDavTag)) CustomUrl(it).getUrl() else it
-        }
-        return archivePath.substringAfterLast("/")
+        val archivePath = origin.substringAfter("::")
+        return if (origin.startsWith(BookType.webDavTag)) {
+            CustomUrl(archivePath).getUrl().toHttpUrl().pathSegments.lastOrNull().orEmpty()
+        } else archivePath.substringAfterLast("/")
     }
 
 fun Book.contains(word: String?): Boolean {
@@ -276,6 +277,7 @@ fun Book.updateTo(newBook: Book): Book {
     newBook.durChapterTime = durChapterTime
     newBook.group = group
     newBook.order = order
+    newBook.customCoverSource = customCoverSource
     newBook.customCoverUrl = customCoverUrl
     newBook.persistedCoverUrl = persistedCoverUrl
     newBook.customIntro = customIntro
@@ -332,9 +334,10 @@ internal fun parseExportFileNameResult(result: Any?): String? {
     return result?.toString()?.takeIf { it.isNotBlank() }
 }
 
-fun Book.getExportFileName(suffix: String): String {
+fun Book.getExportFileName(suffix: String): String = getExportFileName(suffix, AppConfig.bookExportFileName)
+
+fun Book.getExportFileName(suffix: String,jsStr: String?): String {
     val default = normalizeExportFileName("$name 作者：${getRealAuthor()}", suffix)
-    val jsStr = AppConfig.bookExportFileName
     if (jsStr.isNullOrBlank()) {
         return default
     }

@@ -47,8 +47,20 @@ internal object RequestManager : OnPermissionsResultCallback {
         }
     }
 
+    /** A timed-out request may complete after its callback has queued a replacement. */
+    fun complete(completed: Request) {
+        if (request === completed) {
+            startNextRequest()
+        } else {
+            completed.clear()
+            if (RequestPlugins.sRequestCallback === completed) RequestPlugins.sRequestCallback = null
+        }
+    }
+
     private fun startNextRequest() {
+        val completed = request
         request?.clear()
+        if (RequestPlugins.sRequestCallback === completed) RequestPlugins.sRequestCallback = null
         request = null
 
         requests?.let {

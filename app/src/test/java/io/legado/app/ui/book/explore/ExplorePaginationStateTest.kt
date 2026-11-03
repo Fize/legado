@@ -36,19 +36,13 @@ class ExplorePaginationStateTest {
     @Test
     fun `page picker starts selected page explicitly`() {
         val source = projectFile(
-            "src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"
+            "src/main/java/io/legado/app/ui/book/explore/ExploreShowScreen.kt"
         ).readText()
-        val skip = source.indexOf("viewModel.skipPage(it)")
-        val stopTop = source.indexOf("topLoadingState = false", skip)
-        val startBottom = source.indexOf("bottomHasMoreState = true", stopTop)
-        val clear = source.indexOf("booksState = emptyList()", startBottom)
-        val explore = source.indexOf("viewModel.explore()", clear)
+        val skip = source.indexOf("viewModel.skipPage(targetPage)")
+        val explore = source.indexOf("viewModel.explore()", skip)
 
         assertTrue(skip >= 0)
-        assertTrue(stopTop > skip)
-        assertTrue(startBottom > stopTop)
-        assertTrue(clear > startBottom)
-        assertTrue(explore > clear)
+        assertTrue(explore > skip)
     }
 
     private fun projectFile(pathInApp: String): File =

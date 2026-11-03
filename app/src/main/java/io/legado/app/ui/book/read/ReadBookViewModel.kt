@@ -10,11 +10,15 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
+import io.legado.app.data.cache.acquireBook
+import io.legado.app.data.cache.cacheResourceLeases
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.replaceBookAfterSourceChange
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookInfoChildRequest
+import io.legado.app.data.repository.PlatformReaderReturnRepository
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
@@ -38,7 +42,7 @@ import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.page.entities.TextChapter
-import io.legado.app.ui.book.searchContent.SearchResult
+import io.legado.app.model.ContentSearchResult as SearchResult
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.utils.GSON
 import io.legado.app.utils.DocumentUtils
@@ -60,6 +64,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onEmpty
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.sync.Semaphore
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
@@ -71,9 +76,33 @@ data class ReaderSourceReimport(val bookUrl: String, val sourceUrl: String, val 
  * 阅读界面数据处理
  */
 class ReadBookViewModel(application: Application) : BaseViewModel(application) {
+    private val platformReturns = PlatformReaderReturnRepository(appDb)
+    @Volatile private var platformOwner: BookInfoChildRequest? = null
+    private val platformOwnershipLock = Any()
+    private var platformFinishing = false
+    private val platformToken = java.util.UUID.randomUUID().toString()
+    private val initializationSemaphore = Semaphore(1)
+    private var initialization: Coroutine<*>? = null
+
+    /** Enqueued after the mature reader's final progress save; recreation keeps the receipt open. */
+    fun finishPlatformReturn() {
+        synchronized(platformOwnershipLock) { platformFinishing = true }
+        releasePlatformOwner()
+    }
+
+    private fun releasePlatformOwner() {
+        val owner = synchronized(platformOwnershipLock) {
+            platformOwner.also { platformOwner = null }
+        } ?: return
+        io.legado.app.help.globalExecutor.execute {
+            runCatching { platformReturns.finish(owner) }
+                .onFailure { AppLog.put("保存阅读返回结果失败", it) }
+        }
+    }
     val permissionDenialLiveData = MutableLiveData<Int>()
     var isInitFinish = false
     var searchContentQuery = ""
+    var searchContentSessionId: String? = null
     var searchResultList: List<SearchResult>? = null
     var searchResultIndex: Int = 0
     private var changeSourceCoroutine: Coroutine<*>? = null
@@ -100,14 +129,41 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
      * 初始化
      */
     fun initData(intent: Intent, success: (() -> Unit)? = null) {
-        execute {
+        initialization?.cancel()
+        initialization = execute(semaphore = initializationSemaphore) {
+            val platformId = intent.getStringExtra(PlatformReaderReturnRepository.REQUEST_ID)
+            if (platformOwner?.id != platformId) releasePlatformOwner()
+            val owned = if (platformId == null) null else platformReturns.claim(platformId,
+                checkNotNull(intent.getStringExtra("bookUrl")), platformToken)
+            synchronized(platformOwnershipLock) {
+                if (platformFinishing) {
+                    owned?.let { owner -> io.legado.app.help.globalExecutor.execute { platformReturns.finish(owner) } }
+                    throw kotlinx.coroutines.CancellationException("Reader Activity has finished")
+                }
+                platformOwner = owned
+            }
+            currentCoroutineContext().ensureActive()
+            val platformBook = owned?.returnBookUrl?.let(appDb.bookDao::getBook)
+            if (owned != null) {
+                checkNotNull(platformBook) { "Book does not exist" }
+                ReadBook.upReadBookConfig(platformBook)
+                intent.putExtra("inBookshelf", platformBook.type and BookType.notShelf == 0)
+                owned.position?.let { position ->
+                    intent.putExtra("index", position.chapterIndex)
+                    intent.putExtra("chapterPos", position.chapterPosition)
+                    intent.putExtra("chapterChanged", position.chapterChanged)
+                    position.highlightLayoutTitleLength?.let { intent.putExtra(TocActivityResult.EXTRA_HIGHLIGHT_LAYOUT_TITLE_LENGTH, it) }
+                    position.highlightAnchorText?.let { intent.putExtra(TocActivityResult.EXTRA_HIGHLIGHT_ANCHOR_TEXT, it) }
+                    position.pdfPageIndex?.let { intent.putExtra(TocActivityResult.EXTRA_PDF_PAGE_INDEX, it) }
+                }
+            }
             ReadBook.inBookshelf = intent.getBooleanExtra("inBookshelf", true)
             val hasHighlightTarget =
                 intent.hasExtra(TocActivityResult.EXTRA_HIGHLIGHT_LAYOUT_TITLE_LENGTH)
             ReadBook.chapterChanged =
                 intent.getBooleanExtra("chapterChanged", false) || hasHighlightTarget
             val bookUrl = intent.getStringExtra("bookUrl")
-            val book = when {
+            val book = platformBook ?: when {
                 bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
                 else -> appDb.bookDao.getBook(bookUrl)
             } ?: ReadBook.book
@@ -132,7 +188,18 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                     intent.removeExtra("chapterPos")
                 }
                 ReadBook.saveCurrentBookProgress() //启用恢复进度提示
-                openChapter(index, chapterPos, highlightLayoutTitleLength, highlightAnchorText)
+                openChapter(index, chapterPos, highlightLayoutTitleLength, highlightAnchorText,
+                    intent.takeIf { it.hasExtra(TocActivityResult.EXTRA_PDF_PAGE_INDEX) }
+                        ?.getIntExtra(TocActivityResult.EXTRA_PDF_PAGE_INDEX, -1), success = {
+                        if (owned != null) {
+                            ReadBook.saveRead()
+                            io.legado.app.help.globalExecutor.execute { platformReturns.acknowledgePosition(owned) }
+                        }
+                    })
+                if (owned != null) {
+                    intent.removeExtra("index"); intent.removeExtra("chapterPos")
+                    intent.removeExtra(TocActivityResult.EXTRA_PDF_PAGE_INDEX)
+                }
             }
         }.onSuccess {
             success?.invoke()
@@ -146,6 +213,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     }
 
     private suspend fun initBook(book: Book) {
+        addCloseable("reader-cache", cacheResourceLeases().acquireBook(book))
         val isSameBook = ReadBook.book?.bookUrl == book.bookUrl
         if (isSameBook) {
             ReadBook.upData(book)
@@ -318,11 +386,16 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     fun changeTo(book: Book, toc: List<BookChapter>, onSuccess: () -> Unit = {}) {
         changeSourceCoroutine?.cancel()
         changeSourceCoroutine = execute {
+            addCloseable("reader-cache", cacheResourceLeases().acquireBook(book))
             ReadBook.upMsg(context.getString(R.string.loading))
             ReadBook.upReadTime()
             ReadBook.book?.migrateTo(book, toc)
             book.removeType(BookType.updateError)
-            replaceBookAfterSourceChange(ReadBook.book, book, toc)
+            val previous = ReadBook.book
+            val owner = platformOwner
+            if (owner != null && previous != null) platformReturns.replaceSource(owner, previous.bookUrl, book.bookUrl) {
+                replaceBookAfterSourceChange(previous, book, toc)
+            } else replaceBookAfterSourceChange(previous, book, toc)
             ReadBook.resetData(book)
             ReadBook.upMsg(null)
             ReadBook.loadContent(resetPageOffset = true)
@@ -570,23 +643,11 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         // calculate search result's pageIndex
         val pages = textChapter.pages
         val content = textChapter.getContent()
-        var queryLength = searchContentQuery.length
-
-        var index: Int
-        if (searchResult.isRegex) {
-            val regex = Regex(searchContentQuery)
-            val matches = regex.findAll(content)
-            val match = matches.elementAtOrNull(searchResult.resultCountWithinChapter)
-            queryLength = match?.value?.length ?: 0
-            index = match?.range?.first ?: -1
-        } else {
-            var count = 0
-            index = content.indexOf(searchContentQuery)
-            while (count != searchResult.resultCountWithinChapter) {
-                index = content.indexOf(searchContentQuery, index + queryLength)
-                count += 1
-            }
-        }
+        val match=try { io.legado.app.model.BookContentMatcher(searchContentQuery,searchResult.isRegex,searchResult.matchCase)
+            .matches(content).drop(searchResult.resultCountWithinChapter).firstOrNull() }
+            catch(_: IllegalArgumentException) { null }
+        val queryLength=match?.let { it.last+1-it.first } ?: 0
+        val index=match?.first ?: searchResult.queryIndexInChapter.coerceIn(0,(content.length-1).coerceAtLeast(0))
         val contentPosition = index
         var pageIndex = 0
         var length = pages[pageIndex].text.length
@@ -628,7 +689,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             addLine = -1
             charIndex2 = charIndex + queryLength - curLineLength - 1
         }
-        return arrayOf(pageIndex, lineIndex, charIndex, addLine, charIndex2, queryLength)
+        return arrayOf(pageIndex, lineIndex, charIndex, addLine, charIndex2, queryLength,
+            match?.first ?: -1)
     }
 
     /**

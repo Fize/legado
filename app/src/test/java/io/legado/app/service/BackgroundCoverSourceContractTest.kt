@@ -41,7 +41,7 @@ class BackgroundCoverSourceContractTest {
         assertTrue(videoCover.contains("sourceOrigin"))
         assertFalse(videoCover.contains("VideoPlay."))
 
-        val export = source("app/src/main/java/io/legado/app/service/ExportBookService.kt")
+        val export = source("app/src/main/java/io/legado/app/service/BookExportEngine.kt")
         val exportCover = export.substringAfter("private fun setCover")
             .substringBefore("private suspend fun setEpubContent")
         assertTrue(exportCover.contains("book.getCoverSourceOrigin()"))

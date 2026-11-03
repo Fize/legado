@@ -18,7 +18,7 @@ class ReadRecordDeviceScopeTest {
         listOf(
             "src/main/java/io/legado/app/model/ReadBook.kt" to
                 "getRecord(AppConst.androidId, book.name, book.author)",
-            "src/main/java/io/legado/app/model/ReadManga.kt" to
+            "src/main/java/io/legado/app/data/repository/MangaReaderDataRepository.kt" to
                 "getRecord(AppConst.androidId, book.name, book.author)",
             "src/main/java/io/legado/app/model/AudioPlay.kt" to
                 "ReadRecord(\n            deviceId = AppConst.androidId,",
@@ -43,21 +43,27 @@ class ReadRecordDeviceScopeTest {
     @Test
     fun `manga resume excludes time spent in background`() {
         val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt"
+            "src/main/java/io/legado/app/ui/book/manga/MangaReaderDestination.kt"
         )
-        assertTrue(methodBody(activity, "onPause").contains("ReadManga.upReadTime()"))
-        assertTrue(
-            methodBody(activity, "onResume")
-                .contains("ReadManga.readStartTime = System.currentTimeMillis()")
-        )
+        assertTrue(activity.contains("LifecycleResumeEffect(viewModel, network, isCurrent)"))
+        assertTrue(activity.contains("if (isCurrent) viewModel.resumeReader()"))
+        assertTrue(activity.contains("viewModel.resumeReader()"))
+        assertTrue(activity.contains("viewModel.pauseReader()"))
+        val viewModel = projectFile("src/main/java/io/legado/app/ui/book/manga/ReadMangaViewModel.kt")
+        assertTrue(methodBody(viewModel, "pauseReader").contains("upReadTime()"))
+        assertTrue(methodBody(viewModel, "resumeReader").contains("beginReading()"))
 
-        val manga = projectFile("src/main/java/io/legado/app/model/ReadManga.kt")
+        val manga = projectFile("src/main/java/io/legado/app/model/MangaReaderSession.kt")
         val upReadTime = methodBody(manga, "upReadTime")
         assertTrue(upReadTime.contains("val currentBook = book?.copy() ?: return"))
         assertTrue(upReadTime.contains("val elapsed = (now - readStartTime).coerceAtLeast(0)"))
         assertTrue(upReadTime.contains("readStartTime = now"))
         assertTrue(upReadTime.contains("readRecord.copy()"))
-        assertTrue(upReadTime.contains("record.saveWithCover(snapshotBook, elapsed)"))
+        assertTrue(upReadTime.contains("dataRepository.saveReadRecord(record, snapshotBook, elapsed)"))
+        assertTrue(
+            projectFile("src/main/java/io/legado/app/data/repository/MangaReaderDataRepository.kt")
+                .contains("record.saveWithCover(book, elapsed)")
+        )
         assertTrue(upReadTime.indexOf("val elapsed = (now - readStartTime).coerceAtLeast(0)") <
             upReadTime.indexOf("executor.execute"))
         assertTrue(upReadTime.indexOf("readStartTime = now") <
