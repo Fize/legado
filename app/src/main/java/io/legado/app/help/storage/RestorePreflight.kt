@@ -1,6 +1,9 @@
 package io.legado.app.help.storage
 
 import com.google.gson.JsonElement
+import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import io.legado.app.data.entities.*
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
@@ -21,9 +24,7 @@ internal fun validateRestorePayloads(root: File) {
     validateRestoreList<HighlightRule>(root, "highlightRule.json")
     validateRestoreList<BookGroup>(root, "bookGroup.json")
     File(root, "bookSource.json").takeIf { it.isFile }?.let { file ->
-        val json = file.readText()
-        validateRestoreObjectArray(json, file.name)
-        parseRestoredBookSources(json)
+        forEachRestoredBookSource(file) { }
     }
     validateRestoreList<ReplaceRule>(root, "replaceRule.json")
     validateRestoreList<SearchKeyword>(root, "searchHistory.json")
@@ -33,6 +34,26 @@ internal fun validateRestorePayloads(root: File) {
     validateRestoreList<DictRule>(root, "dictRule.json")
     validateRestoreList<KeyboardAssist>(root, "keyboardAssists.json")
     validateRestoreList<ReadRecord>(root, "readRecord.json")
+}
+
+/** Validate and decode one source at a time so large backups do not occupy the heap twice. */
+internal fun forEachRestoredBookSource(file: File, consume: (BookSource) -> Unit) {
+    try {
+        file.bufferedReader().use { input ->
+            JsonReader(input).use { reader ->
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    val entry = JsonParser.parseReader(reader)
+                    require(entry.isJsonObject)
+                    consume(parseRestoredBookSources("[$entry]").single())
+                }
+                reader.endArray()
+                require(reader.peek() == JsonToken.END_DOCUMENT)
+            }
+        }
+    } catch (e: Exception) {
+        throw IllegalArgumentException("${file.name} 备份数据无法解析", e)
+    }
 }
 
 internal fun parseRestoredBookSources(json: String): List<BookSource> {

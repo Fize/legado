@@ -29,16 +29,10 @@ if (!version) {
     }
 }
 
-def versionCodeValue = 30000
-try {
-    def gitCount = providers.exec {
-        commandLine 'git', 'rev-list', '--count', 'HEAD'
-        ignoreExitValue = true
-    }.standardOutput.asText.get().trim()
-    if (gitCount) {
-        versionCodeValue = 30000 + Integer.parseInt(gitCount)
-    }
-} catch (ignored) {
+// Explicitly maintained: Git history can be squashed or shallow in CI.
+def versionCodeValue = providers.gradleProperty("appVersionCode").get().toInteger()
+if (versionCodeValue < 1) {
+    throw new GradleException("appVersionCode must be a positive integer")
 }
 
 def defaultKeystore = rootProject.file(".github/workflows/legado.jks")

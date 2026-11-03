@@ -170,6 +170,26 @@ fun resolveBookshelfSpanCount(configuredLayout: Int, screenWidthDp: Int): Int {
     }
 }
 
+/** Honor the selected grid density on phones while retaining a safe minimum for tiny windows. */
+fun resolveBookshelfContentColumns(
+    configuredLayout: Int,
+    contentWidthDp: Float,
+    fontScale: Float,
+    horizontalPaddingDp: Float,
+    spacingDp: Float,
+): Int {
+    val width = if (contentWidthDp.isFinite()) contentWidthDp else 0f
+    val phoneGrid = configuredLayout in 2..6 && width < 600f
+    return resolveContentGridColumns(
+        preferredColumns = resolveBookshelfSpanCount(configuredLayout, width.toInt()),
+        contentWidthDp = width,
+        minimumCellWidthDp = if (configuredLayout < 2) 280f else if (phoneGrid) 48f else 96f,
+        fontScale = if (phoneGrid) 1f else fontScale,
+        horizontalPaddingDp = horizontalPaddingDp,
+        spacingDp = spacingDp,
+    )
+}
+
 /**
  * 大屏对话框宽度约束：在 >=600dp 大屏下限制弹窗最大宽度（默认 560dp），避免横向铺满全屏。
  */

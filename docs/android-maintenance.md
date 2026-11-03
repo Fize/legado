@@ -16,3 +16,5 @@ python3 -B -m unittest discover -s tools -p 'test_*.py'
 ```
 
 设备回归入口和原生库、Proto 检查位于 `tools/`，CI 配置位于 `.github/workflows/android-quality.yml`。设备测试应使用专用模拟器，并核实 APK 与测试范围；远端 CI 结果以实际运行记录为准。
+
+安装包版本号由 `gradle.properties` 中的 `appVersionCode` 管理，不依赖 Git 提交数量。每次发布新版本前，须将其提高到大于所有已发布或供覆盖安装的版本；本轮从 `38707` 开始。

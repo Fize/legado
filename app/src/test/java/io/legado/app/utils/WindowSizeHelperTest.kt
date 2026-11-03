@@ -6,6 +6,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WindowSizeHelperTest {
+    @Test fun `phone bookshelf respects chosen grid columns and bounds tiny windows`() {
+        assertEquals(4, resolveBookshelfContentColumns(4, 393f, 1f, 24f, 4f))
+        assertEquals(4, resolveBookshelfContentColumns(4, 393f, 2f, 24f, 4f))
+        assertEquals(3, resolveBookshelfContentColumns(3, 360f, 1f, 24f, 4f))
+        assertEquals(2, resolveBookshelfContentColumns(4, 150f, 1f, 24f, 4f))
+        assertEquals(5, resolveBookshelfContentColumns(3, 600f, 1f, 32f, 8f))
+    }
     @Test fun `content columns account for rail width padding spacing and large fonts`() {
         assertEquals(5, resolveContentGridColumns(5, 600f, 96f, horizontalPaddingDp = 32f, spacingDp = 8f))
         assertEquals(4, resolveContentGridColumns(5, 520f, 96f, horizontalPaddingDp = 32f, spacingDp = 8f))

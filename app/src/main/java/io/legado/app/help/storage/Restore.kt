@@ -543,7 +543,15 @@ object Restore {
                 appDb.bookGroupDao.insert(*groups.toTypedArray())
             }
             File(path, "bookSource.json").takeIf { it.isFile }?.let { file ->
-                appDb.bookSourceDao.insert(*parseRestoredBookSources(file.readText()).toTypedArray())
+                val batch = ArrayList<BookSource>(50)
+                forEachRestoredBookSource(file) { source ->
+                    batch.add(source)
+                    if (batch.size == 50) {
+                        appDb.bookSourceDao.insert(*batch.toTypedArray())
+                        batch.clear()
+                    }
+                }
+                if (batch.isNotEmpty()) appDb.bookSourceDao.insert(*batch.toTypedArray())
             }
             fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
                 val insertedIds = appDb.replaceRuleDao.insert(*it.toTypedArray())

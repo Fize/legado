@@ -43,8 +43,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.readText
-import io.legado.app.utils.resolveBookshelfSpanCount
-import io.legado.app.utils.resolveContentGridColumns
+import io.legado.app.utils.resolveBookshelfContentColumns
 import io.legado.app.utils.sendToClip
 
 @Composable
@@ -113,10 +112,9 @@ fun BookshelfRootScreen(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val spanCount = resolveContentGridColumns(
-            preferredColumns = resolveBookshelfSpanCount(uiState.layout, maxWidth.value.toInt()),
+        val spanCount = resolveBookshelfContentColumns(
+            configuredLayout = uiState.layout,
             contentWidthDp = maxWidth.value,
-            minimumCellWidthDp = if (uiState.layout < 2) 280f else 96f,
             fontScale = fontScale,
             horizontalPaddingDp = 2 * (8f + spacing.value),
             spacingDp = spacing.value,
