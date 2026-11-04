@@ -22,13 +22,13 @@ import io.legado.app.utils.postEvent
 @Keep
 object ThemeConfig {
 
-    const val DEFAULT_LIGHT_SURFACE_CONTAINER = 0xFFF1F3F5.toInt()
-    const val DEFAULT_LIGHT_ACCENT = 0xFF3B5BA9.toInt()
-    const val DEFAULT_LIGHT_BACKGROUND = 0xFFF8F9FA.toInt()
+    const val DEFAULT_LIGHT_SURFACE_CONTAINER = 0xFFFFFFFF.toInt()
+    const val DEFAULT_LIGHT_ACCENT = 0xFF0B57D0.toInt()
+    const val DEFAULT_LIGHT_BACKGROUND = 0xFFF8FAFD.toInt()
 
-    const val DEFAULT_DARK_SURFACE_CONTAINER = 0xFF1A1C20.toInt()
-    const val DEFAULT_DARK_ACCENT = 0xFF8FB0FF.toInt()
-    const val DEFAULT_DARK_BACKGROUND = 0xFF121316.toInt()
+    const val DEFAULT_DARK_SURFACE_CONTAINER = 0xFF202124.toInt()
+    const val DEFAULT_DARK_ACCENT = 0xFFA8C7FA.toInt()
+    const val DEFAULT_DARK_BACKGROUND = 0xFF131314.toInt()
 
     fun getTheme() = when {
         AppConfig.isEInkMode -> Theme.EInk

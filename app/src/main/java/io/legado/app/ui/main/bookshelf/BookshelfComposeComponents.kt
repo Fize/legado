@@ -189,6 +189,12 @@ fun BookshelfTopBar(
                             contentDescription = stringResource(R.string.search),
                         )
                     }
+                    IconButton(onClick = { onMenuAction(BookshelfMenuAction.ADD_LOCAL) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_add),
+                            contentDescription = stringResource(R.string.book_local),
+                        )
+                    }
                     Box {
                         IconButton(onClick = { overflowExpanded = true }) {
                             Icon(
@@ -394,7 +400,7 @@ fun BookshelfHeaderSection(
 
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = MaterialTheme.colorScheme.secondaryContainer,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("bookshelf_continue_reading")
@@ -406,46 +412,33 @@ fun BookshelfHeaderSection(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .heightIn(min = 58.dp)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = stringResource(R.string.continue_read),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                    LegadoBookCover(
+                        path = continueBook.getDisplayCover(),
+                        name = continueBook.name,
+                        author = continueBook.author,
+                        loadOnlyWifi = false,
+                        sourceOrigin = continueBook.getCoverSourceOrigin(),
+                        modifier = Modifier.size(width = 30.dp, height = 46.dp),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = continueBook.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = chapterTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "$percent%",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.continue_read), style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary, maxLines = 1)
+                        Text(continueBook.name, style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("$chapterTitle · $percent%", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis)
+                    }
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -736,7 +729,7 @@ fun BookshelfBookGridItem(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
-            .padding(if (showBooknameMode == 2) 4.dp else 6.dp),
+            .padding(4.dp),
     ) {
         Box(
             modifier = Modifier

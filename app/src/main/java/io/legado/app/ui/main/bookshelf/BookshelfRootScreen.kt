@@ -19,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -166,12 +167,21 @@ fun BookshelfRootScreen(
 
             if (uiState.items.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.bookshelf_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(16.dp),
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = stringResource(R.string.bookshelf_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (uiState.groupId == BookGroup.IdRoot) {
+                            Button(onClick = { handleMenuAction(BookshelfMenuAction.ADD_LOCAL) }) {
+                                Text(stringResource(R.string.book_local))
+                            }
+                            TextButton(onClick = { handleMenuAction(BookshelfMenuAction.SEARCH) }) {
+                                Text(stringResource(R.string.search))
+                            }
+                        }
+                    }
                 }
             } else {
                 LazyVerticalGrid(

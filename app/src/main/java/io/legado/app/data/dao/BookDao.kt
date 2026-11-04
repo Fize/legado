@@ -177,8 +177,8 @@ interface BookDao {
 
     @get:Query(
         "SELECT * FROM books where type & ${BookType.notShelf} = 0 " +
-            "ORDER BY (durChapterIndex > 0 OR durChapterPos > 0) DESC, " +
-            "durChapterTime DESC limit 1"
+            "AND (durChapterIndex > 0 OR durChapterPos > 0) " +
+            "ORDER BY durChapterTime DESC limit 1"
     )
     val lastReadBookOnShelf: Book?
 

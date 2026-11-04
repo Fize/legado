@@ -101,6 +101,18 @@ class BookshelfGroupItemTest {
     }
 
     @Test
+    fun rootShelfKeepsNonemptyGroupWithCustomCover() {
+        val groups = listOf(
+            BookGroup(1, cover = "custom-cover", bookSort = 3),
+            BookGroup(2, cover = "custom-cover", bookSort = 3),
+        )
+        val items = buildRootBookshelfGroupItems(groups, listOf(book("grouped", group = 1)))
+
+        assertEquals(listOf(1L), items.map { it.group.groupId })
+        assertTrue(items.single().previewBooks.isEmpty())
+    }
+
+    @Test
     fun groupPreviewUsesLatestReadTimeOfAllMembers() {
         val books = (1..5).map { index ->
             book("book-$index", group = 1, order = index, read = if (index == 5) 100 else index.toLong())

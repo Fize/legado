@@ -133,7 +133,7 @@ class BookshelfReadProgressTest {
             projectFile("src/main/java/io/legado/app/help/config/AppConfig.kt").readText()
         assertTrue(
             appConfig.contains(
-                "get() = appCtx.getPrefBoolean(PreferKey.showBookshelfRecentReading, false)",
+                "get() = appCtx.getPrefBoolean(PreferKey.showBookshelfRecentReading, true)",
             ),
         )
         assertTrue(

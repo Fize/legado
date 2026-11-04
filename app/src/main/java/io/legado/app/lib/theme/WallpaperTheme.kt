@@ -44,7 +44,7 @@ object WallpaperTheme {
     fun isAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     fun isFollowEnabled(context: Context): Boolean =
-        isAvailable() && context.getPrefBoolean(PreferKey.wallpaperColorFollow, true)
+        isAvailable() && context.getPrefBoolean(PreferKey.wallpaperColorFollow, false)
 
     /**
      * 开启或关闭跟随壁纸配色

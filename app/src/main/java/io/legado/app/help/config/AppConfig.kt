@@ -245,7 +245,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var showBookshelfRecentReading: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.showBookshelfRecentReading, false)
+        get() = appCtx.getPrefBoolean(PreferKey.showBookshelfRecentReading, true)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.showBookshelfRecentReading, value)
         }

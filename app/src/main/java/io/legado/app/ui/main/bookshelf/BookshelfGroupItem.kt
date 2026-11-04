@@ -11,6 +11,7 @@ data class BookshelfGroupItem(
     val group: BookGroup,
     val previewBooks: List<BookshelfBook>,
     val latestReadTime: Long = Long.MIN_VALUE,
+    val hasBooks: Boolean = previewBooks.isNotEmpty(),
 ) {
     val coverSignature: List<List<String?>> = previewBooks.map { book ->
         listOf(
@@ -41,6 +42,7 @@ internal fun buildBookshelfGroupItems(
             group = group,
             previewBooks = previewBooks,
             latestReadTime = memberBooks.maxOfOrNull { it.durChapterTime } ?: Long.MIN_VALUE,
+            hasBooks = memberBooks.isNotEmpty(),
         )
     }
 }
@@ -76,7 +78,7 @@ internal fun buildRootBookshelfGroupItems(
 ): List<BookshelfGroupItem> {
     return buildBookshelfGroupItems(groups, books)
         .filterNot { it.group.isRootHiddenSystemGroup }
-        .filter { it.previewBooks.isNotEmpty() }
+        .filter { it.hasBooks }
 }
 
 internal val BookGroup.isRootHiddenSystemGroup: Boolean
