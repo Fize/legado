@@ -19,11 +19,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.Backup
-import io.legado.app.help.update.AppUpdate
-import io.legado.app.help.update.isIgnoredAppUpdate
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.about.CrashLogsDialog
-import io.legado.app.ui.about.UpdateDialog
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.navigation.ImportKind
 import io.legado.app.ui.navigation.ImportRoute
@@ -38,7 +35,6 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.Duration.Companion.hours
 
 /** Runs application-shell lifecycle work that used to live in the retired main Activity. */
 internal class AppStartupCoordinator(
@@ -112,20 +108,6 @@ internal class AppStartupCoordinator(
     }
 
     private fun updateVersion() {
-        if (LocalConfig.versionCode == appInfo.versionCode) {
-            if (AppConfig.autoUpdateVariant &&
-                LocalConfig.lastCheckUpdate + 24.hours.inWholeMilliseconds < System.currentTimeMillis()
-            ) {
-                AppUpdate.gitHubUpdate.check(activity.lifecycleScope)
-                    .onSuccess {
-                        if (isIgnoredAppUpdate(it.tagName, LocalConfig.ignoreUpdateVersion)) return@onSuccess
-                        if (activity.supportFragmentManager.isStateSaved) return@onSuccess
-                        activity.showDialogFragment(UpdateDialog(it))
-                    }
-                LocalConfig.lastCheckUpdate = System.currentTimeMillis()
-            }
-            return
-        }
         LocalConfig.versionCode = appInfo.versionCode
     }
 

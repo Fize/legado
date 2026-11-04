@@ -37,8 +37,6 @@ internal fun AppCompatActivity.rateApplication() {
 internal fun performAboutAction(activity: AppCompatActivity, action: AboutAction) {
     when (action) {
         AboutAction.Contributors -> activity.openUrl(activity.getString(R.string.contributors_url))
-        AboutAction.CheckUpdate -> activity.checkAppUpdate()
-        AboutAction.CheckBetaUpdate -> activity.checkAppUpdate(beta = true)
         AboutAction.CrashLogs -> activity.showDialogFragment<CrashLogsDialog>()
         AboutAction.SaveLog -> saveLog()
         AboutAction.CreateHeapDump -> createHeapDump()

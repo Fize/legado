@@ -56,10 +56,8 @@ interface BookDao {
 
     @Query(
         """
-        select * from books where type & ${BookType.text} > 0
-        and type & ${BookType.local} = 0
+        select * from books where type & ${BookType.audio} = 0 and type & ${BookType.video} = 0
         and ((SELECT coalesce(sum(groupId), 0) FROM book_groups where groupId > 0 OR groupId = ${Long.MIN_VALUE}) & `group`) = 0
-        and (select show from book_groups where groupId = ${BookGroup.IdNetNone}) != 1
         """
     )
     fun flowRoot(): Flow<List<Book>>

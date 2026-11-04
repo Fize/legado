@@ -132,7 +132,6 @@ class DownloadService : BaseService() {
             IntentAction.start -> guardedCommand(intent) { generation -> startDownload(
                 intent.getStringExtra("url"),
                 intent.getStringExtra("fileName"),
-                intent.getBooleanExtra("isAppUpdate", false),
                 intent.getIntExtra("notificationId", 0),
                 generation
             ) }
@@ -201,7 +200,6 @@ class DownloadService : BaseService() {
     private fun startDownload(
         url: String?,
         fileName: String?,
-        isAppUpdate: Boolean,
         preferredNotificationId: Int = 0,
         generation: RestoreWriteGeneration.Token,
     ) {
@@ -228,7 +226,6 @@ class DownloadService : BaseService() {
                     url,
                     fileName,
                     allocateNotificationId(url, fileName, preferredNotificationId),
-                    isAppUpdate,
                     generation
                 )
             queryStateLocked()
@@ -269,14 +266,7 @@ class DownloadService : BaseService() {
         if (downloadInfo.state != DownloadState.ACTIVE) return
         downloadInfo.state = DownloadState.COMPLETED
         openDownload(downloadId, downloadInfo.fileName)
-        updateTerminalNotification(
-            downloadInfo,
-            if (downloadInfo.isAppUpdate) {
-                getString(R.string.download_live_update_completed)
-            } else {
-                getString(R.string.download_live_completed)
-            }
-        )
+        updateTerminalNotification(downloadInfo, getString(R.string.download_live_completed))
         scheduleTerminalCleanup(downloadId)
     }
 
@@ -507,7 +497,6 @@ class DownloadService : BaseService() {
                             putExtra("fileName", downloadInfo.fileName)
                             if (action == IntentAction.start) {
                                 putExtra("url", downloadInfo.url)
-                                putExtra("isAppUpdate", downloadInfo.isAppUpdate)
                                 putExtra("notificationId", downloadInfo.notificationId)
                             }
                         }
@@ -606,7 +595,6 @@ class DownloadService : BaseService() {
         val url: String,
         val fileName: String,
         val notificationId: Int,
-        val isAppUpdate: Boolean,
         val generation: RestoreWriteGeneration.Token,
         val startTime: Long = System.currentTimeMillis(),
         var progress: Int = 0,

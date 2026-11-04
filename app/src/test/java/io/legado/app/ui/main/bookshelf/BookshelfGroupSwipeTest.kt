@@ -33,6 +33,20 @@ class BookshelfGroupSwipeTest {
     }
 
     @Test
+    fun `swiping skips ungrouped system groups`() {
+        val groupsWithUngrouped = listOf(
+            BookGroup(groupId = 1, groupName = "First"),
+            BookGroup(groupId = BookGroup.IdAll, groupName = "All"),
+            BookGroup(groupId = BookGroup.IdNetNone, groupName = "Ungrouped"),
+            BookGroup(groupId = BookGroup.IdLocalNone, groupName = "Ungrouped local"),
+            BookGroup(groupId = 2, groupName = "Second"),
+        )
+
+        assertEquals(2L, adjacentBookshelfGroupId(groupsWithUngrouped, 1, 1))
+        assertEquals(1L, adjacentBookshelfGroupId(groupsWithUngrouped, 2, -1))
+    }
+
+    @Test
     fun `group swipe uses compose drag gestures and commits after threshold`() {
         val source = projectFile(
             "src/main/java/io/legado/app/ui/main/bookshelf/BookshelfRootScreen.kt",

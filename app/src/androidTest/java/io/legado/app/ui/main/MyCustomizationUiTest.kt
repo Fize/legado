@@ -37,7 +37,7 @@ class MyCustomizationUiTest {
     private val preferences = context.defaultSharedPreferences
     private val saved = listOf(PreferKey.myMoreItems, PreferKey.language, PreferKey.autoBackup)
         .associateWith { key -> preferences.all[key].let { if (it is Set<*>) it.toSet() else it } }
-    private val initial = setOf(MyAction.CheckUpdate.key, MyAction.CheckBetaUpdate.key)
+    private val initial = setOf(MyAction.ReadRecord.key)
     private val rotation = InstrumentationRegistry.getArguments().getString("compatSettingsRotation", "0")!!.toInt().also { require(it in 0..1) }
     @Suppress("DEPRECATION")
     private fun rotationFor(landscape: Boolean): Int {
@@ -157,17 +157,17 @@ class MyCustomizationUiTest {
 
     @Test fun aDraftRemainsOpenAfterRecreationAndCancelNeverPersistsIt() {
         case = "cancel"
-        openDialog(); select(R.string.book_source_manage); select(R.string.check_beta_update)
+        openDialog(); select(R.string.book_source_manage); select(R.string.read_record)
         assertEquals(initial, preferences.getStringSet(PreferKey.myMoreItems, null))
         sample("editing")
         scenario!!.recreate(); compose.waitForIdle()
         compose.onNode(isDialog()).assertExists()
-        assertSelection(R.string.book_source_manage, true); assertSelection(R.string.check_beta_update, false)
+        assertSelection(R.string.book_source_manage, true); assertSelection(R.string.read_record, false)
         sample("recreated")
         action(R.string.cancel).performClick()
         assertEquals(initial, preferences.getStringSet(PreferKey.myMoreItems, null))
         openDialog()
-        assertSelection(R.string.book_source_manage, false); assertSelection(R.string.check_beta_update, true)
+        assertSelection(R.string.book_source_manage, false); assertSelection(R.string.read_record, true)
         action(R.string.cancel).performClick()
     }
 

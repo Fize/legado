@@ -712,14 +712,6 @@ private fun OtherConfigContent(
                     summary = stringResource(R.string.show_add_to_shelf_alert_summary),
                 )
             }
-            item(key = "autoUpdateVariant") {
-                SwitchPreferenceItem(
-                    key = "autoUpdateVariant",
-                    default = true,
-                    title = stringResource(R.string.auto_update),
-                    summary = stringResource(R.string.auto_update_summary),
-                )
-            }
             if (showLiveUpdate) {
                 item(key = PreferKey.liveUpdateNotifications) {
                     SwitchPreferenceItem(

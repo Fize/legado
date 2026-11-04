@@ -59,7 +59,6 @@ class LiveUpdateNotificationTest {
         val manifest = source("app/src/main/AndroidManifest.xml")
         val settings = source("app/src/main/java/io/legado/app/ui/config/OtherSettingsScreen.kt")
         val download = source("app/src/main/java/io/legado/app/model/Download.kt")
-        val updateDialog = source("app/src/main/java/io/legado/app/ui/about/UpdateDialog.kt")
 
         assertTrue(manifest.contains("android.permission.POST_PROMOTED_NOTIFICATIONS"))
         assertTrue(service.contains("private var nextNotificationId = NotificationId.Download"))
@@ -81,7 +80,7 @@ class LiveUpdateNotificationTest {
         assertTrue(service.contains("setContentText(downloadInfo.fileName)"))
         assertTrue(service.contains("if (!terminal && !result)"))
         assertTrue(service.contains("if (!result) setGroup(groupKey)"))
-        assertTrue(service.contains("download_live_update_completed"))
+        assertTrue(service.contains("download_live_completed"))
         assertTrue(service.contains("download_live_canceled"))
         assertTrue(service.contains("private fun updateResultNotification(downloadInfo: DownloadInfo)"))
         assertTrue(service.contains("result = true"))
@@ -91,7 +90,6 @@ class LiveUpdateNotificationTest {
         assertTrue(service.contains("downloads.values.forEach { downloadInfo ->"))
         assertTrue(service.contains("updateResultNotification(downloadInfo)"))
         assertTrue(service.contains("IntentAction.start"))
-        assertTrue(service.contains("putExtra(\"isAppUpdate\", downloadInfo.isAppUpdate)"))
         assertTrue(service.contains("notificationManager.cancel(downloadInfo.notificationId)"))
         assertTrue(service.contains("delay(TERMINAL_NOTIFICATION_DURATION + RESULT_NOTIFICATION_DELAY)"))
         assertTrue(service.contains("TERMINAL_NOTIFICATION_DURATION + RESULT_NOTIFICATION_DELAY"))
@@ -111,13 +109,13 @@ class LiveUpdateNotificationTest {
         assertTrue(colorizedFallback > firstProbe)
         assertTrue(secondProbe > colorizedFallback)
         assertFalse(helper.contains("SDK_INT_FULL"))
-        assertTrue(download.contains("isAppUpdate: Boolean = false"))
+        assertFalse(download.contains("isAppUpdate"))
+        assertFalse(service.contains("isAppUpdate"))
         assertTrue(settings.contains("supportsPromotedNotifications() && ("))
         assertTrue(settings.contains("canPostPromotedNotifications() ||"))
         assertTrue(settings.contains("promotedNotificationSettingsIntent(context).resolveActivity(packageManager)"))
         assertTrue(settings.contains("intent.resolveActivity(packageManager)"))
         assertTrue(settings.contains("context.putPrefBoolean(PreferKey.liveUpdateNotifications, false)"))
-        assertTrue(updateDialog.contains("isAppUpdate = true"))
     }
 
     @Test
@@ -133,7 +131,6 @@ class LiveUpdateNotificationTest {
         assertTrue(strings.contains("<string name=\"download_live_downloading\">%1\$d%%</string>"))
         assertTrue(strings.contains("<string name=\"download_live_waiting\">下载中</string>"))
         assertTrue(strings.contains("<string name=\"download_live_completed\">已完成</string>"))
-        assertTrue(strings.contains("<string name=\"download_live_update_completed\">待安装</string>"))
         assertTrue(strings.contains("<string name=\"download_live_canceled\">已取消</string>"))
         assertTrue(strings.contains("<string name=\"download_live_failed\">下载失败</string>"))
     }

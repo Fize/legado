@@ -1,6 +1,7 @@
 package io.legado.app.ui.main.bookshelf
 
 import io.legado.app.constant.BookType
+import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookshelfBook
 import org.junit.Assert.assertEquals
@@ -77,6 +78,73 @@ class BookshelfGroupItemTest {
     }
 
     @Test
+    fun rootShelfHidesAggregateAndUngroupedSystemGroupCards() {
+        val books = listOf(
+            book("net-none"),
+            book("local-none", type = BookType.text or BookType.local),
+            book("grouped", group = 1),
+        )
+        val groups = listOf(
+            BookGroup(BookGroup.IdAll, bookSort = 3),
+            BookGroup(BookGroup.IdLocal, bookSort = 3),
+            BookGroup(BookGroup.IdNetNone, bookSort = 3),
+            BookGroup(BookGroup.IdLocalNone, bookSort = 3),
+            BookGroup(1, bookSort = 3),
+        )
+
+        val items = buildRootBookshelfGroupItems(groups, books)
+
+        assertEquals(
+            setOf(BookGroup.IdLocal, 1L),
+            items.map { it.group.groupId }.toSet(),
+        )
+    }
+
+    @Test
+    fun groupPreviewUsesLatestReadTimeOfAllMembers() {
+        val books = (1..5).map { index ->
+            book("book-$index", group = 1, order = index, read = if (index == 5) 100 else index.toLong())
+        }
+        val groups = listOf(BookGroup(1, bookSort = 3))
+
+        val item = buildBookshelfGroupItems(groups, books).single()
+
+        assertEquals(100L, item.latestReadTime)
+        assertEquals(listOf("book-1", "book-2", "book-3", "book-4"), item.previewBooks.map { it.bookUrl })
+    }
+
+    @Test
+    fun rootItemsInterleaveGroupsAndBooksByLatestReadTime() {
+        val groups = listOf(BookGroup(1, groupName = "Grouped", bookSort = 3))
+        val groupItems = buildBookshelfGroupItems(
+            groups,
+            listOf(book("grouped-book", group = 1, read = 100)),
+        )
+        val books = listOf(
+            shelfBook("newer", read = 200),
+            shelfBook("older", read = 50),
+        )
+
+        assertEquals(
+            listOf("newer", "Grouped", "older"),
+            orderBookshelfItems(groupItems, books).map(::itemName),
+        )
+    }
+
+    @Test
+    fun emptyGroupsSortAfterBooks() {
+        val groupItems = buildBookshelfGroupItems(
+            listOf(BookGroup(1, groupName = "Empty", bookSort = 3)),
+            emptyList(),
+        )
+
+        assertEquals(
+            listOf("book", "Empty"),
+            orderBookshelfItems(groupItems, listOf(shelfBook("book", read = 0))).map(::itemName),
+        )
+    }
+
+    @Test
     fun supportsEveryBookshelfSortMode() {
         val books = listOf(
             book("b", name = "B", order = 2, latest = 20, read = 40),
@@ -112,6 +180,18 @@ class BookshelfGroupItemTest {
     }
 
     private fun urls(item: BookshelfGroupItem) = item.previewBooks.map { it.bookUrl }
+
+    private fun itemName(item: Any) = when (item) {
+        is Book -> item.name
+        is BookshelfGroupItem -> item.group.groupName
+        else -> error("Unexpected shelf item: $item")
+    }
+
+    private fun shelfBook(id: String, read: Long) = Book(
+        bookUrl = id,
+        name = id,
+        durChapterTime = read,
+    )
 
     private fun book(
         id: String,

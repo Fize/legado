@@ -1,6 +1,7 @@
 package io.legado.app.ui.main.bookshelf
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,8 +55,12 @@ fun BookshelfRootScreen(
     onGroupLongClick: (BookGroup) -> Unit,
     bookshelfViewModel: BookshelfRootViewModel = viewModel(),
     actionsViewModel: BookshelfViewModel = viewModel(),
+    isCurrent: Boolean = true,
 ) {
     val uiState by bookshelfViewModel.uiState.collectAsStateWithLifecycle()
+    BackHandler(enabled = isCurrent && uiState.groupId != BookGroup.IdRoot) {
+        bookshelfViewModel.goBack()
+    }
     val addBookProgress by actionsViewModel.addBookProgress.collectAsStateWithLifecycle()
     val fontScale = LocalDensity.current.fontScale
     val shelfScrollState = rememberLazyGridState()

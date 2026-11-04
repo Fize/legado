@@ -5,7 +5,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.bookshelf.BookshelfGroupItem
-import io.legado.app.ui.main.bookshelf.buildBookshelfGroupItems
+import io.legado.app.ui.main.bookshelf.buildRootBookshelfGroupItems
 import io.legado.app.utils.cnCompare
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -37,8 +37,7 @@ class BookshelfRepository @Inject constructor() {
         val books = appDb.bookDao.flowByGroup(groupId).map { sortBooks(it, groupId) }
         return if (groupId == BookGroup.IdRoot) {
             combine(books, groups, appDb.bookDao.flowBookshelfBooks()) { current, allGroups, allBooks ->
-                val items = buildBookshelfGroupItems(allGroups, allBooks)
-                    .filter { it.group.groupId == BookGroup.IdAll || it.previewBooks.isNotEmpty() }
+                val items = buildRootBookshelfGroupItems(allGroups, allBooks)
                 BookshelfContent(current, allGroups, items)
             }
         } else {

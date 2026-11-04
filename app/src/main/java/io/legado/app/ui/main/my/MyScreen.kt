@@ -33,8 +33,7 @@ import io.legado.app.ui.compose.prefs.rememberPrefStringSet
 
 enum class MyAction(val key: String) {
     About("about"), AllBookmarks("bookmark"), BackupSettings("web_dav_setting"),
-    BookSourceManage("bookSourceManage"), CheckBetaUpdate("check_beta_update"),
-    CheckUpdate("check_update"), DictionaryRuleManage("dictRuleManage"), Exit("exit"),
+    BookSourceManage("bookSourceManage"), DictionaryRuleManage("dictRuleManage"), Exit("exit"),
     FileManage("fileManage"), More("myMore"), OtherSettings("setting"),
     ReadRecord("readRecord"), ReplaceRuleManage("replaceManage"),
     RuleSubscription("ruleSubscription"), TextTocRuleManage("txtTocRuleManage"),
@@ -67,8 +66,6 @@ private val aboutEntries = listOf(
     MyNavEntry(MyAction.ReadRecord, R.string.read_record, R.string.read_record_summary, R.drawable.ic_history),
     MyNavEntry(MyAction.FileManage, R.string.file_manage, R.string.file_manage_summary, R.drawable.ic_folder_outline),
     MyNavEntry(MyAction.About, R.string.about, iconRes = R.drawable.ic_cfg_about),
-    MyNavEntry(MyAction.CheckUpdate, R.string.check_update, iconRes = R.drawable.ic_download),
-    MyNavEntry(MyAction.CheckBetaUpdate, R.string.check_beta_update, iconRes = R.drawable.ic_download),
 )
 
 @Composable
@@ -114,7 +111,7 @@ fun MyPreferenceScreen(
 ) {
     var moreItems by rememberPrefStringSet(
         PreferKey.myMoreItems,
-        setOf(MyAction.CheckUpdate.key, MyAction.CheckBetaUpdate.key),
+        emptySet(),
     )
     fun isVisible(key: String): Boolean = (key in moreItems) == isMore
     val visibleTop = topEntries.filter { isVisible(it.action.key) }

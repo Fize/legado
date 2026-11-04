@@ -36,7 +36,8 @@ data class BookshelfRootUiState(
     val continueBook: Book? = null,
 ) {
     val currentGroup: BookGroup? get() = groups.firstOrNull { it.groupId == groupId }
-    val items: List<Any> get() = if (groupId == BookGroup.IdRoot) groupItems + books else books
+    val items: List<Any>
+        get() = if (groupId == BookGroup.IdRoot) orderBookshelfItems(groupItems, books) else books
 }
 
 @HiltViewModel
@@ -122,7 +123,7 @@ internal fun adjacentBookshelfGroupId(
     currentGroupId: Long,
     offset: Int,
 ): Long? {
-    val visible = groups.map(BookGroup::groupId)
+    val visible = groups.filterNot { it.isRootHiddenSystemGroup }.map(BookGroup::groupId)
     val currentIndex = visible.indexOf(currentGroupId)
     if (currentIndex < 0) return null
     return visible.getOrNull(currentIndex + offset)

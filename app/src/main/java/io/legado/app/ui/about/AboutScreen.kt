@@ -32,8 +32,6 @@ import io.legado.app.ui.compose.prefs.PreferenceItem
 
 enum class AboutAction {
     Contributors,
-    CheckUpdate,
-    CheckBetaUpdate,
     CrashLogs,
     SaveLog,
     CreateHeapDump,
@@ -119,19 +117,7 @@ private fun AboutOptions(onAction: (AboutAction) -> Unit, modifier: Modifier = M
                 onClick = { onAction(AboutAction.Contributors) },
             )
         }
-        item("update_log") {
-            PreferenceItem(
-                title = stringResource(R.string.update_log),
-                summary = versionSummary,
-                onClick = { onAction(AboutAction.CheckUpdate) },
-            )
-        }
-        item("check_update") {
-            PreferenceItem(stringResource(R.string.check_update)) { onAction(AboutAction.CheckUpdate) }
-        }
-        item("check_beta_update") {
-            PreferenceItem(stringResource(R.string.check_beta_update)) { onAction(AboutAction.CheckBetaUpdate) }
-        }
+        item("version") { Text(versionSummary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) }
         item("otherCategory") { PreferenceCategoryHeader(title = stringResource(R.string.other)) }
         item("crashLog") {
             PreferenceItem(stringResource(R.string.crash_log)) { onAction(AboutAction.CrashLogs) }

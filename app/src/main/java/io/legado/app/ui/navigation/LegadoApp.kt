@@ -34,7 +34,6 @@ import io.legado.app.ui.about.AboutScreen
 import io.legado.app.ui.about.AppLogScreen
 import io.legado.app.ui.about.ReadRecordDestination
 import io.legado.app.ui.about.ReadRecordScreen
-import io.legado.app.ui.about.checkAppUpdate
 import io.legado.app.ui.about.performAboutAction
 import io.legado.app.ui.about.rateApplication
 import io.legado.app.ui.about.shareApplication
@@ -162,8 +161,6 @@ fun LegadoApp(
                 onMyAction = { action ->
                     when (action) {
                         MyAction.More -> navigator.navigate(SettingsRoute())
-                        MyAction.CheckUpdate -> (context as? AppCompatActivity)?.checkAppUpdate()
-                        MyAction.CheckBetaUpdate -> (context as? AppCompatActivity)?.checkAppUpdate(beta = true)
                         MyAction.BookSourceManage -> context.startActivity<BookSourceActivity>()
                         MyAction.ReplaceRuleManage -> navigator.navigate(ReplaceRuleRoute)
                         MyAction.RuleSubscription -> navigator.navigate(RuleSubscriptionRoute)
@@ -644,6 +641,7 @@ private fun AppRouteContent(
     if (route == BookshelfRoute) {
         val mainViewModel: MainViewModel = viewModel()
         BookshelfRootScreen(
+            isCurrent = isCurrentRoute,
             onMenuAction = { action, state ->
                 when (action) {
                     BookshelfMenuAction.SEARCH -> onNavigate(SearchRoute())
