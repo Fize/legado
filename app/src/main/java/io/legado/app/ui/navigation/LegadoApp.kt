@@ -247,7 +247,7 @@ private fun AppRouteContent(
 ) {
     val context = LocalContext.current
     val bookOpener = if (route == BookshelfRoute || route is BookshelfManageRoute ||
-        route is ExploreBooksRoute || route is AddToBookshelfRoute) {
+        route is ExploreBooksRoute || route is AddToBookshelfRoute || route == BookshelfSearchRoute) {
         viewModel<BookInfoOpenViewModel>().also { model ->
             BookInfoOpenEffect(model, isCurrentRoute, detailChildren) { request ->
                 val destination = BookInfoRoute(request.bookUrl, request.id, request.previewKey)
@@ -283,6 +283,10 @@ private fun AppRouteContent(
         io.legado.app.ui.book.read.PlatformReaderDestination(route.bookUrl,
             route.requestId.takeIf { route.returnToDetails }, io.legado.app.ui.video.VideoPlayerActivity::class.java, onNavigateBack,
             requireRequest = route.returnToDetails, chapterIndex = route.chapterIndex)
+        return
+    }
+    if (route == BookshelfSearchRoute) {
+        io.legado.app.ui.main.bookshelf.BookshelfSearchScreen(onBack = onNavigateBack, onOpenBook = { bookOpener!!.openShelf(it) })
         return
     }
     if (route is SearchRoute) {
@@ -644,7 +648,8 @@ private fun AppRouteContent(
             isCurrent = isCurrentRoute,
             onMenuAction = { action, state ->
                 when (action) {
-                    BookshelfMenuAction.SEARCH -> onNavigate(SearchRoute())
+                    BookshelfMenuAction.SEARCH -> onNavigate(BookshelfSearchRoute)
+                    BookshelfMenuAction.FIND_BOOKS -> onNavigate(SearchRoute())
                     BookshelfMenuAction.UPDATE_TOC -> mainViewModel.upToc(
                         state.books,
                         state.currentGroup?.onlyUpdateRead ?: false,
@@ -675,6 +680,7 @@ private fun AppRouteContent(
     }
     if (route == ExploreRoute) {
         ExploreRootScreen(
+            onSearchBooks = { onNavigate(SearchRoute()) },
             onManageSources = { context.startActivity<BookSourceActivity>() },
             onEditSource = { sourceUrl ->
                 context.startActivity<BookSourceEditActivity> { putExtra("sourceUrl", sourceUrl) }

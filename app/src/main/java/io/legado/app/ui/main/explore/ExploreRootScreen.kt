@@ -69,6 +69,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ExploreRootScreen(
+    onSearchBooks: () -> Unit,
     onManageSources: () -> Unit,
     onEditSource: (String) -> Unit,
     onLoginSource: (String) -> Unit,
@@ -98,6 +99,9 @@ fun ExploreRootScreen(
                 onSearchQueryChange = exploreViewModel::setSearchQuery,
                 searchPlaceholder = stringResource(R.string.screen_find),
                 actions = {
+                    TextButton(onClick = onSearchBooks, modifier = Modifier.testTag("explore-search-books")) {
+                        Text(stringResource(R.string.find_books_online), maxLines = 1)
+                    }
                     IconButton(onClick = onManageSources) {
                         Icon(
                             painter = painterResource(R.drawable.ic_settings),

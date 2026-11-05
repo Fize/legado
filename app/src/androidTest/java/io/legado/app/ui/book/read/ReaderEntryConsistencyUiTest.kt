@@ -240,7 +240,7 @@ class ReaderEntryConsistencyUiTest {
         resetApplication()
         val route = BookInfoRoute(book.bookUrl)
         app = ActivityScenario.launch(AppActivity.startIntent(context, route))
-        val reading = context.getString(R.string.reading)
+        val reading = context.getString(R.string.continue_read)
         compose.waitUntil(20_000) {
             compose.onAllNodesWithText(reading).fetchSemanticsNodes().isNotEmpty()
         }
@@ -302,7 +302,7 @@ class ReaderEntryConsistencyUiTest {
             app!!.onActivity { ready = it.currentDestination is BookInfoRoute }
             ready
         }
-        val reading = context.getString(R.string.reading)
+        val reading = context.getString(R.string.continue_read)
         compose.waitUntil(20_000) {
             compose.onAllNodesWithText(reading).fetchSemanticsNodes().isNotEmpty()
         }

@@ -76,7 +76,7 @@ class PlatformReaderEntryUiTest {
     @Test fun actualDetailReadingUsesTheMatureHostAndReturnsThroughItsDurableReceipt() {
         scenario = ActivityScenario.launch(AppActivity.startIntent(context, route))
         var label = ""
-        scenario!!.onActivity { label = it.getString(R.string.reading) }
+        scenario!!.onActivity { label = it.getString(R.string.continue_read) }
         compose.waitUntil(15_000) { compose.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(label).performClick()
         compose.waitUntil(20_000) {
@@ -118,7 +118,7 @@ class PlatformReaderEntryUiTest {
             var editLabel = ""
             var bookmarkTabLabel = ""
             scenario!!.onActivity {
-                readingLabel = it.getString(R.string.reading)
+                readingLabel = it.getString(R.string.continue_read)
                 editLabel = it.getString(R.string.edit)
                 bookmarkTabLabel = it.getString(R.string.bookmark)
             }
@@ -242,7 +242,7 @@ class PlatformReaderEntryUiTest {
                 appDb.bookDao.update(book)
                 scenario = ActivityScenario.launch(AppActivity.startIntent(context, route))
                 var label = ""
-                scenario!!.onActivity { label = it.getString(R.string.reading) }
+                scenario!!.onActivity { label = it.getString(R.string.continue_read) }
                 compose.waitUntil(15_000) { compose.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithText(label).performClick()
                 compose.waitUntil(20_000) {
@@ -280,7 +280,7 @@ class PlatformReaderEntryUiTest {
         assertFalse(RestoreRecoveryGate.isQuarantined)
         scenario = ActivityScenario.launch(AppActivity.startIntent(context, route))
         var label = ""
-        scenario!!.onActivity { label = it.getString(R.string.reading) }
+        scenario!!.onActivity { label = it.getString(R.string.continue_read) }
         compose.waitUntil(15_000) { compose.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(label).performClick()
         compose.waitUntil(20_000) {

@@ -224,7 +224,7 @@ fun BookshelfRootScreen(
                             Button(onClick = { handleMenuAction(BookshelfMenuAction.ADD_LOCAL) }) {
                                 Text(stringResource(R.string.book_local))
                             }
-                            TextButton(onClick = { handleMenuAction(BookshelfMenuAction.SEARCH) }) {
+                            TextButton(onClick = { handleMenuAction(BookshelfMenuAction.FIND_BOOKS) }) {
                                 Text(stringResource(R.string.search))
                             }
                         }

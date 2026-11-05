@@ -35,6 +35,9 @@ data class BookInfoRoute(
 data class EditBookInfoRoute(val bookUrl: String, val bookInfoChildRequestId: String? = null) : AppRoute
 
 @Serializable
+data object BookshelfSearchRoute : AppRoute
+
+@Serializable
 data class SearchRoute(val query: String = "", val scope: String? = null) : AppRoute
 
 @Serializable

@@ -138,7 +138,7 @@ class PlatformMediaEntryUiTest {
     private fun <T : Activity> openDetail(host: Class<T>): BookInfoChildRequest {
         scenario = ActivityScenario.launch(AppActivity.startIntent(context, route))
         var reading = ""
-        scenario!!.onActivity { reading = it.getString(R.string.reading) }
+        scenario!!.onActivity { reading = it.getString(R.string.continue_read) }
         try {
             compose.waitUntil(15_000) { compose.onAllNodesWithText(reading).fetchSemanticsNodes().isNotEmpty() }
         } catch (error: Throwable) {
@@ -346,7 +346,7 @@ class PlatformMediaEntryUiTest {
         fixture(BookType.video)
         scenario = ActivityScenario.launch(AppActivity.startIntent(context, route))
         var reading = ""
-        scenario!!.onActivity { reading = it.getString(R.string.reading) }
+        scenario!!.onActivity { reading = it.getString(R.string.continue_read) }
         compose.waitUntil(15_000) { compose.onAllNodesWithText(reading).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(reading).performClick()
         awaitFloating()

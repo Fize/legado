@@ -432,8 +432,8 @@ class TextReaderDestinationTest {
     @Test fun detailReadAndBackPublishesTheFinalPositionToTheOriginalDetailEntry() {
         val parent = UUID.randomUUID().toString()
         launch(BookInfoRoute(book.bookUrl, requestId = parent))
-        compose.waitUntil(15_000) { compose.onAllNodesWithText(context.getString(R.string.reading)).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(context.getString(R.string.reading)).performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText(context.getString(R.string.continue_read)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(context.getString(R.string.continue_read)).performClick()
         compose.waitUntil(15_000) { current() is TextReaderRoute }
         val child = (current() as TextReaderRoute).requestId!!
         ready(child)

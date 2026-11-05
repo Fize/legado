@@ -280,23 +280,22 @@ fun BookInfoScreen(state: BookInfoUiState, deleteAlertEnabled: Boolean, onAction
                     ) {
                         OutlinedButton(
                             enabled = currentBook != null && !mutationBlocked,
-                            onClick = { onAction(BookInfoUiAction.Shelf) },
-                            modifier = Modifier.weight(1f),
+                            onClick = { onAction(if (inBookshelf) BookInfoUiAction.Shelf else BookInfoUiAction.Read) },
+                            modifier = Modifier.weight(1f).testTag("book-info-secondary"),
                         ) {
-                            Text(
-                                text = if (inBookshelf) {
-                                    stringResource(R.string.remove_from_bookshelf)
-                                } else {
-                                    stringResource(R.string.add_to_bookshelf)
-                                }
-                            )
+                            Text(stringResource(if (inBookshelf) R.string.remove_from_bookshelf else R.string.start_read))
                         }
                         Button(
                             enabled = currentBook != null && !mutationBlocked,
-                            onClick = { onAction(BookInfoUiAction.Read) },
-                            modifier = Modifier.weight(1f),
+                            onClick = { onAction(if (inBookshelf) BookInfoUiAction.Read else BookInfoUiAction.Shelf) },
+                            modifier = Modifier.weight(1f).testTag("book-info-primary"),
                         ) {
-                            Text(text = stringResource(R.string.reading))
+                            val label = when {
+                                !inBookshelf -> R.string.add_to_bookshelf
+                                currentBook?.readProgress() != null -> R.string.continue_read
+                                else -> R.string.start_read
+                            }
+                            Text(stringResource(label))
                         }
                     }
                 }

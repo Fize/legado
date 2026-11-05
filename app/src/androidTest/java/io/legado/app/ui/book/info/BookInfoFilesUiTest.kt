@@ -223,7 +223,7 @@ class BookInfoFilesUiTest {
         launch().use { scenario ->
             ready(scenario)
             lateinit var label: String
-            scenario.onActivity { label = it.getString(R.string.reading) }
+            scenario.onActivity { label = it.getString(R.string.start_read) }
             compose.onNodeWithText(label).performClick()
             await { state(scenario).fileImport.open }
             compose.onNodeWithTag("web_file_0").performClick()

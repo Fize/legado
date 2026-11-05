@@ -81,6 +81,7 @@ import kotlin.math.roundToInt
 
 enum class BookshelfMenuAction {
     SEARCH,
+    FIND_BOOKS,
     UPDATE_TOC,
     ADD_LOCAL,
     ADD_REMOTE,

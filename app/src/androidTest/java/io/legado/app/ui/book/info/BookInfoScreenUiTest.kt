@@ -37,12 +37,16 @@ class BookInfoScreenUiTest {
         } }
         compose.waitForIdle()
     }
-    private fun text(id: Int) = context.getString(id)
+    private fun text(id: Int): String {
+        var value = context.getString(id)
+        scenario?.onActivity { value = it.getString(id) }
+        return value
+    }
 
     @Test fun footerAndMetadataEmitTypedIntentWithoutAViewModel() {
         show()
         compose.onNodeWithText(text(R.string.add_to_bookshelf)).performClick()
-        compose.onNodeWithText(text(R.string.reading)).performClick()
+        compose.onNodeWithText(text(R.string.start_read)).performClick()
         compose.onNodeWithText(text(R.string.view_toc)).performScrollTo().performClick()
         compose.onNodeWithText(text(R.string.change_origin)).performScrollTo().performClick()
         compose.onNodeWithText(text(R.string.change_group)).performScrollTo().performClick()
@@ -82,7 +86,7 @@ class BookInfoScreenUiTest {
     @Test fun mutationDisablesBothFooterActions() {
         show(state.copy(shelfMutation = true))
         compose.onNodeWithText(text(R.string.add_to_bookshelf)).assertIsNotEnabled()
-        compose.onNodeWithText(text(R.string.reading)).assertIsNotEnabled()
+        compose.onNodeWithText(text(R.string.start_read)).assertIsNotEnabled()
         compose.runOnIdle { assertEquals(emptyList<BookInfoUiAction>(), actions) }
     }
 
@@ -120,4 +124,22 @@ class BookInfoScreenUiTest {
             io.legado.app.data.entities.BookInfoUploadStatus.Running)))
         compose.onNodeWithTag("book_upload_cancel").assertIsNotEnabled()
     }
+    @Test fun primaryActionAddsBookWhenNotOnShelf() {
+        show(state.copy(inBookshelf = false))
+        compose.onNodeWithTag("book-info-primary").performClick()
+        compose.runOnIdle { assertEquals(listOf(BookInfoUiAction.Shelf), actions) }
+    }
+
+    @Test fun primaryActionStartsUnreadBook() {
+        show(state.copy(inBookshelf = true))
+        compose.onNodeWithTag("book-info-primary").assertTextContains(text(R.string.start_read)).performClick()
+        compose.runOnIdle { assertEquals(listOf(BookInfoUiAction.Read), actions) }
+    }
+
+    @Test fun primaryActionContinuesBookWithProgress() {
+        show(state.copy(inBookshelf = true, book = book.copy(durChapterPos = 10)))
+        compose.onNodeWithTag("book-info-primary").assertTextContains(text(R.string.continue_read)).performClick()
+        compose.runOnIdle { assertEquals(listOf(BookInfoUiAction.Read), actions) }
+    }
+
 }
