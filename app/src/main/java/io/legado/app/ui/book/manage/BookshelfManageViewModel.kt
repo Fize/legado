@@ -58,7 +58,13 @@ internal data class PersistentCoverResult(
     val failed: Int,
 )
 
+enum class ShelfSelectionOperation { Idle, Running, Succeeded, Failed }
+
 class BookshelfManageViewModel(application: Application) : BaseViewModel(application) {
+    private val _selectionOperation = MutableStateFlow(ShelfSelectionOperation.Idle)
+    val selectionOperation: StateFlow<ShelfSelectionOperation> = _selectionOperation.asStateFlow()
+
+    fun consumeSelectionOperation() { _selectionOperation.value = ShelfSelectionOperation.Idle }
     private val _uiState = MutableStateFlow(BookshelfManageUiState())
     val uiState: StateFlow<BookshelfManageUiState> = _uiState.asStateFlow()
     private var booksJob: Job? = null
@@ -146,6 +152,26 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
         if (updates.isNotEmpty()) updateBook(*updates.toTypedArray())
     }
 
+    fun changeSelectedGroups(bookUrls: List<String>, mask: Long, remove: Boolean) {
+        if (_selectionOperation.value == ShelfSelectionOperation.Running) return
+        if (bookUrls.isEmpty() || mask == 0L) { _selectionOperation.value = ShelfSelectionOperation.Failed; return }
+        _selectionOperation.value = ShelfSelectionOperation.Running
+        executeLazy {
+            if (remove) appDb.bookDao.removeGroupsFromBooks(bookUrls, mask.inv())
+            else appDb.bookDao.addGroup(bookUrls, mask)
+        }.onSuccess { _selectionOperation.value = ShelfSelectionOperation.Succeeded }
+            .onError { _selectionOperation.value = ShelfSelectionOperation.Failed }.start()
+    }
+
+    fun removeSelectedFromShelf(books: List<Book>) {
+        if (_selectionOperation.value == ShelfSelectionOperation.Running) return
+        if (books.isEmpty()) { _selectionOperation.value = ShelfSelectionOperation.Failed; return }
+        _selectionOperation.value = ShelfSelectionOperation.Running
+        deleteBook(books, deleteOriginal = false) { success ->
+            _selectionOperation.value = if (success) ShelfSelectionOperation.Succeeded else ShelfSelectionOperation.Failed
+        }
+    }
+
     fun cancelBatchOperation() {
         batchChangeSourceCoroutine?.cancel()
         batchPersistCoverCoroutine?.cancel()
@@ -187,8 +213,8 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
         }
     }
 
-    fun deleteBook(books: List<Book>, deleteOriginal: Boolean = false) {
-        execute {
+    fun deleteBook(books: List<Book>, deleteOriginal: Boolean = false, onComplete: ((Boolean) -> Unit)? = null) {
+        executeLazy {
             books.forEach { it.saveReadRecordSnapshot() }
             appDb.bookDao.delete(*books.toTypedArray())
             books.forEach {
@@ -199,7 +225,9 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                     SourceCallBack.callBackBook(SourceCallBack.DEL_BOOK_SHELF, source, it)
                 }
             }
-        }
+        }.onSuccess { onComplete?.invoke(true) }.onError { error ->
+            if (onComplete != null) onComplete(false) else context.toastOnUi(error.localizedMessage ?: context.getString(R.string.error))
+        }.start()
     }
 
     fun saveAllUseBookSourceToFile(success: (file: File) -> Unit) {

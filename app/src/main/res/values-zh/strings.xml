@@ -1795,4 +1795,9 @@
     <string name="cache_recovery_keep_description">完成发布已生成的新文件，并移除校验一致的原备份。授权失效时请重新选择原目录。</string>
     <string name="cache_recovery_forget">清除损坏记录</string>
     <string name="cache_recovery_forget_description">仅清除此损坏的恢复记录？导出目录中的文件和备份均保留。再次导出同名文件前，请先手动核对。</string>
+    <string name="bookshelf_selection_count">已选择 %1$d 本</string>
+    <string name="bookshelf_no_custom_groups">还没有自定义分组，请先在分组管理中创建。</string>
+    <string name="bookshelf_remove_selected">移出书架</string>
+    <string name="bookshelf_remove_confirmation">确定将选中的 %1$d 本书移出书架吗？本地原文件会保留。</string>
+    <string name="bookshelf_remove_from_group">移出分组</string>
 </resources>

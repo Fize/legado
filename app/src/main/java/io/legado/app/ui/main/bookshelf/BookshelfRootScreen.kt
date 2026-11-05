@@ -3,12 +3,16 @@ package io.legado.app.ui.main.bookshelf
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -20,12 +24,18 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -40,13 +50,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.legado.app.R
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
+import io.legado.app.data.repository.isSelectableGroup
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.book.manage.BookshelfManageViewModel
+import io.legado.app.ui.book.manage.ShelfSelectionOperation
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.readText
 import io.legado.app.utils.resolveBookshelfContentColumns
 import io.legado.app.utils.sendToClip
+import io.legado.app.utils.toastOnUi
 
 @Composable
 fun BookshelfRootScreen(
@@ -59,13 +73,36 @@ fun BookshelfRootScreen(
     isCurrent: Boolean = true,
 ) {
     val uiState by bookshelfViewModel.uiState.collectAsStateWithLifecycle()
-    BackHandler(enabled = isCurrent && uiState.groupId != BookGroup.IdRoot) {
-        bookshelfViewModel.goBack()
+    var selectionMode by rememberSaveable { mutableStateOf(false) }
+    var selectedUrls by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var groupPicker by remember { mutableStateOf<Boolean?>(null) }
+    var groupMask by remember { mutableStateOf(0L) }
+    var confirmRemove by remember { mutableStateOf(false) }
+    val manageViewModel: BookshelfManageViewModel = viewModel()
+    val manageState by manageViewModel.uiState.collectAsStateWithLifecycle()
+    val selectionOperation by manageViewModel.selectionOperation.collectAsStateWithLifecycle()
+    val selectionBusy = selectionOperation == ShelfSelectionOperation.Running
+    LaunchedEffect(Unit) { manageViewModel.initialize(BookGroup.IdRoot) }
+    val selectedBooks = uiState.books.filter { it.bookUrl in selectedUrls }
+    fun exitSelection() { selectionMode = false; selectedUrls = emptySet() }
+    fun toggleBook(book: Book) {
+        if (selectionBusy) return
+        selectedUrls = if (book.bookUrl in selectedUrls) selectedUrls - book.bookUrl else selectedUrls + book.bookUrl
+    }
+    BackHandler(enabled = isCurrent && (selectionMode || uiState.groupId != BookGroup.IdRoot)) {
+        if (selectionMode) { if (!selectionBusy) exitSelection() } else bookshelfViewModel.goBack()
     }
     val addBookProgress by actionsViewModel.addBookProgress.collectAsStateWithLifecycle()
     val fontScale = LocalDensity.current.fontScale
     val shelfScrollState = rememberLazyGridState()
     val context = LocalContext.current
+    LaunchedEffect(selectionOperation) {
+        when (selectionOperation) {
+            ShelfSelectionOperation.Succeeded -> { exitSelection(); manageViewModel.consumeSelectionOperation() }
+            ShelfSelectionOperation.Failed -> { context.toastOnUi(R.string.error); manageViewModel.consumeSelectionOperation() }
+            else -> Unit
+        }
+    }
     val resources = LocalResources.current
     val spacing = (uiState.margin / 2).coerceAtLeast(2).dp
     var showAddUrlDialog by remember { mutableStateOf(false) }
@@ -128,12 +165,13 @@ fun BookshelfRootScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(uiState.groupId, uiState.groups) {
+                .pointerInput(uiState.groupId, uiState.groups, selectionMode) {
                     detectHorizontalDragGestures(
                         onDragStart = { totalHorizontalDrag = 0f },
                         onHorizontalDrag = { _, amount -> totalHorizontalDrag += amount },
                         onDragEnd = {
                             when {
+                                selectionMode -> Unit
                                 totalHorizontalDrag > 96f -> bookshelfViewModel.switchGroup(-1)
                                 totalHorizontalDrag < -96f -> bookshelfViewModel.switchGroup(1)
                             }
@@ -143,7 +181,16 @@ fun BookshelfRootScreen(
                     )
                 },
         ) {
-            BookshelfTopBar(
+            if (selectionMode) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.bookshelf_selection_count, selectedBooks.size),
+                            modifier = Modifier.weight(1f).testTag("shelf-selection-count"), style = MaterialTheme.typography.titleLarge)
+                        TextButton(onClick = ::exitSelection, enabled = !selectionBusy, modifier = Modifier.testTag("shelf-selection-cancel")) { Text(stringResource(R.string.cancel)) }
+                    }
+                }
+            } else BookshelfTopBar(
                 title = uiState.currentGroup?.let {
                     stringResource(R.string.bookshelf) + "(" + it.groupName + ")"
                 } ?: stringResource(R.string.bookshelf),
@@ -153,7 +200,7 @@ fun BookshelfRootScreen(
                 },
             )
 
-            BookshelfHeaderSection(
+            if (!selectionMode) BookshelfHeaderSection(
                 showStats = uiState.showBookshelfStats,
                 statsText = if (uiState.showBookshelfStats) {
                     resources.getString(R.string.bookshelf_stats, uiState.bookCount, uiState.readingCount)
@@ -166,14 +213,14 @@ fun BookshelfRootScreen(
             )
 
             if (uiState.items.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = stringResource(R.string.bookshelf_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (uiState.groupId == BookGroup.IdRoot) {
+                        if (uiState.groupId == BookGroup.IdRoot && !selectionMode) {
                             Button(onClick = { handleMenuAction(BookshelfMenuAction.ADD_LOCAL) }) {
                                 Text(stringResource(R.string.book_local))
                             }
@@ -190,22 +237,73 @@ fun BookshelfRootScreen(
                     contentPadding = PaddingValues(8.dp + spacing),
                     horizontalArrangement = Arrangement.spacedBy(spacing),
                     verticalArrangement = Arrangement.spacedBy(spacing),
-                    modifier = Modifier.fillMaxSize().testTag("bookshelf_items"),
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("bookshelf_items"),
                 ) {
                     items(uiState.items, key = ::bookshelfItemKey) { item ->
                         BookshelfRootItem(
                             item = item,
                             uiState = uiState,
-                            onBookClick = onBookClick,
-                            onBookLongClick = onBookLongClick,
-                            onGroupClick = bookshelfViewModel::openGroup,
-                            onGroupLongClick = onGroupLongClick,
+                            selectionMode = selectionMode,
+                            selected = item is Book && item.bookUrl in selectedUrls,
+                            onBookClick = { if (selectionMode) toggleBook(it) else onBookClick(it) },
+                            onBookLongClick = { if (!selectionMode) selectionMode = true; toggleBook(it) },
+                            onGroupClick = { if (!selectionMode) bookshelfViewModel.openGroup(it) },
+                            onGroupLongClick = { if (!selectionMode) onGroupLongClick(it) },
                         )
                     }
                 }
 
             }
+            if (selectionMode) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Button(modifier = Modifier.fillMaxWidth().testTag("shelf-selection-add"), enabled = selectedBooks.isNotEmpty() && !selectionBusy, onClick = { groupMask = 0; groupPicker = false }) {
+                            Text(stringResource(R.string.add_to_group))
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            TextButton(modifier = Modifier.weight(1f).testTag("shelf-selection-remove-group"), enabled = selectedBooks.isNotEmpty() && !selectionBusy, onClick = { groupMask = 0; groupPicker = true }) {
+                                Text(stringResource(R.string.bookshelf_remove_from_group))
+                            }
+                            TextButton(modifier = Modifier.weight(1f).testTag("shelf-selection-remove-shelf"), enabled = selectedBooks.isNotEmpty() && !selectionBusy, onClick = { confirmRemove = true }) {
+                                Text(stringResource(R.string.bookshelf_remove_selected))
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    groupPicker?.let { remove ->
+        val groups = manageState.groups.filter { it.isSelectableGroup() }
+        val validMask = groupMask and groups.fold(0L) { mask, group -> mask or group.groupId }
+        AlertDialog(onDismissRequest = { groupPicker = null },
+            title = { Text(stringResource(if (remove) R.string.bookshelf_remove_from_group else R.string.add_to_group)) },
+            text = { if (groups.isEmpty()) Text(stringResource(R.string.bookshelf_no_custom_groups)) else LazyColumn { items(groups, key = { it.groupId }) { group ->
+                val checked = (groupMask and group.groupId) != 0L
+                Row(Modifier.fillMaxWidth().testTag("shelf-group-choice:${group.groupId}").clickable {
+                    groupMask = if (checked) groupMask and group.groupId.inv() else groupMask or group.groupId
+                }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = checked, onCheckedChange = null)
+                    Text(group.groupName)
+                }
+            } } },
+            confirmButton = { TextButton(modifier = Modifier.testTag("shelf-group-confirm"), enabled = validMask != 0L && selectedBooks.isNotEmpty() && !selectionBusy, onClick = {
+                groupPicker = null
+                manageViewModel.changeSelectedGroups(selectedBooks.map { it.bookUrl }, validMask, remove)
+            }) { Text(stringResource(R.string.ok)) } },
+            dismissButton = { TextButton(onClick = { groupPicker = null }) { Text(stringResource(R.string.cancel)) } })
+    }
+    if (confirmRemove) {
+        AlertDialog(onDismissRequest = { confirmRemove = false },
+            title = { Text(stringResource(R.string.bookshelf_remove_selected)) },
+            text = { Text(stringResource(R.string.bookshelf_remove_confirmation, selectedBooks.size)) },
+            confirmButton = { TextButton(modifier = Modifier.testTag("shelf-remove-confirm"), enabled = selectedBooks.isNotEmpty() && !selectionBusy, onClick = {
+                confirmRemove = false
+                manageViewModel.removeSelectedFromShelf(selectedBooks)
+            }) { Text(stringResource(R.string.bookshelf_remove_selected)) } },
+            dismissButton = { TextButton(modifier = Modifier.testTag("shelf-remove-cancel"), onClick = { confirmRemove = false }) { Text(stringResource(R.string.cancel)) } })
     }
 
     if (showAddUrlDialog) {
@@ -331,6 +429,8 @@ private fun bookshelfItemKey(item: Any): String = when (item) {
 private fun BookshelfRootItem(
     item: Any,
     uiState: BookshelfRootUiState,
+    selectionMode: Boolean,
+    selected: Boolean,
     onBookClick: (Book) -> Unit,
     onBookLongClick: (Book) -> Unit,
     onGroupClick: (BookGroup) -> Unit,
@@ -354,7 +454,7 @@ private fun BookshelfRootItem(
                 )
             }
         }
-        is Book -> {
+        is Book -> Box {
             if (uiState.layout < 2) {
                 BookshelfBookListItem(
                     book = item,
@@ -376,6 +476,8 @@ private fun BookshelfRootItem(
                     onLongClick = { onBookLongClick(item) },
                 )
             }
+            if (selectionMode) Checkbox(checked = selected, onCheckedChange = null,
+                modifier = Modifier.align(Alignment.TopEnd))
         }
     }
 }

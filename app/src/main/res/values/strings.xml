@@ -1906,4 +1906,9 @@
     <string name="cache_recovery_keep_description">Finish publishing the generated output and remove its verified backup. Select the original directory again if access has expired.</string>
     <string name="cache_recovery_forget">Clear damaged record</string>
     <string name="cache_recovery_forget_description">Clear only this damaged recovery record? Files and backups in the export directory will remain. Review them manually before exporting to the same name again.</string>
+    <string name="bookshelf_selection_count">%1$d selected</string>
+    <string name="bookshelf_no_custom_groups">No custom groups yet. Create one in group management.</string>
+    <string name="bookshelf_remove_selected">Remove from bookshelf</string>
+    <string name="bookshelf_remove_confirmation">Remove %1$d selected books from the bookshelf? Local source files will be kept.</string>
+    <string name="bookshelf_remove_from_group">Remove from groups</string>
 </resources>

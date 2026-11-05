@@ -5,6 +5,8 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -99,7 +101,7 @@ class BookshelfManageRouteUiTest {
     }
 
     @Test
-    fun longPressingAShelfBookOpensItsDetailsInsideTheMainActivity() {
+    fun longPressSelectsBookAndCancelLeavesItUnchanged() {
         ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
             scenario.onActivity { activity ->
                 val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
@@ -108,8 +110,137 @@ class BookshelfManageRouteUiTest {
             }
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
             composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
-            composeRule.waitUntil(10_000) { var opened = false; scenario.onActivity { opened = it.currentDestination is io.legado.app.ui.navigation.BookInfoRoute }; opened }
-            scenario.onActivity { org.junit.Assert.assertEquals(book.bookUrl, (it.currentDestination as io.legado.app.ui.navigation.BookInfoRoute).bookUrl) }
+            composeRule.onNodeWithTag("shelf-selection-add").assertIsEnabled()
+            composeRule.onNodeWithText(book.name).performClick()
+            composeRule.onNodeWithTag("shelf-selection-add").assertIsNotEnabled()
+            composeRule.onNodeWithTag("shelf-selection-cancel").performClick()
+            org.junit.Assert.assertEquals(group.groupId, appDb.bookDao.getBook(book.bookUrl)?.group)
+        }
+    }
+
+    @Test
+    fun selectedBookCanBeRemovedFromGroupWithoutRemovingItFromShelf() {
+        ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
+            scenario.onActivity { activity ->
+                val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
+                    .getOrCreateOwner(androidx.navigation3.runtime.NavEntry(io.legado.app.ui.navigation.BookshelfRoute) {}.contentKey)
+                androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
+            }
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            composeRule.onNodeWithTag("shelf-selection-remove-group").performClick()
+            composeRule.onNodeWithTag("shelf-group-choice:${group.groupId}").performClick()
+            composeRule.onNodeWithTag("shelf-group-confirm").performClick()
+            composeRule.waitUntil(10_000) { appDb.bookDao.getBook(book.bookUrl)?.group == 0L }
+            org.junit.Assert.assertNotNull(appDb.bookDao.getBook(book.bookUrl))
+        }
+    }
+
+    @Test
+    fun selectedBookCanBeAddedToHiddenGroup() {
+        val hidden = BookGroup(groupId = 8192L, groupName = "Hidden fixture", show = false)
+        val previous = appDb.bookGroupDao.getByID(hidden.groupId)
+        appDb.bookGroupDao.insert(hidden)
+        try {
+            ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
+                scenario.onActivity { activity ->
+                    val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
+                        .getOrCreateOwner(androidx.navigation3.runtime.NavEntry(io.legado.app.ui.navigation.BookshelfRoute) {}.contentKey)
+                    androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
+                }
+                composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+                composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+                composeRule.onNodeWithTag("shelf-selection-add").performClick()
+                composeRule.onNodeWithTag("shelf-group-choice:${hidden.groupId}").performClick()
+                composeRule.onNodeWithTag("shelf-group-confirm").performClick()
+                composeRule.waitUntil(10_000) { appDb.bookDao.getBook(book.bookUrl)?.group == (group.groupId or hidden.groupId) }
+            }
+        } finally {
+            appDb.bookGroupDao.delete(hidden)
+            previous?.let { appDb.bookGroupDao.insert(it) }
+        }
+    }
+
+    @Test
+    fun removingSelectedBookRequiresConfirmation() {
+        ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
+            scenario.onActivity { activity ->
+                val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
+                    .getOrCreateOwner(androidx.navigation3.runtime.NavEntry(io.legado.app.ui.navigation.BookshelfRoute) {}.contentKey)
+                androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
+            }
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            composeRule.onNodeWithTag("shelf-selection-remove-shelf").performClick()
+            org.junit.Assert.assertNotNull(appDb.bookDao.getBook(book.bookUrl))
+            composeRule.onNodeWithTag("shelf-remove-cancel").performClick()
+            org.junit.Assert.assertNotNull(appDb.bookDao.getBook(book.bookUrl))
+            composeRule.onNodeWithTag("shelf-selection-remove-shelf").performClick()
+            composeRule.onNodeWithTag("shelf-remove-confirm").performClick()
+            composeRule.waitUntil(10_000) { appDb.bookDao.getBook(book.bookUrl) == null }
+        }
+    }
+
+    @Test
+    fun selectionSurvivesRotationAndGroupChangeSurvivesRecreation() {
+        val preferences = context.getSharedPreferences("${context.packageName}_preferences", android.content.Context.MODE_PRIVATE)
+        val previousTheme = preferences.getString("themeMode", "0")
+        preferences.edit().putString("themeMode", "1").commit()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { io.legado.app.help.config.ThemeConfig.applyDayNightInit(context) }
+        val target = BookGroup(groupId = 8192L, groupName = "Recreation fixture")
+        val previous = appDb.bookGroupDao.getByID(target.groupId)
+        appDb.bookGroupDao.insert(target)
+        try {
+            ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
+                scenario.onActivity { activity ->
+                    val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
+                        .getOrCreateOwner(androidx.navigation3.runtime.NavEntry(io.legado.app.ui.navigation.BookshelfRoute) {}.contentKey)
+                    androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
+                }
+                composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+                composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+                org.junit.Assert.assertFalse(io.legado.app.help.config.AppConfig.isNightTheme)
+                composeRule.onNodeWithTag("shelf-selection-add").assertIsEnabled()
+                Thread.sleep(1000)
+                val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                java.io.FileOutputStream(java.io.File(context.getExternalFilesDir(null), "bookshelf-light-test.png")).use {
+                    screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+                screenshot.recycle()
+                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                composeRule.waitUntil(10_000) { var landscape = false; scenario.onActivity { landscape = it.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE }; landscape }
+                composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+                composeRule.onNodeWithTag("shelf-selection-add").assertIsEnabled()
+                composeRule.onNodeWithTag("shelf-selection-add").performClick()
+                composeRule.onNodeWithTag("shelf-group-choice:${target.groupId}").performClick()
+                val lockAcquired = java.util.concurrent.CountDownLatch(1)
+                val releaseLock = java.util.concurrent.CountDownLatch(1)
+                val locker = Thread {
+                    appDb.runInTransaction {
+                        lockAcquired.countDown()
+                        releaseLock.await(20, java.util.concurrent.TimeUnit.SECONDS)
+                    }
+                }
+                locker.start()
+                try {
+                    assertTrue(lockAcquired.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                    composeRule.onNodeWithTag("shelf-group-confirm").performClick()
+                    composeRule.onNodeWithTag("shelf-selection-add").assertIsNotEnabled()
+                    scenario.recreate()
+                    composeRule.onNodeWithTag("shelf-selection-add").assertIsNotEnabled()
+                } finally {
+                    releaseLock.countDown()
+                    locker.join(5000)
+                }
+                composeRule.waitUntil(10_000) { appDb.bookDao.getBook(book.bookUrl)?.group == (group.groupId or target.groupId) }
+                composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+                composeRule.onNodeWithText(book.name).assertIsDisplayed()
+            }
+        } finally {
+            appDb.bookGroupDao.delete(target)
+            previous?.let { appDb.bookGroupDao.insert(it) }
+            preferences.edit().putString("themeMode", previousTheme).commit()
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { io.legado.app.help.config.ThemeConfig.applyDayNightInit(context) }
         }
     }
 

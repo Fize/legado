@@ -439,6 +439,9 @@ interface BookDao {
     @Query("update books set `group` = `group` | :groupId where bookUrl in (:bookUrls)")
     fun addGroup(bookUrls: List<String>, groupId: Long)
 
+    @Query("update books set `group` = `group` & :keepMask where bookUrl in (:bookUrls)")
+    fun removeGroupsFromBooks(bookUrls: List<String>, keepMask: Long)
+
     fun removeGroup(group: Long) = clearGroupBit(group, group.inv())
 
     @Query("update books set `group` = `group` & :keepMask where (`group` & :groupId) != 0")
