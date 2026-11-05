@@ -2,6 +2,7 @@ package io.legado.app.ui.book.manage
 
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertIsDisplayed
@@ -241,6 +242,33 @@ class BookshelfManageRouteUiTest {
             previous?.let { appDb.bookGroupDao.insert(it) }
             preferences.edit().putString("themeMode", previousTheme).commit()
             InstrumentationRegistry.getInstrumentation().runOnMainSync { io.legado.app.help.config.ThemeConfig.applyDayNightInit(context) }
+        }
+    }
+
+    @Test
+    fun groupingAndRemovalConfirmationSurviveActivityRecreation() {
+        ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
+            scenario.onActivity { activity ->
+                val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
+                    .getOrCreateOwner(androidx.navigation3.runtime.NavEntry(io.legado.app.ui.navigation.BookshelfRoute) {}.contentKey)
+                androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
+            }
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            composeRule.onNodeWithTag("shelf-selection-add").performClick()
+            composeRule.onNodeWithTag("shelf-group-choice:${group.groupId}").performClick()
+            composeRule.onNodeWithTag("shelf-group-confirm").assertIsEnabled()
+            scenario.recreate()
+            composeRule.waitUntil(10_000) { runCatching { composeRule.onNodeWithTag("shelf-group-confirm").assertIsEnabled() }.isSuccess }
+            composeRule.onNodeWithTag("shelf-group-confirm").performClick()
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithTag("shelf-selection-add").fetchSemanticsNodes().isEmpty() }
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            composeRule.onNodeWithTag("shelf-selection-remove-shelf").performClick()
+            scenario.recreate()
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithTag("shelf-remove-cancel").fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNodeWithTag("shelf-remove-cancel").performClick()
+            org.junit.Assert.assertNotNull(appDb.bookDao.getBook(book.bookUrl))
         }
     }
 

@@ -78,4 +78,20 @@ class BookshelfSearchUiTest {
         }
     }
 
+    @Test fun searchQueryAndResultsSurviveRotationAndRecreation() {
+        ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, BookshelfSearchRoute)).use { scenario ->
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag("shelf-search-query").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("shelf-search-query").performTextInput(key)
+            compose.waitUntil(10_000) { compose.onAllNodesWithText(shelf.name).fetchSemanticsNodes().isNotEmpty() }
+            scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            compose.waitUntil(10_000) { var landscape = false; scenario.onActivity { landscape = it.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE }; landscape }
+            compose.onNodeWithTag("shelf-search-query").assertTextContains(key)
+            compose.onNodeWithText(shelf.name).assertIsDisplayed()
+            scenario.recreate()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText(shelf.name).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("shelf-search-query").assertTextContains(key)
+            compose.onNodeWithText(shelf.name).assertIsDisplayed()
+        }
+    }
+
 }

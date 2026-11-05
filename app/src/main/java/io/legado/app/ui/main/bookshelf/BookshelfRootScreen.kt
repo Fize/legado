@@ -75,9 +75,9 @@ fun BookshelfRootScreen(
     val uiState by bookshelfViewModel.uiState.collectAsStateWithLifecycle()
     var selectionMode by rememberSaveable { mutableStateOf(false) }
     var selectedUrls by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    var groupPicker by remember { mutableStateOf<Boolean?>(null) }
-    var groupMask by remember { mutableStateOf(0L) }
-    var confirmRemove by remember { mutableStateOf(false) }
+    var groupPicker by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var groupMask by rememberSaveable { mutableStateOf(0L) }
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
     val manageViewModel: BookshelfManageViewModel = viewModel()
     val manageState by manageViewModel.uiState.collectAsStateWithLifecycle()
     val selectionOperation by manageViewModel.selectionOperation.collectAsStateWithLifecycle()
