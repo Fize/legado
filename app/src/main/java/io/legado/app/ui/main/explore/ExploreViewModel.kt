@@ -7,6 +7,9 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.rule.ExploreKind
 import io.legado.app.data.repository.ExploreRepository
 import io.legado.app.utils.InfoMap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,6 +31,7 @@ data class ExploreUiState(
     val expandedSourceUrl: String? = null,
     val loadingSourceUrl: String? = null,
     val sourceKinds: Map<String, List<ExploreKind>> = emptyMap(),
+    val failedSourceErrors: Map<String, String> = emptyMap(),
 )
 
 private data class ExploreContentState(
@@ -40,6 +44,7 @@ private data class ExploreExpansionState(
     val expandedSourceUrl: String?,
     val loadingSourceUrl: String?,
     val sourceKinds: Map<String, List<ExploreKind>>,
+    val failedSourceErrors: Map<String, String>,
 )
 
 @HiltViewModel
@@ -52,6 +57,7 @@ class ExploreViewModel @Inject constructor(
     private val expandedSourceUrl = MutableStateFlow<String?>(null)
     private val loadingSourceUrl = MutableStateFlow<String?>(null)
     private val sourceKinds = MutableStateFlow<Map<String, List<ExploreKind>>>(emptyMap())
+    private val failedSourceErrors = MutableStateFlow<Map<String, String>>(emptyMap())
     private var kindsJob: Job? = null
 
     private val groups = repository.observeGroups()
@@ -68,6 +74,7 @@ class ExploreViewModel @Inject constructor(
         expandedSourceUrl,
         loadingSourceUrl,
         sourceKinds,
+        failedSourceErrors,
         ::ExploreExpansionState,
     )
 
@@ -82,6 +89,7 @@ class ExploreViewModel @Inject constructor(
             expandedSourceUrl = expansion.expandedSourceUrl,
             loadingSourceUrl = expansion.loadingSourceUrl,
             sourceKinds = expansion.sourceKinds,
+            failedSourceErrors = expansion.failedSourceErrors,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExploreUiState())
 
@@ -143,13 +151,22 @@ class ExploreViewModel @Inject constructor(
         kindsJob?.cancel()
         val sourceUrl = source.bookSourceUrl
         loadingSourceUrl.value = sourceUrl
+        failedSourceErrors.update { it - sourceUrl }
         kindsJob = viewModelScope.launch {
-            runCatching { repository.loadKinds(source, refresh) }
-                .onSuccess { kinds ->
-                    if (expandedSourceUrl.value == sourceUrl || refresh) {
-                        sourceKinds.update { it + (sourceUrl to kinds) }
-                    }
+            try {
+                val kinds = repository.loadKinds(source, refresh)
+                currentCoroutineContext().ensureActive()
+                val error = kinds.firstOrNull { it.title.startsWith("ERROR:") }
+                if (error != null) {
+                    failedSourceErrors.update { it + (sourceUrl to (error.url ?: error.title)) }
+                } else if (expandedSourceUrl.value == sourceUrl || refresh) {
+                    sourceKinds.update { it + (sourceUrl to kinds) }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                failedSourceErrors.update { it + (sourceUrl to error.stackTraceToString()) }
+            }
             if (loadingSourceUrl.value == sourceUrl) loadingSourceUrl.value = null
         }
     }
@@ -163,6 +180,7 @@ class ExploreViewModel @Inject constructor(
     fun clearTransientKinds() {
         kindsJob?.cancel()
         sourceKinds.value = emptyMap()
+        failedSourceErrors.value = emptyMap()
         loadingSourceUrl.value = null
     }
 

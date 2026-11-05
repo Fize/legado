@@ -1913,4 +1913,6 @@
     <string name="bookshelf_remove_from_group">Remove from groups</string>
     <string name="bookshelf_search_hint">Search your bookshelf</string>
     <string name="find_books_online">Find books online</string>
+    <string name="my_management_tools">Management tools</string>
+    <string name="explore_error_details">Details</string>
 </resources>

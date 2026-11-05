@@ -2,6 +2,7 @@ package io.legado.app.ui.config
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -18,6 +19,7 @@ fun MoreSettingsScreen(
     onThemeModeChanged: () -> Unit,
 ) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LegadoTopAppBar(
                 title = stringResource(R.string.reader_menu_more),

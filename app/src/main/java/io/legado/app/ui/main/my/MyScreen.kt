@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,6 +76,7 @@ fun MyRootScreen(
 ) {
     var showCustomizeDialog by rememberSaveable { mutableStateOf(false) }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LegadoTopAppBar(
                 title = stringResource(R.string.my),
@@ -121,7 +123,10 @@ fun MyPreferenceScreen(
 
     Box(modifier = modifier, contentAlignment = Alignment.TopCenter) {
         LazyColumn(modifier = Modifier.widthIn(max = 720.dp).fillMaxSize().testTag("my_preferences"), contentPadding = PaddingValues(vertical = 8.dp)) {
-            visibleTop.forEach { entry -> item(key = entry.action.key) { MyEntry(entry, onAction) } }
+            if (visibleTop.isNotEmpty()) {
+                item(key = "toolsCategory") { PreferenceCategoryHeader(title = stringResource(R.string.my_management_tools)) }
+                visibleTop.forEach { entry -> item(key = entry.action.key) { MyEntry(entry, onAction) } }
+            }
             if (showThemeMode) {
                 item(key = PreferKey.themeMode) {
                     ListPreferenceItem(

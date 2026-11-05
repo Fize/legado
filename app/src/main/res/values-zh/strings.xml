@@ -1802,4 +1802,6 @@
     <string name="bookshelf_remove_from_group">移出分组</string>
     <string name="bookshelf_search_hint">搜索书架中的书</string>
     <string name="find_books_online">网络找书</string>
+    <string name="my_management_tools">管理工具</string>
+    <string name="explore_error_details">详情</string>
 </resources>

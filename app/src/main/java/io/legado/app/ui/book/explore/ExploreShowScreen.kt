@@ -565,11 +565,13 @@ private fun LoadMoreFooterItem(
     ) {
         when {
             isLoading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-            errorText != null -> Text(
-                text = errorText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
+            errorText != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.load_error_retry), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(errorText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = onClick) { Text(stringResource(R.string.retry)) }
+            }
             emptyText != null -> Text(
                 text = emptyText,
                 style = MaterialTheme.typography.bodyMedium,

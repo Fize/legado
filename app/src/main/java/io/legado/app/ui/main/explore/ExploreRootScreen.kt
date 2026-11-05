@@ -3,6 +3,8 @@ package io.legado.app.ui.main.explore
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -82,6 +85,7 @@ fun ExploreRootScreen(
     var groupMenuExpanded by remember { mutableStateOf(false) }
     var itemMenuSource by remember { mutableStateOf<BookSourcePart?>(null) }
     var deleteSource by remember { mutableStateOf<BookSourcePart?>(null) }
+    var sourceErrorDetails by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(lifecycleOwner, exploreViewModel) {
         val observer = LifecycleEventObserver { _, event ->
@@ -92,6 +96,7 @@ fun ExploreRootScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LegadoTopAppBar(
                 title = stringResource(R.string.discovery),
@@ -170,7 +175,8 @@ fun ExploreRootScreen(
                 ) {
                     items(uiState.sources, key = { it.bookSourceUrl }) { source ->
                         val expanded = source.bookSourceUrl == uiState.expandedSourceUrl
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        Surface(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer) {
+                          Column {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -204,6 +210,13 @@ fun ExploreRootScreen(
                             }
                             if (expanded) {
                                 val kinds = uiState.sourceKinds[source.bookSourceUrl].orEmpty()
+                                if (source.bookSourceUrl in uiState.failedSourceErrors) {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("explore-source-error:${source.bookSourceUrl}"), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(stringResource(R.string.load_error_retry), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                                        TextButton(onClick = { sourceErrorDetails = uiState.failedSourceErrors[source.bookSourceUrl] }, modifier = Modifier.testTag("explore-source-details:${source.bookSourceUrl}")) { Text(stringResource(R.string.explore_error_details)) }
+                                        TextButton(onClick = { exploreViewModel.refreshSource(source) }, modifier = Modifier.testTag("explore-source-retry:${source.bookSourceUrl}")) { Text(stringResource(R.string.retry)) }
+                                    }
+                                }
                                 if (kinds.isNotEmpty()) {
                                     ExploreKindsSection(
                                         source = source,
@@ -214,12 +227,18 @@ fun ExploreRootScreen(
                                     )
                                 }
                             }
-                            HorizontalDivider()
+                          }
                         }
                     }
                 }
             }
         }
+    }
+
+    sourceErrorDetails?.let { details ->
+        AlertDialog(onDismissRequest = { sourceErrorDetails = null }, title = { Text(stringResource(R.string.error)) },
+            text = { Text(details, Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { sourceErrorDetails = null }, modifier = Modifier.testTag("explore-error-details-close")) { Text(stringResource(R.string.ok)) } })
     }
 
     val menuSource = itemMenuSource
