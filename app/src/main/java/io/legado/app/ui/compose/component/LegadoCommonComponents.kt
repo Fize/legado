@@ -1,7 +1,10 @@
 package io.legado.app.ui.compose.component
 
+import androidx.activity.compose.BackHandler
+
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -65,6 +68,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
@@ -108,6 +112,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -173,92 +178,23 @@ fun LegadoTopAppBar(
     onSearchQueryChange: ((String) -> Unit)? = null,
     searchPlaceholder: String = stringResource(R.string.search),
     searchExpandedState: MutableState<Boolean>? = null,
+    modernSearch: Boolean = false,
     menuActions: List<LegadoMenuAction> = emptyList(),
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    val internalSearchExpanded = remember { mutableStateOf(false) }
+    val internalSearchExpanded = if (modernSearch) rememberSaveable { mutableStateOf(false) } else remember { mutableStateOf(false) }
     val expandedState: MutableState<Boolean> = searchExpandedState ?: internalSearchExpanded
     var searchExpanded by expandedState
     var overflowExpanded by remember { mutableStateOf(false) }
+    BackHandler(enabled = modernSearch && searchExpanded && onSearchQueryChange != null) {
+        searchExpanded = false
+        onSearchQueryChange?.invoke("")
+    }
 
     val visibleActions = remember(menuActions) { menuActions.filter { it.showAsAction } }
     val overflowActions = remember(menuActions) { menuActions.filter { !it.showAsAction } }
 
-    TopAppBar(
-        modifier = modifier,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-        ),
-        navigationIcon = {
-            if (searchExpanded && onSearchQueryChange != null) {
-                IconButton(onClick = {
-                    searchExpanded = false
-                    onSearchQueryChange("")
-                }, modifier = Modifier.testTag("legadoTopAppBarNavigation")) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
-                    )
-                }
-            } else if (onNavigationClick != null) {
-                IconButton(onClick = onNavigationClick, modifier = Modifier.testTag("legadoTopAppBarNavigation")) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
-                    )
-                }
-            }
-        },
-        title = {
-            if (searchExpanded && onSearchQueryChange != null) {
-                OutlinedTextField(
-                    value = searchQuery.orEmpty(),
-                    onValueChange = onSearchQueryChange,
-                    placeholder = { Text(searchPlaceholder, maxLines = 1) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    trailingIcon = {
-                        if (!searchQuery.isNullOrEmpty()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(Icons.Default.Close, contentDescription = null)
-                            }
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {}),
-                )
-            } else {
-                Column {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (!subtitle.isNullOrBlank()) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        },
-        actions = {
-            if (onSearchQueryChange != null && !searchExpanded) {
-                IconButton(onClick = { searchExpanded = true }, modifier = Modifier.testTag("legadoTopAppBarSearch")) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = stringResource(R.string.search),
-                    )
-                }
-            }
+    val renderActions: @Composable RowScope.() -> Unit = {
             actions()
             visibleActions.forEach { item ->
                 IconButton(onClick = item.onClick) {
@@ -333,8 +269,99 @@ fun LegadoTopAppBar(
                     }
                 }
             }
+    }
+    val renderTopBar: @Composable () -> Unit = {
+    TopAppBar(
+        modifier = modifier,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        navigationIcon = {
+            if (searchExpanded && onSearchQueryChange != null) {
+                IconButton(onClick = {
+                    searchExpanded = false
+                    onSearchQueryChange("")
+                }, modifier = Modifier.testTag("legadoTopAppBarNavigation")) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                    )
+                }
+            } else if (onNavigationClick != null) {
+                IconButton(onClick = onNavigationClick, modifier = Modifier.testTag("legadoTopAppBarNavigation")) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                    )
+                }
+            }
+        },
+        title = {
+            if (searchExpanded && onSearchQueryChange != null) {
+                if (modernSearch) UnifiedSearchField(
+                    query = searchQuery.orEmpty(),
+                    onQueryChange = onSearchQueryChange,
+                    placeholder = searchPlaceholder,
+                    modifier = Modifier.fillMaxWidth().testTag("unified_search_field"),
+                    showLeadingIcon = false,
+                ) else OutlinedTextField(
+                    value = searchQuery.orEmpty(),
+                    onValueChange = onSearchQueryChange,
+                    placeholder = { Text(searchPlaceholder, maxLines = 1) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    trailingIcon = {
+                        if (!searchQuery.isNullOrEmpty()) {
+                            IconButton(onClick = { onSearchQueryChange("") }) {
+                                Icon(Icons.Default.Close, contentDescription = null)
+                            }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {}),
+                )
+            } else {
+                Column {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        },
+        actions = {
+            if (onSearchQueryChange != null && !searchExpanded) {
+                IconButton(onClick = { searchExpanded = true }, modifier = Modifier.testTag("legadoTopAppBarSearch")) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = stringResource(R.string.search),
+                    )
+                }
+            }
+            if (!(modernSearch && searchExpanded)) renderActions()
         }
     )
+    }
+    if (modernSearch && searchExpanded) {
+        Column {
+            renderTopBar()
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer), horizontalArrangement = Arrangement.End) { renderActions() }
+        }
+    } else renderTopBar()
 }
 
 @Composable
@@ -1143,13 +1170,43 @@ fun LegadoNumberPickerDialog(
 }
 
 @Composable
+fun UnifiedSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    showLeadingIcon: Boolean = true,
+) {
+    val focusManager = LocalFocusManager.current
+    CompactSearchTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text(placeholder, maxLines = 1) },
+        leadingIcon = if (showLeadingIcon) ({ Icon(Icons.Default.Search, contentDescription = null) }) else null,
+        trailingIcon = if (query.isNotEmpty()) ({
+            IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear)) }
+        }) else null,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+        modifier = modifier.compactSearchHeight().unifiedSearchOutline(),
+    )
+}
+
+@Composable
 fun LegadoSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     placeholder: String = stringResource(R.string.search),
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    modernSearch: Boolean = false,
 ) {
+    if (modernSearch) {
+        UnifiedSearchField(query, onQueryChange, placeholder,
+            modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (compact) 0.dp else 4.dp).testTag("legadoSearchField"),
+            showLeadingIcon = !compact)
+        return
+    }
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
@@ -1177,7 +1234,7 @@ fun LegadoSearchBar(
         keyboardActions = KeyboardActions(onSearch = {}),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = if (compact) 0.dp else 6.dp)
+            .padding(horizontal = 12.dp, vertical = if (compact) 0.dp else 4.dp)
             .testTag("legadoSearchField"),
     )
 }

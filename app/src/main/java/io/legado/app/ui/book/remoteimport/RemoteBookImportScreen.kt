@@ -61,6 +61,7 @@ import io.legado.app.constant.AppConst
 import io.legado.app.data.entities.Book
 import io.legado.app.ui.compose.component.LegadoMenuAction
 import io.legado.app.ui.compose.component.LegadoSelectActionBar
+import io.legado.app.ui.compose.component.SearchEmptyState
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ConvertUtils
@@ -128,6 +129,7 @@ fun RemoteBookImportScreen(
             LegadoTopAppBar(
                 title = stringResource(R.string.remote_book),
                 onBack = { if (!state.working) onBack() },
+                modernSearch = true,
                 searchQuery = state.query,
                 onSearchQueryChange = viewModel::query,
                 searchPlaceholder = stringResource(R.string.screen) + " • " + stringResource(R.string.remote_book),
@@ -246,7 +248,7 @@ fun RemoteBookImportScreen(
 
             Box(modifier = Modifier.fillMaxSize()) {
                 if (state.entries.isEmpty() && !state.loading) {
-                    Text(
+                    if (state.query.isNotBlank()) SearchEmptyState(onClear = { viewModel.query("") }, modifier = Modifier.align(Alignment.Center)) else Text(
                         text = stringResource(R.string.empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

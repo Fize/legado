@@ -62,6 +62,7 @@ import io.legado.app.R
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.rule.ExploreKind
 import io.legado.app.data.entities.rule.ExploreKind.Type
+import io.legado.app.ui.compose.component.SearchEmptyState
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import kotlinx.coroutines.Dispatchers.IO
@@ -100,6 +101,7 @@ fun ExploreRootScreen(
         topBar = {
             LegadoTopAppBar(
                 title = stringResource(R.string.discovery),
+                modernSearch = true,
                 searchQuery = uiState.searchQuery,
                 onSearchQueryChange = exploreViewModel::setSearchQuery,
                 searchPlaceholder = stringResource(R.string.screen_find),
@@ -163,6 +165,10 @@ fun ExploreRootScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(16.dp),
                 )
+            }
+        } else if (uiState.sources.isEmpty() && uiState.searchQuery.isNotBlank()) {
+            Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+                SearchEmptyState(onClear = { exploreViewModel.setSearchQuery("") })
             }
         } else {
             Box(

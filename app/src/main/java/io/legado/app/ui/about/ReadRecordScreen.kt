@@ -61,6 +61,7 @@ import io.legado.app.R
 import io.legado.app.data.entities.ReadRecordShow
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.ui.compose.component.LegadoImageState
+import io.legado.app.ui.compose.component.SearchEmptyState
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.compose.component.rememberLegadoImageState
 import java.text.SimpleDateFormat
@@ -117,6 +118,7 @@ fun ReadRecordScreen(
             LegadoTopAppBar(
                 title = stringResource(R.string.read_record),
                 onBack = onBack,
+                modernSearch = true,
                 searchQuery = state.query,
                 onSearchQueryChange = viewModel::setQuery,
                 actions = {
@@ -178,7 +180,8 @@ fun ReadRecordScreen(
             when {
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                 state.records.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text(stringResource(R.string.read_record_empty))
+                    if (state.query.isNotBlank()) SearchEmptyState(onClear = { viewModel.setQuery("") })
+                    else Text(stringResource(R.string.read_record_empty))
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),

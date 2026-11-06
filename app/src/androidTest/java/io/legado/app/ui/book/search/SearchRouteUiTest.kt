@@ -120,10 +120,18 @@ class SearchRouteUiTest {
     private fun ready() = compose.waitUntil(20_000) {
         runCatching { compose.onNodeWithTag("search_query").assertIsEnabled() }.isSuccess
     }
+    private fun uiText(id: Int): String {
+        var result = context.getString(id)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                .filterIsInstance<AppActivity>().firstOrNull()?.let { result = it.getString(id) }
+        }
+        return result
+    }
     private fun menu(label: Int) {
         compose.onNodeWithTag("search_menu").assertIsEnabled().performClick()
-        compose.waitUntil(20_000) { compose.onAllNodesWithText(context.getString(label)).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(context.getString(label)).performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(uiText(label)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(uiText(label)).performClick()
     }
     private fun completed(): Boolean = appDb.openHelper.readableDatabase.query("SELECT hasMore,status FROM search_sessions WHERE query = ? ORDER BY updatedAt DESC LIMIT 1", arrayOf(query)).use {
         it.moveToFirst() && it.getInt(0) == 0 && it.getString(1) == "Ready"
@@ -187,7 +195,7 @@ class SearchRouteUiTest {
             ready(); await(::completed)
             menu(R.string.search_result_filter)
             compose.onNodeWithTag("search_filter").performTextReplacement(query)
-            compose.onNodeWithText(context.getString(R.string.ok)).performClick()
+            compose.onNodeWithText(uiText(R.string.ok)).performClick()
             compose.waitUntil(20_000) { compose.onAllNodesWithTag("search_empty").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("search_empty").assertIsDisplayed()
             scenario.recreate(); ready()
@@ -199,13 +207,13 @@ class SearchRouteUiTest {
     @Test fun sourceScopeDraftAndSearchTextSurviveActivityRecreation() {
         launch("").use { scenario ->
             ready(); menu(R.string.search_scope)
-            compose.onNodeWithText(context.getString(R.string.book_source), useUnmergedTree = true).performClick()
+            compose.onNodeWithText(uiText(R.string.book_source), useUnmergedTree = true).performClick()
             compose.onNodeWithTag("search_scope_query").performTextReplacement(id)
             compose.onNodeWithText(sources.single().bookSourceName).performClick()
             scenario.recreate(); ready()
             compose.onNodeWithTag("search_scope_query").assertTextContains(id)
             compose.onNodeWithText(sources.single().bookSourceName).assertExists()
-            compose.onNodeWithText(context.getString(R.string.ok)).performClick()
+            compose.onNodeWithText(uiText(R.string.ok)).performClick()
             assertEquals(0, calls.get())
         }
     }

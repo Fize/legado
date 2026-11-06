@@ -75,6 +75,7 @@ import io.legado.app.data.repository.LocalImportEntry
 import io.legado.app.ui.compose.component.LegadoMenuAction
 import io.legado.app.ui.compose.component.LegadoDropdownMenu
 import io.legado.app.ui.compose.component.LegadoSelectActionBar
+import io.legado.app.ui.compose.component.SearchEmptyState
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ConvertUtils
@@ -175,6 +176,7 @@ fun LocalBookImportScreen(
             LegadoTopAppBar(
                 title = stringResource(R.string.local_book),
                 onBack = { if (!value.working) currentOnBack() },
+                modernSearch = true,
                 searchQuery = value.query,
                 onSearchQueryChange = viewModel::query,
                 searchPlaceholder = stringResource(R.string.screen) + " • " + stringResource(R.string.local_book),
@@ -420,7 +422,8 @@ fun LocalBookImportScreen(
                     items(state.entries, key = { it.uri }) { entryRow(it, true) }
                     if (state.entries.isEmpty() && !state.loading) {
                         item(key = "import-empty") {
-                            Text(stringResource(R.string.empty_msg_import_book),
+                            if (state.query.isNotBlank()) SearchEmptyState(onClear = { viewModel.query("") }, modifier = Modifier.fillMaxWidth().padding(16.dp))
+                            else Text(stringResource(R.string.empty_msg_import_book),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
@@ -434,7 +437,8 @@ fun LocalBookImportScreen(
                     directoryHeader()
                     Box(Modifier.fillMaxSize()) {
                         if (state.entries.isEmpty() && !state.loading) {
-                            Text(stringResource(R.string.empty_msg_import_book),
+                            if (state.query.isNotBlank()) SearchEmptyState(onClear = { viewModel.query("") }, modifier = Modifier.align(Alignment.Center).padding(16.dp))
+                            else Text(stringResource(R.string.empty_msg_import_book),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,

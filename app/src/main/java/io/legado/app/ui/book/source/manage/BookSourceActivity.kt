@@ -101,6 +101,7 @@ import io.legado.app.ui.navigation.openBookSearch
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.compose.component.LegadoMenuAction
 import io.legado.app.ui.compose.component.LegadoTextInputDialog
+import io.legado.app.ui.compose.component.SearchEmptyState
 import io.legado.app.ui.compose.component.LegadoSearchBar
 import io.legado.app.ui.compose.component.LegadoSelectActionBar
 import io.legado.app.ui.compose.component.LegadoTopAppBar
@@ -210,7 +211,7 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
         }
     }
     private fun openBookSourceImport(source: String, grantUri: Uri? = null) {
-        val intent = AppActivity.startIntent(this, BookSourceImportRoute(source))
+        val intent = AppActivity.startIntent(this, BookSourceImportRoute(source, modernSearch = intent.getBooleanExtra("modernSearch", false)))
         grantUri?.let { uri ->
             intent.data = uri
             intent.clipData = ClipData.newRawUri("book source", uri)
@@ -347,6 +348,7 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                     onQueryChange = { searchQueryState = it; upBookSource(it) },
                     placeholder = stringResource(R.string.search_book_source),
                     compact = compactLayout,
+                    modernSearch = intent.getBooleanExtra("modernSearch", false),
                 )
             },
             topBar = {
@@ -694,7 +696,7 @@ class BookSourceActivity : VMBaseComposeActivity<BookSourceViewModel>() {
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
+                    if (intent.getBooleanExtra("modernSearch", false) && searchQueryState.isNotBlank()) SearchEmptyState(onClear = { searchQueryState = ""; upBookSource("") }) else Text(
                         text = stringResource(R.string.empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

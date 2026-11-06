@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.legado.app.R
 import io.legado.app.constant.AppConst
+import io.legado.app.ui.compose.component.SearchEmptyState
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.utils.openFileUri
 import java.io.File
@@ -73,6 +74,7 @@ fun FileManagerScreen(
             LegadoTopAppBar(
                 title = stringResource(R.string.file_manage),
                 onBack = navigateBack,
+                modernSearch = true,
                 searchQuery = state.query,
                 onSearchQueryChange = viewModel::setQuery,
             )
@@ -104,7 +106,8 @@ fun FileManagerScreen(
             HorizontalDivider()
             if (state.visibleFiles.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.empty))
+                    if (state.query.isNotBlank()) SearchEmptyState(onClear = { viewModel.setQuery("") })
+                    else Text(stringResource(R.string.empty))
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {

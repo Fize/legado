@@ -22,6 +22,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookshelfBook
+import io.legado.app.ui.compose.component.CompactSearchTextField
+import io.legado.app.ui.compose.component.SearchEmptyState
+import io.legado.app.ui.compose.component.unifiedSearchTextStyle
+import io.legado.app.ui.compose.component.compactSearchHeight
+import io.legado.app.ui.compose.component.unifiedSearchColors
+import io.legado.app.ui.compose.component.unifiedSearchOutline
+import io.legado.app.ui.compose.component.unifiedSearchShape
 import io.legado.app.ui.compose.component.LegadoBookCover
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -41,12 +48,11 @@ fun BookshelfSearchScreen(onBack: () -> Unit, onOpenBook: (String) -> Unit) {
     }
     Scaffold(topBar = {
         TopAppBar(navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } }, title = {
-            TextField(value = query, onValueChange = { query = it }, singleLine = true,
+            CompactSearchTextField(value = query, onValueChange = { query = it },
                 placeholder = { Text(stringResource(R.string.bookshelf_search_hint), maxLines = 1) },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }, modifier = Modifier.testTag("shelf-search-clear")) { Icon(Icons.Default.Close, stringResource(R.string.clear)) } },
-                colors = TextFieldDefaults.colors(focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent),
-                shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth().testTag("shelf-search-query"))
+                modifier = Modifier.fillMaxWidth().compactSearchHeight().unifiedSearchOutline().testTag("shelf-search-query"))
         })
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -57,7 +63,7 @@ fun BookshelfSearchScreen(onBack: () -> Unit, onOpenBook: (String) -> Unit) {
                     TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.retry)) }
                 }
                 query.isBlank() -> Text(stringResource(R.string.bookshelf_search_hint), Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                matches.isEmpty() -> Text(stringResource(R.string.search_session_no_results), Modifier.align(Alignment.Center).testTag("shelf-search-empty"))
+                matches.isEmpty() -> SearchEmptyState(onClear = { query = "" }, modifier = Modifier.align(Alignment.Center).testTag("shelf-search-empty"))
                 else -> LazyColumn(state = scroll, modifier = Modifier.fillMaxSize().testTag("shelf-search-results")) {
                     items(matches, key = { it.bookUrl }) { book ->
                         Row(Modifier.fillMaxWidth().clickable { onOpenBook(book.bookUrl) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

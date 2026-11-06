@@ -161,7 +161,7 @@ fun LegadoApp(
                 onMyAction = { action ->
                     when (action) {
                         MyAction.More -> navigator.navigate(SettingsRoute())
-                        MyAction.BookSourceManage -> context.startActivity<BookSourceActivity>()
+                        MyAction.BookSourceManage -> context.startActivity<BookSourceActivity> { putExtra("modernSearch", true) }
                         MyAction.ReplaceRuleManage -> navigator.navigate(ReplaceRuleRoute)
                         MyAction.RuleSubscription -> navigator.navigate(RuleSubscriptionRoute)
                         MyAction.DictionaryRuleManage -> navigator.navigate(DictionaryRuleRoute)
@@ -293,7 +293,7 @@ private fun AppRouteContent(
         SearchScreen(route, onNavigateBack,
             onOpenBook = { request -> onNavigate(BookInfoRoute(request.bookUrl, request.id, request.previewKey)) },
             isCurrent = isCurrentRoute, knownDetails = detailChildren,
-            onManageSources = { context.startActivity<BookSourceActivity>() },
+            onManageSources = { context.startActivity<BookSourceActivity> { putExtra("modernSearch", true) } },
             onLogs = { onNavigate(AppLogRoute) })
         return
     }
@@ -681,7 +681,7 @@ private fun AppRouteContent(
     if (route == ExploreRoute) {
         ExploreRootScreen(
             onSearchBooks = { onNavigate(SearchRoute()) },
-            onManageSources = { context.startActivity<BookSourceActivity>() },
+            onManageSources = { context.startActivity<BookSourceActivity> { putExtra("modernSearch", true) } },
             onEditSource = { sourceUrl ->
                 context.startActivity<BookSourceEditActivity> { putExtra("sourceUrl", sourceUrl) }
             },

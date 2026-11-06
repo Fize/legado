@@ -56,6 +56,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.ui.compose.component.LegadoMenuAction
 import io.legado.app.ui.compose.component.LegadoSelectActionBar
+import io.legado.app.ui.compose.component.SearchEmptyState
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.filterBooksForTocUpdate
@@ -126,6 +127,7 @@ fun BookshelfManageDestination(
                 title = stringResource(R.string.bookshelf_management),
                 subtitle = state.groupName,
                 onBack = onBack,
+                modernSearch = true,
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
                 searchPlaceholder = stringResource(R.string.screen) + " • " + state.groupName,
@@ -226,7 +228,11 @@ fun BookshelfManageDestination(
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+        if (filteredBooks.isEmpty() && searchQuery.isNotBlank()) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                SearchEmptyState(onClear = { searchQuery = "" })
+            }
+        } else LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             items(filteredBooks, key = { it.bookUrl }) { book ->
                 val isSelected = book.bookUrl in selectedUrls
                 val groupsText = state.groups.filter { (it.groupId > 0 || it.groupId == Long.MIN_VALUE) && (it.groupId and book.group) != 0L }

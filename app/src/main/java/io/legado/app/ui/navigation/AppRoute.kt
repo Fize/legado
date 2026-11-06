@@ -185,6 +185,7 @@ data class BookSourceImportRoute(
     val source: String,
     val reimportBookUrl: String? = null,
     val reimportSourceUrl: String? = null,
+    val modernSearch: Boolean? = null,
 ) : AppRoute
 
 @Serializable

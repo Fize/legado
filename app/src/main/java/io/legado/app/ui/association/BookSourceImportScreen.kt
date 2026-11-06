@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.activity.compose.LocalActivity
@@ -57,6 +58,12 @@ import io.legado.app.data.repository.parseBookSourceJson
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.read.EffectiveReplacesDialog
 import io.legado.app.ui.book.read.ManualReplaceRulesDialog
+import io.legado.app.ui.compose.component.unifiedSearchTextStyle
+import io.legado.app.ui.compose.component.CompactSearchTextField
+import io.legado.app.ui.compose.component.compactSearchHeight
+import io.legado.app.ui.compose.component.unifiedSearchColors
+import io.legado.app.ui.compose.component.unifiedSearchOutline
+import io.legado.app.ui.compose.component.unifiedSearchShape
 import io.legado.app.ui.compose.component.LegadoSearchActionLayout
 import io.legado.app.ui.compose.component.LegadoTopAppBar
 import io.legado.app.ui.navigation.AppRoute
@@ -434,6 +441,26 @@ fun BookSourceImportScreen(
                 }
             },
             searchBar = {
+                if (route.modernSearch ?: (route.reimportBookUrl == null)) {
+                CompactSearchTextField(
+                    value = searchInput,
+                    onValueChange = { value ->
+                        searchInput = value
+                        viewModel.updateSearch(value.text, presetLabels.entries.firstOrNull { it.value == value.text }?.key)
+                    },
+                    placeholder = { Text(stringResource(R.string.search)) },
+                    leadingIcon = if (compactLayout) null else ({ Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search)) }),
+                    trailingIcon = {
+                        if (state.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear))
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().compactSearchHeight().unifiedSearchOutline().testTag("sourceImportSearch")
+                        .padding(horizontal = if (compactLayout) 4.dp else 12.dp, vertical = if (compactLayout) 0.dp else 4.dp),
+                )
+                } else {
                 OutlinedTextField(
                     value = searchInput,
                     onValueChange = { value ->
@@ -451,8 +478,9 @@ fun BookSourceImportScreen(
                     },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("sourceImportSearch")
-                        .padding(horizontal = if (compactLayout) 4.dp else 12.dp, vertical = if (compactLayout) 0.dp else 6.dp),
+                        .padding(horizontal = if (compactLayout) 4.dp else 12.dp, vertical = if (compactLayout) 0.dp else 4.dp),
                 )
+                }
             },
             content = {
                 Box(

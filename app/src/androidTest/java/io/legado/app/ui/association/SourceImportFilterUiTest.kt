@@ -204,9 +204,9 @@ class SourceImportFilterUiTest {
         assertRows(2)
         search("group:rss")
         assertRows(3)
-        search(context.getString(R.string.no_group))
+        search(composeRule.activity.getString(R.string.no_group))
         assertRows(0)
-        search(context.getString(R.string.need_login))
+        search(composeRule.activity.getString(R.string.need_login))
         assertRows(0, 1)
     }
 
@@ -322,7 +322,7 @@ class SourceImportFilterUiTest {
 
     private fun toggleRememberGroup() {
         composeRule.onNodeWithTag("sourceImportOverflow").performClick()
-        composeRule.onNodeWithText(context.getString(R.string.import_remember_group)).performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.import_remember_group)).performClick()
     }
 
     private fun dialogOrNull(): BookSourceImportRoute? {

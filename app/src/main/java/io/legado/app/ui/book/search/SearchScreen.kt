@@ -47,6 +47,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.legado.app.R
+import io.legado.app.ui.compose.component.unifiedSearchPadding
+import io.legado.app.ui.compose.component.unifiedSearchTextStyle
+import io.legado.app.ui.compose.component.compactSearchHeight
+import io.legado.app.ui.compose.component.unifiedSearchColors
+import io.legado.app.ui.compose.component.unifiedSearchOutline
+import io.legado.app.ui.compose.component.unifiedSearchShape
 import io.legado.app.data.repository.BookInfoOpenRequest
 import io.legado.app.data.repository.SearchScopeSpec
 import io.legado.app.data.repository.toSearchBook
@@ -124,8 +130,9 @@ fun SearchScreen(
             TopAppBar(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
                 title = {
-                    OutlinedTextField(
+                    TextField(
                         state = viewModel.queryEditor,
+                        shape = unifiedSearchShape, colors = unifiedSearchColors(), textStyle = unifiedSearchTextStyle, contentPadding = unifiedSearchPadding,
                         enabled = state.ready, lineLimits = TextFieldLineLimits.SingleLine,
                         placeholder = { Text(stringResource(R.string.search_book_key), maxLines = 1) },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -136,7 +143,7 @@ fun SearchScreen(
                             }
                             IconButton(onClick = submit, enabled = state.ready) { Icon(Icons.Default.Search, stringResource(R.string.search)) }
                         } },
-                        modifier = Modifier.fillMaxWidth().testTag("search_query").onFocusChanged { viewModel.focusChanged(it.isFocused) },
+                        modifier = Modifier.fillMaxWidth().compactSearchHeight().unifiedSearchOutline().testTag("search_query").onFocusChanged { viewModel.focusChanged(it.isFocused) },
                     )
                 },
                 actions = { Box {
@@ -319,8 +326,11 @@ private fun SearchScopeDialogContent(state: SearchScreenState, draft: SearchScre
                     }
                 }
             }
-            if (draft.scopeSourceMode) OutlinedTextField(state = viewModel.scopeQueryEditor,
-                lineLimits = TextFieldLineLimits.SingleLine, label = { Text(stringResource(R.string.search_book_source)) }, modifier = Modifier.testTag("search_scope_query"))
+            if (draft.scopeSourceMode) TextField(state = viewModel.scopeQueryEditor,
+                lineLimits = TextFieldLineLimits.SingleLine, placeholder = { Text(stringResource(R.string.search_book_source)) },
+                trailingIcon = { if (viewModel.scopeQueryEditor.text.isNotEmpty()) IconButton(onClick = { viewModel.scopeQuery("") }) { Icon(Icons.Default.Close, stringResource(R.string.clear)) } },
+                shape = unifiedSearchShape, colors = unifiedSearchColors(), textStyle = unifiedSearchTextStyle, contentPadding = unifiedSearchPadding,
+                modifier = Modifier.fillMaxWidth().compactSearchHeight().unifiedSearchOutline().testTag("search_scope_query"))
             LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                 if (draft.scopeSourceMode) items(state.sources, key = { it.url }) { source ->
                     val selected = SearchScopeSpec(draft.scopeSourceDraft.orEmpty()).sourceUrl == source.url
