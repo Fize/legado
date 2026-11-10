@@ -61,7 +61,7 @@ class BookshelfWindowBoundsUiTest {
             compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
         }
     }
-    @Test fun actualShelfFitsItsContentBoundsAndReflowsWhenFontSizeChanges() {
+    @Test fun actualShelfFitsBoundsAndRetainsChosenPhoneColumns() {
         scenario = ActivityScenario.launch(AppActivity.startIntent(context, AboutRoute))
         scenario!!.onActivity { activity ->
             val shelf = ViewModelProvider(activity)[BookshelfRootViewModel::class.java]
@@ -89,9 +89,9 @@ class BookshelfWindowBoundsUiTest {
         }
         expect(5); capture("shelf-600")
         compose.runOnIdle { width = 520f }
-        expect(4); capture("shelf-520")
+        expect(6); capture("shelf-520")
         compose.runOnIdle { width = 360f; font = 2f }
-        expect(2); capture("shelf-360-large-font")
+        expect(6); capture("shelf-360-large-font")
         assertEquals(6, AppConfig.bookshelfLayout)
     }
 

@@ -19,6 +19,8 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class BookshelfSearchUiTest {
+    @get:org.junit.Rule(order = 0) val acceptanceTheme = io.legado.app.ui.test.AcceptanceThemeRule()
+
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val key = UUID.randomUUID().toString().take(8)
     private val shelf = Book(bookUrl = "shelf-search://$key", name = "Shelf $key", author = "Author", origin = BookType.localTag, type = BookType.local or BookType.text)

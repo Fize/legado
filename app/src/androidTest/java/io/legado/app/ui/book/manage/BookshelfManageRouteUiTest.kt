@@ -32,6 +32,8 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class BookshelfManageRouteUiTest {
+    @get:org.junit.Rule(order = 0) val acceptanceTheme = io.legado.app.ui.test.AcceptanceThemeRule()
+
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val group = BookGroup(groupId = 4096L, groupName = "Managed shelf fixture")
     private val book = Book(
@@ -67,11 +69,13 @@ class BookshelfManageRouteUiTest {
     fun typedRouteShowsTheRequestedGroupAndItsBooks() {
         ActivityScenario.launch<AppActivity>(
             AppActivity.startIntent(context, BookshelfManageRoute(group.groupId)),
-        ).use {
+        ).use { scenario ->
+            var title = ""
+            scenario.onActivity { title = it.getString(R.string.bookshelf_management) }
             composeRule.waitUntil(10_000) {
                 composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText(context.getString(R.string.bookshelf_management)).assertIsDisplayed()
+            composeRule.onNodeWithText(title).assertIsDisplayed()
             assertTrue(composeRule.onAllNodesWithText(group.groupName).fetchSemanticsNodes().isNotEmpty())
             composeRule.onNodeWithText(book.name).assertIsDisplayed()
             composeRule.onNodeWithText(book.author).assertIsDisplayed()

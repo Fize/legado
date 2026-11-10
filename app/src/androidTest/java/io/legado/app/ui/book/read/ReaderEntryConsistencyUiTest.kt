@@ -55,6 +55,8 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(AndroidJUnit4::class)
 class ReaderEntryConsistencyUiTest {
+    @get:org.junit.Rule(order = 0) val acceptanceTheme = io.legado.app.ui.test.AcceptanceThemeRule()
+
     @get:Rule val compose = createEmptyComposeRule()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -240,7 +242,8 @@ class ReaderEntryConsistencyUiTest {
         resetApplication()
         val route = BookInfoRoute(book.bookUrl)
         app = ActivityScenario.launch(AppActivity.startIntent(context, route))
-        val reading = context.getString(R.string.continue_read)
+        var reading = ""
+        app!!.onActivity { reading = it.getString(R.string.continue_read) }
         compose.waitUntil(20_000) {
             compose.onAllNodesWithText(reading).fetchSemanticsNodes().isNotEmpty()
         }
@@ -302,7 +305,8 @@ class ReaderEntryConsistencyUiTest {
             app!!.onActivity { ready = it.currentDestination is BookInfoRoute }
             ready
         }
-        val reading = context.getString(R.string.continue_read)
+        var reading = ""
+        app!!.onActivity { reading = it.getString(R.string.continue_read) }
         compose.waitUntil(20_000) {
             compose.onAllNodesWithText(reading).fetchSemanticsNodes().isNotEmpty()
         }

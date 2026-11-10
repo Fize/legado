@@ -48,6 +48,7 @@ class PlatformReaderEntryUiTest {
     private var scenario: ActivityScenario<AppActivity>? = null
     private var opened: ReadBookActivity? = null
     @Before fun setup() {
+        if (InstrumentationRegistry.getArguments().containsKey("comparisonLabel")) { book.name = "Reader comparison"; book.author = "Fixture author" }
         appDb.bookSourceDao.insert(source); appDb.bookDao.insert(book)
         repeat(2) { index ->
             val chapter = BookChapter(bookUrl = book.bookUrl, url = book.bookUrl + "/$index", title = "Chapter $index", index = index)
@@ -71,6 +72,37 @@ class PlatformReaderEntryUiTest {
                 .filterIsInstance<ReadBookActivity>().firstOrNull()
         }
         return result
+    }
+
+    @Test fun readerVisualUpgradeAcceptance() {
+        scenario = ActivityScenario.launch(AppActivity.startIntent(context, route))
+        var label = ""
+        scenario!!.onActivity { label = it.getString(R.string.continue_read) }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(label).performClick()
+        compose.waitUntil(20_000) {
+            opened = reader()
+            opened != null && ReadBook.book?.bookUrl == book.bookUrl && ReadBook.curTextChapter?.isCompleted == true
+        }
+        val prefix = InstrumentationRegistry.getArguments().getString("comparisonLabel", "current")
+        fun capture(stage: String) {
+            Thread.sleep(1500)
+            instrumentation.uiAutomation.takeScreenshot().let { image ->
+                java.io.File(context.getExternalFilesDir(null), "reader-$prefix-$stage.png").outputStream().use {
+                    image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+                image.recycle()
+            }
+        }
+        val initial = ReadBook.durChapterPos
+        capture("body")
+        androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(R.id.read_view))
+            .perform(androidx.test.espresso.action.ViewActions.swipeLeft())
+        compose.waitUntil(10_000) { ReadBook.durChapterPos != initial }
+        capture("turned")
+        androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(R.id.read_view))
+            .perform(androidx.test.espresso.action.ViewActions.click())
+        capture("toolbar")
     }
 
     @Test fun actualDetailReadingUsesTheMatureHostAndReturnsThroughItsDurableReceipt() {
