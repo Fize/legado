@@ -8,6 +8,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.ui.AppActivity
+import io.legado.app.ui.compat.OrientationWindowSession
+import org.json.JSONObject
 import io.legado.app.ui.navigation.SearchRoute
 import org.junit.Rule
 import org.junit.Test
@@ -49,4 +51,23 @@ class SearchThemeUiTest {
             instrumentation.runOnMainSync { ThemeConfig.applyDayNightInit(context) }
         }
     }
+    @Test fun searchDraftSurvivesExpandedDisplayChanges() {
+        ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, SearchRoute())).use { scenario ->
+            var host: AppActivity? = null
+            scenario.onActivity { host = it }
+            compose.waitUntil(20_000) { runCatching { compose.onNodeWithTag("search_query").assertIsEnabled() }.isSuccess }
+            compose.onNodeWithTag("search_query").performTextInput("window draft")
+            OrientationWindowSession("search-stage5").use { window ->
+                for ((width, height) in listOf(1200 to 800, 800 to 1200, 900 to 700)) {
+                    window.resize(width, height, { scenario.onActivity { host = it }; checkNotNull(host) }) {
+                        compose.onNodeWithTag("search_query").assertIsDisplayed().assertTextContains("window draft")
+                        compose.onNodeWithTag("search_menu").assertIsDisplayed()
+                        JSONObject().put("draft", "window draft")
+                    }
+                }
+            }
+            compose.onNodeWithTag("search_query").assertTextContains("window draft")
+        }
+    }
+
 }
