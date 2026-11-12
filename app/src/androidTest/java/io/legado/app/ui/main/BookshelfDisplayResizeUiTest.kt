@@ -50,7 +50,9 @@ class BookshelfDisplayResizeUiTest {
                 ViewModelProvider(owner)[BookshelfRootViewModel::class.java].openGroup(group)
             }
             compose.waitUntil(20_000) { compose.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText(book.name).performTouchInput { longClick() }
+            compose.onNodeWithTag("shelf-menu").performClick()
+            compose.onNodeWithTag("shelf-menu-select").performClick()
+            compose.onNodeWithText(book.name).performClick()
             fun navPositions(): List<androidx.compose.ui.geometry.Rect> = listOf(R.string.bookshelf, R.string.discovery, R.string.my).map { id ->
                 var label = ""; scenario.onActivity { label = it.getString(id) }
                 compose.onNode(isSelectable() and hasText(label)).assertIsDisplayed().fetchSemanticsNode().boundsInRoot

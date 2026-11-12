@@ -1804,4 +1804,5 @@
     <string name="find_books_online">网络找书</string>
     <string name="my_management_tools">管理工具</string>
     <string name="explore_error_details">详情</string>
+    <string name="bookshelf_select_books">多选</string>
 </resources>

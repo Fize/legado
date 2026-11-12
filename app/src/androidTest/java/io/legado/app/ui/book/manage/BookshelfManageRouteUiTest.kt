@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.manage
 
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -105,8 +107,15 @@ class BookshelfManageRouteUiTest {
         }
     }
 
+    private fun enterSelectionAndSelectBook() {
+        composeRule.onNodeWithTag("shelf-menu").performClick()
+        composeRule.onNodeWithTag("shelf-menu-select").performClick()
+        composeRule.onNodeWithTag("shelf-selection-add").assertIsNotEnabled()
+        composeRule.onNodeWithText(book.name).performClick()
+    }
+
     @Test
-    fun longPressSelectsBookAndCancelLeavesItUnchanged() {
+    fun longPressOpensBookDetails() {
         ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
             scenario.onActivity { activity ->
                 val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
@@ -115,10 +124,74 @@ class BookshelfManageRouteUiTest {
             }
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
             composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            composeRule.waitUntil(10_000) {
+                var opened = false
+                scenario.onActivity {
+                    opened = (it.currentDestination as? io.legado.app.ui.navigation.BookInfoRoute)?.bookUrl == book.bookUrl
+                }
+                opened
+            }
+        }
+    }
+
+    @Test
+    fun detailsTransitionKeepsOutgoingShelfAndNavigationBounds() {
+        ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
+            scenario.onActivity { activity ->
+                val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
+                    .getOrCreateOwner(androidx.navigation3.runtime.NavEntry(io.legado.app.ui.navigation.BookshelfRoute) {}.contentKey)
+                androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
+            }
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+            var discoveryLabel = ""
+            scenario.onActivity { discoveryLabel = it.getString(R.string.discovery) }
+            val nav = composeRule.onNode(isSelectable() and hasText(discoveryLabel))
+            val navBounds = nav.fetchSemanticsNode().boundsInRoot
+            val shelfHeight = composeRule.onNodeWithTag("bookshelf_items").fetchSemanticsNode().boundsInRoot.height
+            composeRule.mainClock.autoAdvance = false
+            try {
+                composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+                composeRule.waitUntil(10_000) {
+                    composeRule.mainClock.advanceTimeByFrame()
+                    var opened = false
+                    scenario.onActivity { opened = it.currentDestination is io.legado.app.ui.navigation.BookInfoRoute }
+                    opened
+                }
+                composeRule.mainClock.advanceTimeByFrame()
+                org.junit.Assert.assertEquals(navBounds, nav.fetchSemanticsNode().boundsInRoot)
+                org.junit.Assert.assertEquals(shelfHeight, composeRule.onNodeWithTag("bookshelf_items").fetchSemanticsNode().boundsInRoot.height, 1f)
+                composeRule.mainClock.advanceTimeBy(1000)
+                nav.assertDoesNotExist()
+                scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                composeRule.mainClock.advanceTimeBy(1000)
+                org.junit.Assert.assertEquals(navBounds, nav.fetchSemanticsNode().boundsInRoot)
+            } finally {
+                composeRule.mainClock.autoAdvance = true
+            }
+        }
+    }
+
+    @Test
+    fun menuSelectsBookAndCancelLeavesItUnchanged() {
+        ActivityScenario.launch<AppActivity>(AppActivity.startIntent(context, io.legado.app.ui.navigation.BookshelfRoute)).use { scenario ->
+            scenario.onActivity { activity ->
+                val owner = io.legado.app.ui.navigation.navigationViewModelStores(activity, io.legado.app.ui.navigation.BookshelfRoute)
+                    .getOrCreateOwner(androidx.navigation3.runtime.NavEntry(io.legado.app.ui.navigation.BookshelfRoute) {}.contentKey)
+                androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
+            }
+            composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
+            enterSelectionAndSelectBook()
             composeRule.onNodeWithTag("shelf-selection-add").assertIsEnabled()
-            composeRule.onNodeWithText(book.name).performClick()
+            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
             composeRule.onNodeWithTag("shelf-selection-add").assertIsNotEnabled()
+            composeRule.onNodeWithText(book.name).performClick()
+            composeRule.onNodeWithTag("shelf-selection-add").assertIsEnabled()
             composeRule.onNodeWithTag("shelf-selection-cancel").performClick()
+            composeRule.onNodeWithTag("shelf-menu").performClick()
+            composeRule.onNodeWithTag("shelf-menu-select").performClick()
+            composeRule.onNodeWithTag("shelf-selection-add").assertIsNotEnabled()
+            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            composeRule.onNodeWithTag("shelf-menu").assertIsDisplayed()
             org.junit.Assert.assertEquals(group.groupId, appDb.bookDao.getBook(book.bookUrl)?.group)
         }
     }
@@ -132,7 +205,7 @@ class BookshelfManageRouteUiTest {
                 androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
             }
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
-            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            enterSelectionAndSelectBook()
             composeRule.onNodeWithTag("shelf-selection-remove-group").performClick()
             composeRule.onNodeWithTag("shelf-group-choice:${group.groupId}").performClick()
             composeRule.onNodeWithTag("shelf-group-confirm").performClick()
@@ -154,7 +227,7 @@ class BookshelfManageRouteUiTest {
                     androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
                 }
                 composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
-                composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+                enterSelectionAndSelectBook()
                 composeRule.onNodeWithTag("shelf-selection-add").performClick()
                 composeRule.onNodeWithTag("shelf-group-choice:${hidden.groupId}").performClick()
                 composeRule.onNodeWithTag("shelf-group-confirm").performClick()
@@ -175,7 +248,7 @@ class BookshelfManageRouteUiTest {
                 androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
             }
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
-            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            enterSelectionAndSelectBook()
             composeRule.onNodeWithTag("shelf-selection-remove-shelf").performClick()
             org.junit.Assert.assertNotNull(appDb.bookDao.getBook(book.bookUrl))
             composeRule.onNodeWithTag("shelf-remove-cancel").performClick()
@@ -203,7 +276,7 @@ class BookshelfManageRouteUiTest {
                     androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
                 }
                 composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
-                composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+                enterSelectionAndSelectBook()
                 org.junit.Assert.assertFalse(io.legado.app.help.config.AppConfig.isNightTheme)
                 composeRule.onNodeWithTag("shelf-selection-add").assertIsEnabled()
                 Thread.sleep(1000)
@@ -258,7 +331,7 @@ class BookshelfManageRouteUiTest {
                 androidx.lifecycle.ViewModelProvider(owner)[io.legado.app.ui.main.bookshelf.BookshelfRootViewModel::class.java].openGroup(group)
             }
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
-            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            enterSelectionAndSelectBook()
             composeRule.onNodeWithTag("shelf-selection-add").performClick()
             composeRule.onNodeWithTag("shelf-group-choice:${group.groupId}").performClick()
             composeRule.onNodeWithTag("shelf-group-confirm").assertIsEnabled()
@@ -267,7 +340,7 @@ class BookshelfManageRouteUiTest {
             composeRule.onNodeWithTag("shelf-group-confirm").performClick()
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithTag("shelf-selection-add").fetchSemanticsNodes().isEmpty() }
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(book.name).fetchSemanticsNodes().isNotEmpty() }
-            composeRule.onNodeWithText(book.name).performTouchInput { longClick() }
+            enterSelectionAndSelectBook()
             composeRule.onNodeWithTag("shelf-selection-remove-shelf").performClick()
             scenario.recreate()
             composeRule.waitUntil(10_000) { composeRule.onAllNodesWithTag("shelf-remove-cancel").fetchSemanticsNodes().isNotEmpty() }

@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -86,6 +87,7 @@ enum class BookshelfMenuAction {
     ADD_LOCAL,
     ADD_REMOTE,
     ADD_URL,
+    SELECT_BOOKS,
     BOOKSHELF_MANAGE,
     CACHE_EXPORT,
     GROUP_MANAGE,
@@ -197,7 +199,7 @@ fun BookshelfTopBar(
                         )
                     }
                     Box {
-                        IconButton(onClick = { overflowExpanded = true }) {
+                        IconButton(onClick = { overflowExpanded = true }, modifier = Modifier.testTag("shelf-menu")) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = stringResource(R.string.more_menu),
@@ -261,6 +263,21 @@ fun BookshelfTopBar(
                                 onClick = {
                                     overflowExpanded = false
                                     onMenuAction(BookshelfMenuAction.ADD_URL)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.bookshelf_select_books)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Checklist,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                modifier = Modifier.testTag("shelf-menu-select"),
+                                onClick = {
+                                    overflowExpanded = false
+                                    onMenuAction(BookshelfMenuAction.SELECT_BOOKS)
                                 },
                             )
                             DropdownMenuItem(

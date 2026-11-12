@@ -153,50 +153,76 @@ fun LegadoApp(
                 emptyMap()
             },
         ) { route ->
-            AppRouteContent(
+            AppRouteScaffold(
                 route = route as AppRoute,
-                onNavigate = { destination -> if (navigationState.currentRoute == route) navigator.navigate(destination) },
-                onReplace = { destination -> if (navigationState.currentRoute == route) navigator.replace(destination) },
-                fileAssociationInput = fileAssociationInput,
-                onMyAction = { action ->
-                    when (action) {
-                        MyAction.More -> navigator.navigate(SettingsRoute())
-                        MyAction.BookSourceManage -> context.startActivity<BookSourceActivity> { putExtra("modernSearch", true) }
-                        MyAction.ReplaceRuleManage -> navigator.navigate(ReplaceRuleRoute)
-                        MyAction.RuleSubscription -> navigator.navigate(RuleSubscriptionRoute)
-                        MyAction.DictionaryRuleManage -> navigator.navigate(DictionaryRuleRoute)
-                        MyAction.TextTocRuleManage -> navigator.navigate(TextTocRuleRoute)
-                        MyAction.AllBookmarks -> navigator.navigate(AllBookmarksRoute)
-                        MyAction.OtherSettings -> navigator.navigate(SettingsRoute(SettingsSection.Other))
-                        MyAction.BackupSettings -> navigator.navigate(SettingsRoute(SettingsSection.Backup))
-                        MyAction.ThemeSettings -> navigator.navigate(SettingsRoute(SettingsSection.Theme))
-                        MyAction.FileManage -> navigator.navigate(FileManagerRoute)
-                        MyAction.ReadRecord -> navigator.navigate(ReadRecordRoute)
-                        MyAction.About -> navigator.navigate(AboutRoute)
-                        MyAction.Exit -> (context as? Activity)?.finish()
-                    }
-                },
-                onThemeModeChanged = { ThemeConfig.applyDayNight(context) },
-                onNavigateBack = { if (navigationState.currentRoute == route) navigateBack() },
-                isCurrentRoute = navigationState.currentRoute == route,
-                onResult = { code, data -> if (navigationState.currentRoute == route) onResult(code, data) },
-                detailChildren = navigationState.currentBackStack().mapNotNull { child -> when (child) {
-                    is BookTocRoute -> child.bookInfoChildRequestId
-                    is EditBookInfoRoute -> child.bookInfoChildRequestId
-                    is MangaReaderRoute -> child.requestId.takeIf { child.returnToDetails }
-                    is TextReaderRoute -> child.requestId.takeIf { child.returnToDetails }
-                    is PlatformTextReaderRoute -> child.requestId
-                    is AudioPlayerRoute -> child.requestId.takeIf { child.returnToDetails }
-                    is VideoPlayerRoute -> child.requestId.takeIf { child.returnToDetails }
-                    is BookInfoRoute -> child.requestId
-                    else -> null
-                } }.toSet(),
-            )
+                topLevelRoute = navigationState.topLevelRoute,
+                onNavigate = { if (navigationState.currentRoute == route) navigator.navigate(it) },
+            ) {
+                AppRouteContent(
+                    route = route as AppRoute,
+                    onNavigate = { destination -> if (navigationState.currentRoute == route) navigator.navigate(destination) },
+                    onReplace = { destination -> if (navigationState.currentRoute == route) navigator.replace(destination) },
+                    fileAssociationInput = fileAssociationInput,
+                    onMyAction = { action ->
+                        when (action) {
+                            MyAction.More -> navigator.navigate(SettingsRoute())
+                            MyAction.BookSourceManage -> context.startActivity<BookSourceActivity> { putExtra("modernSearch", true) }
+                            MyAction.ReplaceRuleManage -> navigator.navigate(ReplaceRuleRoute)
+                            MyAction.RuleSubscription -> navigator.navigate(RuleSubscriptionRoute)
+                            MyAction.DictionaryRuleManage -> navigator.navigate(DictionaryRuleRoute)
+                            MyAction.TextTocRuleManage -> navigator.navigate(TextTocRuleRoute)
+                            MyAction.AllBookmarks -> navigator.navigate(AllBookmarksRoute)
+                            MyAction.OtherSettings -> navigator.navigate(SettingsRoute(SettingsSection.Other))
+                            MyAction.BackupSettings -> navigator.navigate(SettingsRoute(SettingsSection.Backup))
+                            MyAction.ThemeSettings -> navigator.navigate(SettingsRoute(SettingsSection.Theme))
+                            MyAction.FileManage -> navigator.navigate(FileManagerRoute)
+                            MyAction.ReadRecord -> navigator.navigate(ReadRecordRoute)
+                            MyAction.About -> navigator.navigate(AboutRoute)
+                            MyAction.Exit -> (context as? Activity)?.finish()
+                        }
+                    },
+                    onThemeModeChanged = { ThemeConfig.applyDayNight(context) },
+                    onNavigateBack = { if (navigationState.currentRoute == route) navigateBack() },
+                    isCurrentRoute = navigationState.currentRoute == route,
+                    onResult = { code, data -> if (navigationState.currentRoute == route) onResult(code, data) },
+                    detailChildren = navigationState.currentBackStack().mapNotNull { child -> when (child) {
+                        is BookTocRoute -> child.bookInfoChildRequestId
+                        is EditBookInfoRoute -> child.bookInfoChildRequestId
+                        is MangaReaderRoute -> child.requestId.takeIf { child.returnToDetails }
+                        is TextReaderRoute -> child.requestId.takeIf { child.returnToDetails }
+                        is PlatformTextReaderRoute -> child.requestId
+                        is AudioPlayerRoute -> child.requestId.takeIf { child.returnToDetails }
+                        is VideoPlayerRoute -> child.requestId.takeIf { child.returnToDetails }
+                        is BookInfoRoute -> child.requestId
+                        else -> null
+                    } }.toSet(),
+                )
+            }
         }
     }
 
-    val immersive = navigationState.currentRoute is BookSourceImportRoute || navigationState.currentRoute is MangaReaderRoute || navigationState.currentRoute is TextReaderRoute || navigationState.currentRoute is BookInfoRoute ||
-        (navigationState.currentRoute as? BookTocRoute)?.let {
+    NavDisplay(
+        entries = entries,
+        onBack = navigateBack,
+        modifier = Modifier.fillMaxSize(),
+        sceneStrategies = listOf(DialogSceneStrategy()),
+    )
+}
+
+// Keep app chrome in its route's scene so outgoing pages retain their bounds during transitions.
+@Composable
+internal fun AppRouteScaffold(
+    route: AppRoute,
+    topLevelRoute: NavKey,
+    onNavigate: (AppRoute) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    if (route is PhotoViewerRoute || route is OpenUrlConfirmRoute || route is VerificationCodeRoute) {
+        content()
+        return
+    }
+    val immersive = route is BookSourceImportRoute || route is MangaReaderRoute || route is TextReaderRoute || route is BookInfoRoute ||
+        (route as? BookTocRoute)?.let {
             it.readerCatalogRequestId != null || it.bookInfoChildRequestId != null
         } == true
     NavigationSuiteScaffold(
@@ -204,31 +230,26 @@ fun LegadoApp(
             NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo()),
         navigationSuiteItems = {
             item(
-                selected = navigationState.topLevelRoute == BookshelfRoute,
-                onClick = { navigator.navigate(BookshelfRoute) },
+                selected = topLevelRoute == BookshelfRoute,
+                onClick = { onNavigate(BookshelfRoute) },
                 icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                 label = { Text(stringResource(R.string.bookshelf)) },
             )
             item(
-                selected = navigationState.topLevelRoute == ExploreRoute,
-                onClick = { navigator.navigate(ExploreRoute) },
+                selected = topLevelRoute == ExploreRoute,
+                onClick = { onNavigate(ExploreRoute) },
                 icon = { Icon(Icons.Default.Explore, contentDescription = null) },
                 label = { Text(stringResource(R.string.discovery)) },
             )
             item(
-                selected = navigationState.topLevelRoute == MyRoute,
-                onClick = { navigator.navigate(MyRoute) },
+                selected = topLevelRoute == MyRoute,
+                onClick = { onNavigate(MyRoute) },
                 icon = { Icon(Icons.Default.Person, contentDescription = null) },
                 label = { Text(stringResource(R.string.my)) },
             )
         },
     ) {
-        NavDisplay(
-            entries = entries,
-            onBack = navigateBack,
-            modifier = Modifier.fillMaxSize(),
-            sceneStrategies = listOf(DialogSceneStrategy()),
-        )
+        content()
     }
 }
 

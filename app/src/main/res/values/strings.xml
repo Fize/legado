@@ -1915,4 +1915,5 @@
     <string name="find_books_online">Find books online</string>
     <string name="my_management_tools">Management tools</string>
     <string name="explore_error_details">Details</string>
+    <string name="bookshelf_select_books">Select books</string>
 </resources>

@@ -42,6 +42,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -129,6 +131,10 @@ fun BookshelfRootScreen(
 
     fun handleMenuAction(action: BookshelfMenuAction) {
         when (action) {
+            BookshelfMenuAction.SELECT_BOOKS -> {
+                selectedUrls = emptySet()
+                selectionMode = true
+            }
             BookshelfMenuAction.ADD_URL -> {
                 dialogText = ""
                 showAddUrlDialog = true
@@ -245,8 +251,9 @@ fun BookshelfRootScreen(
                             uiState = uiState,
                             selectionMode = selectionMode,
                             selected = item is Book && item.bookUrl in selectedUrls,
+                            selectionEnabled = !selectionBusy,
                             onBookClick = { if (selectionMode) toggleBook(it) else onBookClick(it) },
-                            onBookLongClick = { if (!selectionMode) selectionMode = true; toggleBook(it) },
+                            onBookLongClick = { if (selectionMode) toggleBook(it) else onBookLongClick(it) },
                             onGroupClick = { if (!selectionMode) bookshelfViewModel.openGroup(it) },
                             onGroupLongClick = { if (!selectionMode) onGroupLongClick(it) },
                         )
@@ -426,11 +433,12 @@ private fun bookshelfItemKey(item: Any): String = when (item) {
 }
 
 @Composable
-private fun BookshelfRootItem(
+internal fun BookshelfRootItem(
     item: Any,
     uiState: BookshelfRootUiState,
     selectionMode: Boolean,
     selected: Boolean,
+    selectionEnabled: Boolean,
     onBookClick: (Book) -> Unit,
     onBookLongClick: (Book) -> Unit,
     onGroupClick: (BookGroup) -> Unit,
@@ -454,30 +462,45 @@ private fun BookshelfRootItem(
                 )
             }
         }
-        is Book -> Box {
-            if (uiState.layout < 2) {
-                BookshelfBookListItem(
-                    book = item,
-                    compact = uiState.layout == 1,
-                    isUpdating = false,
-                    showUnread = uiState.showUnread,
-                    showLastUpdateTime = uiState.showLastUpdateTime,
-                    timeAgoVersion = 0,
-                    onClick = { onBookClick(item) },
-                    onLongClick = { onBookLongClick(item) },
-                )
-            } else {
-                BookshelfBookGridItem(
-                    book = item,
-                    showBooknameMode = uiState.showBooknameMode,
-                    isUpdating = false,
-                    showUnread = uiState.showUnread,
-                    onClick = { onBookClick(item) },
-                    onLongClick = { onBookLongClick(item) },
+        is Book -> {
+            val selectionControl: @Composable () -> Unit = {
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = { onBookClick(item) },
+                    enabled = selectionEnabled,
+                    modifier = Modifier
+                        .testTag("shelf-book-selection:${item.bookUrl}")
+                        .semantics { contentDescription = item.name },
                 )
             }
-            if (selectionMode) Checkbox(checked = selected, onCheckedChange = null,
-                modifier = Modifier.align(Alignment.TopEnd))
+            if (uiState.layout < 2) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selectionMode) selectionControl()
+                    BookshelfBookListItem(
+                        modifier = Modifier.weight(1f),
+                        book = item,
+                        compact = uiState.layout == 1,
+                        isUpdating = false,
+                        showUnread = uiState.showUnread,
+                        showLastUpdateTime = uiState.showLastUpdateTime,
+                        timeAgoVersion = 0,
+                        onClick = { onBookClick(item) },
+                        onLongClick = { onBookLongClick(item) },
+                    )
+                }
+            } else {
+                Column {
+                    if (selectionMode) selectionControl()
+                    BookshelfBookGridItem(
+                        book = item,
+                        showBooknameMode = uiState.showBooknameMode,
+                        isUpdating = false,
+                        showUnread = uiState.showUnread,
+                        onClick = { onBookClick(item) },
+                        onLongClick = { onBookLongClick(item) },
+                    )
+                }
+            }
         }
     }
 }
