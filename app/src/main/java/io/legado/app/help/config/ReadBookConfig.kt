@@ -19,6 +19,7 @@ import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.compress.ZipUtils
+import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.createFolderReplace
 import io.legado.app.utils.externalCache
 import io.legado.app.utils.externalFiles
@@ -231,7 +232,7 @@ object ReadBookConfig {
 
     @Synchronized
     fun getConfig(index: Int): Config {
-        if (configList.size < 5) {
+        if (configList.isEmpty()) {
             resetAll()
         }
         return configList.getOrNull(index) ?: configList[0]
@@ -251,6 +252,53 @@ object ReadBookConfig {
                 configs = parseReadConfigArray(json).getOrThrow()
             } catch (e: Exception) {
                 AppLog.put("读取排版配置文件出错", e)
+            }
+        }
+        val preferences = appCtx.defaultSharedPreferences
+        if (preferences.getInt("readerBodyPresetsVersion", 0) < 1) {
+            if (configs != null) {
+                try {
+                    val oldReadIndex = preferences.getInt(PreferKey.readStyleSelect, 0)
+                    val oldComicIndex = preferences.getInt(PreferKey.comicStyleSelect, oldReadIndex)
+                    val upgraded = persistReaderPresetUpgrade(configFile, DefaultData.readConfigs,
+                        oldReadIndex, oldComicIndex) { readIndex, comicIndex ->
+                        val committed = preferences.edit()
+                            .putInt(PreferKey.readStyleSelect, readIndex)
+                            .putInt(PreferKey.comicStyleSelect, comicIndex)
+                            .putInt("readerBodyPresetsVersion", 1)
+                            .commit()
+                        if (!committed) {
+                            // A failed commit can still update SharedPreferences in memory.
+                            preferences.edit()
+                                .putInt(PreferKey.readStyleSelect, oldReadIndex)
+                                .putInt(PreferKey.comicStyleSelect, oldComicIndex)
+                                .putInt("readerBodyPresetsVersion", 0)
+                                .commit()
+                        }
+                        committed
+                    }
+                    configs = upgraded.configs
+                    readStyleSelect = upgraded.readIndex
+                    comicStyleSelect = upgraded.comicIndex
+                } catch (e: Exception) {
+                    // Leave the loaded configuration usable; replay the backup on the next start.
+                    AppLog.put("更新阅读主题失败，保留原配置", e)
+                }
+            } else if (!configFile.exists()) {
+                preferences.edit().putInt("readerBodyPresetsVersion", 1).apply()
+            }
+        }
+        if (preferences.getInt("kindleNightPresetVersion", 0) < 1) {
+            if (configs != null) {
+                try {
+                    configs = persistKindleNightUpgrade(configFile, configs,
+                        DefaultData.readConfigs.single { it.name == "Kindle" })
+                    preferences.edit().putInt("kindleNightPresetVersion", 1).commit()
+                } catch (e: Exception) {
+                    AppLog.put("更新 Kindle 夜间主题失败，保留原配置", e)
+                }
+            } else if (!configFile.exists()) {
+                preferences.edit().putInt("kindleNightPresetVersion", 1).apply()
             }
         }
         (configs ?: DefaultData.readConfigs).let {
@@ -391,16 +439,20 @@ object ReadBookConfig {
                 readStyleSelect = value
             }
         }
-    var readStyleSelect = appCtx.getPrefInt(PreferKey.readStyleSelect)
+    // Resolve by name so reordering presets does not change the first-use reading theme.
+    var readStyleSelect = appCtx.getPrefInt(PreferKey.readStyleSelect,
+        configList.indexOfFirst { it.name == "Kindle" }.coerceAtLeast(0))
         set(value) {
             val changed = field != value
             field = value
             if (changed) ResourceThemeGeneration.changed()
-            if (appCtx.getPrefInt(PreferKey.readStyleSelect) != value) {
+            if (!appCtx.defaultSharedPreferences.contains(PreferKey.readStyleSelect) ||
+                appCtx.getPrefInt(PreferKey.readStyleSelect) != value) {
                 appCtx.putPrefInt(PreferKey.readStyleSelect, value)
             }
         }
-    var comicStyleSelect = appCtx.getPrefInt(PreferKey.comicStyleSelect, readStyleSelect)
+    var comicStyleSelect = appCtx.getPrefInt(PreferKey.comicStyleSelect,
+        appCtx.getPrefInt(PreferKey.readStyleSelect))
         set(value) {
             val changed = field != value
             field = value
