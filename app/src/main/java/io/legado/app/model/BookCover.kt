@@ -223,6 +223,8 @@ object BookCover {
         }
         if (bookUrl != null) options = options.set(OkHttpModelLoader.bookUrlOption, bookUrl)
         return ImageLoader.loadFile(context, path).apply(options)
+            // Local stream models (data/content URLs) also need a data cache file for region decoding.
+            .diskCacheStrategy(DiskCacheStrategy.DATA)
     }
 
     /**

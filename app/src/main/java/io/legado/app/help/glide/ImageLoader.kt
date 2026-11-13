@@ -80,6 +80,7 @@ object ImageLoader {
     fun loadFile(context: Context, path: String?): RequestBuilder<File> {
         return when {
             path.isNullOrEmpty() -> Glide.with(context).asFile().load(path)
+            path.isDataUrl() -> Glide.with(context).asFile().load(path)
             path.isAbsUrl() -> Glide.with(context).asFile().load(path)
             path.isContentScheme() -> Glide.with(context).asFile().load(path.toUri())
             else -> kotlin.runCatching {

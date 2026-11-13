@@ -20,7 +20,8 @@ class FilePathLoader : ModelLoader<String, File> {
     }
 
     override fun handles(model: String): Boolean {
-        return true
+        // Leave URLs and data URLs to their stream loaders, including asFile requests.
+        return File(model).isFile
     }
 
     class FilePathFetcher(private val filePath: String) : DataFetcher<File> {

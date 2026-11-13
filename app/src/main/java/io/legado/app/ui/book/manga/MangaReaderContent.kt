@@ -1,11 +1,9 @@
 package io.legado.app.ui.book.manga
 
-import android.graphics.Bitmap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -47,7 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -57,21 +54,15 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import com.bumptech.glide.load.Transformation
-import io.legado.app.model.BookCover
 import io.legado.app.R
-import io.legado.app.ui.compose.component.LegadoImageState
-import io.legado.app.ui.compose.component.rememberLegadoImageState
-import io.legado.app.ui.book.manga.entities.EpaperTransformation
 import io.legado.app.ui.book.manga.entities.BaseMangaPage
-import io.legado.app.ui.book.manga.entities.GrayscaleTransformation
 import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.entities.ReaderLoading
 import kotlinx.coroutines.flow.first
@@ -435,13 +426,6 @@ private fun MangaImagePage(
     var scale by remember(page.mImageUrl) { mutableFloatStateOf(1f) }
     var offsetX by remember(page.mImageUrl) { mutableFloatStateOf(0f) }
     var offsetY by remember(page.mImageUrl) { mutableFloatStateOf(0f) }
-    val transformation: Transformation<Bitmap>? = remember(state.eInk, state.gray, state.eInkThreshold) {
-        when {
-            state.eInk -> EpaperTransformation(state.eInkThreshold)
-            state.gray -> GrayscaleTransformation()
-            else -> null
-        }
-    }
     val matrix = remember(state.colorFilter.contentHashCode()) {
         val r = state.colorFilter.getOrElse(0) { 0 }
         val g = state.colorFilter.getOrElse(1) { 0 }
@@ -456,18 +440,8 @@ private fun MangaImagePage(
             )
         )
     }
-    val imageLoadState by rememberLegadoImageState(
-        requestKey = listOf(page.mImageUrl, state.contentVersion, transformation),
-        retryKey = reloadKey,
-    ) { requestContext ->
-        BookCover.loadManga(
-            context = requestContext,
-            path = mangaImagePath(page),
-            sourceOrigin = state.sourceOrigin,
-            bookUrl = state.bookUrl,
-            transformation = transformation,
-        )
-    }
+    val sourceState by rememberMangaSource(mangaImagePath(page), state.sourceOrigin, state.bookUrl, state.contentVersion, reloadKey)
+    var tileError by remember(page.mImageUrl, state.contentVersion, state.sourceOrigin, state.bookUrl, reloadKey) { mutableStateOf(false) }
     val gestureModifier = if (state.scaleEnabled) {
         Modifier.pointerInput(page.mImageUrl) {
             detectTransformGestures { _, pan, zoom, _ ->
@@ -484,7 +458,7 @@ private fun MangaImagePage(
         }
     } else Modifier
 
-    val decoded = (imageLoadState as? LegadoImageState.Success)?.bitmap
+    val decoded = sourceState.source
     val imageRatio = when {
         decoded != null && decoded.height > 0 -> decoded.width.toFloat() / decoded.height
         page.imageWidth > 0 && page.imageHeight > 0 -> page.imageWidth.toFloat() / page.imageHeight
@@ -497,25 +471,13 @@ private fun MangaImagePage(
             .then(gestureModifier),
         contentAlignment = Alignment.Center,
     ) {
-        when (val loadState = imageLoadState) {
-            LegadoImageState.Loading -> CircularProgressIndicator()
-            LegadoImageState.Error -> Button(onClick = { reloadKey++ }) {
-                Text("重新加载")
-            }
-            is LegadoImageState.Success -> Image(
-                bitmap = loadState.bitmap,
-                contentDescription = "${page.mChapterName} ${page.index + 1}/${page.imageCount}",
-                contentScale = if (horizontal) ContentScale.Fit else ContentScale.FillWidth,
-                colorFilter = ColorFilter.colorMatrix(matrix),
-                modifier = Modifier
-                    .then(if (horizontal) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = offsetX
-                        translationY = offsetY
-                    },
-            )
+        when {
+            sourceState.error || tileError -> Button(onClick = { reloadKey++ }) { Text("重新加载") }
+            decoded == null -> CircularProgressIndicator()
+            else -> MangaTiledImage(decoded, horizontal, scale, offsetX, offsetY,
+                state.gray, state.eInk, state.eInkThreshold, ColorFilter.colorMatrix(matrix),
+                modifier = Modifier.semantics { contentDescription = "${page.mChapterName} ${page.index + 1}/${page.imageCount}" },
+                onError = { tileError = true })
         }
         MangaTapOverlay(
             enabled = state.interactive && scale <= 1.01f,
