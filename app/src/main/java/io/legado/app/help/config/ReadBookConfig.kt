@@ -301,6 +301,21 @@ object ReadBookConfig {
                 preferences.edit().putInt("kindleNightPresetVersion", 1).apply()
             }
         }
+        if (preferences.getInt("readerAndroidTypographyVersion", 0) < 1) {
+            if (configs != null) {
+                try {
+                    configs = persistReaderTypographyUpgrade(configFile, configs) {
+                        val committed = preferences.edit().putInt("readerAndroidTypographyVersion", 1).commit()
+                        if (!committed) preferences.edit().putInt("readerAndroidTypographyVersion", 0).commit()
+                        committed
+                    }
+                } catch (e: Exception) {
+                    AppLog.put("更新阅读排版失败，保留原配置", e)
+                }
+            } else if (!configFile.exists()) {
+                preferences.edit().putInt("readerAndroidTypographyVersion", 1).apply()
+            }
+        }
         (configs ?: DefaultData.readConfigs).let {
             configList.clear()
             configList.addAll(it)

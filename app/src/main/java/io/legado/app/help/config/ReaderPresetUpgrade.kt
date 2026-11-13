@@ -13,9 +13,9 @@ internal data class ReaderPresetUpgrade(
     val comicIndex: Int,
 )
 
-// WeRead reference: https://weread.qq.com/web/reader/cc932860813ab67c2g014597
-// Observed 2026-11-12: light reading surface #FFFFFF, text #0D141E, system sans-serif,
-// container font 18px. Preset spacing is adapted for this reader, not an asserted mobile default.
+// WeRead Android 10.2.2, observed 2026-11-13 on 1440x3168 / 560 dpi / font scale 1:
+// default size 19, Source Han Sans; body glyph height ~61 px, line pitch ~115 px.
+// This reader's font-metric multiplier 1.5 yields ~117 px at 19sp, unlike CSS line-height.
 // Only the reading surface changes. In particular, do not copy status bars, page animations,
 // shared underlines, header/footer settings, or night/e-ink preferences into an existing style.
 private val readerBodyPresetFields = listOf(
@@ -129,5 +129,40 @@ internal fun persistKindleNightUpgrade(file: File, configs: List<ReadBookConfig.
     val backup = File(file.parentFile, "${file.name}.before-kindle-night-v1")
     if (!backup.exists()) writePresetFile(backup, file.readText())
     writePresetFile(file, GSON.toJson(upgraded))
+    return upgraded
+}
+
+/** Upgrade untouched built-in typography only; retain user overrides and all appearance fields. */
+internal fun updateReaderTypography(configs: List<ReadBookConfig.Config>): List<ReadBookConfig.Config> =
+    configs.map { config ->
+        val oldSize: Int
+        val oldPadding: Int
+        when (config.name) {
+            "Kindle" -> { oldSize = 20; oldPadding = 26 }
+            "微信读书" -> { oldSize = 18; oldPadding = 24 }
+            else -> return@map config
+        }
+        config.copy(
+            textSize = if (config.textSize == oldSize) 19 else config.textSize,
+            lineSpacingExtra = if (config.lineSpacingExtra == 17) 15 else config.lineSpacingExtra,
+            paddingLeft = if (config.paddingLeft == oldPadding) 28 else config.paddingLeft,
+            paddingRight = if (config.paddingRight == oldPadding) 28 else config.paddingRight,
+        )
+    }
+
+internal fun persistReaderTypographyUpgrade(
+    file: File,
+    configs: List<ReadBookConfig.Config>,
+    commitVersion: () -> Boolean,
+): List<ReadBookConfig.Config> {
+    val original = file.readText()
+    val upgraded = updateReaderTypography(configs)
+    val backup = File(file.parentFile, "${file.name}.before-android-typography-v1")
+    if (!backup.exists()) writePresetFile(backup, original)
+    writePresetFile(file, GSON.toJson(upgraded))
+    if (!commitVersion()) {
+        writePresetFile(file, original)
+        error("Could not save reader typography version")
+    }
     return upgraded
 }

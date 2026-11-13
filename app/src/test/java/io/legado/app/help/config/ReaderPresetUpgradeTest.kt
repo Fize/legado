@@ -26,6 +26,29 @@ class ReaderPresetUpgradeTest {
         ReadBookConfig.Config(name = "我的主题", textSize = 31, textFont = "custom.ttf"),
     )
 
+    @Test fun `Android typography updates old defaults without touching colors or custom settings`() {
+        val old = defaults().map {
+            when (it.name) {
+                "Kindle" -> it.copy(textSize=20,lineSpacingExtra=17,paddingLeft=26,paddingRight=26)
+                "微信读书" -> it.copy(textSize=18,lineSpacingExtra=17,paddingLeft=24,paddingRight=24)
+                else -> it
+            }
+        }
+        assertEquals(defaults(), updateReaderTypography(old))
+        assertEquals(defaults(), updateReaderTypography(updateReaderTypography(old)))
+        val custom = old.last().copy(textSize=25,letterSpacing=.08f,lineSpacingExtra=21,paddingLeft=40,paddingRight=40,textFont="custom.ttf")
+        assertEquals(custom, updateReaderTypography(listOf(custom)).single())
+        val file=temporary.newFile("typography.json")
+        val original=GSON.toJson(old)
+        file.writeText(original)
+        assertThrows(IllegalStateException::class.java) { persistReaderTypographyUpgrade(file,old) { false } }
+        assertEquals(original,file.readText())
+        val upgraded=persistReaderTypographyUpgrade(file,old) { true }
+        assertEquals(defaults(),upgraded)
+        assertEquals(upgraded,parseReadConfigArray(file.readText()).getOrThrow())
+        assertEquals(original,File(file.parentFile,"typography.json.before-android-typography-v1").readText())
+    }
+
     @Test fun `night upgrade changes only Kindle night appearance and preserves backup`() {
         val preset = defaults().single { it.name == "Kindle" }
         val old = legacy() + ReadBookConfig.Config(name = "Kindle", bgStr = "#abcdef", bgStrNight = "#000000", textSize = 29)
@@ -50,10 +73,10 @@ class ReaderPresetUpgradeTest {
         val kindle = styles.last()
         assertEquals("#E7E7E2", kindle.bgStr)
         assertEquals("#282828", kindle.toMap()["textColor"])
-        assertEquals(20, kindle.textSize)
-        assertEquals(17, kindle.lineSpacingExtra)
-        assertEquals(26, kindle.paddingLeft)
-        assertEquals(26, kindle.paddingRight)
+        assertEquals(19, kindle.textSize)
+        assertEquals(15, kindle.lineSpacingExtra)
+        assertEquals(28, kindle.paddingLeft)
+        assertEquals(28, kindle.paddingRight)
         assertEquals("　　", kindle.paragraphIndent)
         assertEquals("#FFFFFF", styles.first().bgStr)
         assertEquals("#0D141E", styles.first().toMap()["textColor"])
@@ -67,8 +90,8 @@ class ReaderPresetUpgradeTest {
         assertEquals(old[2], result.configs[result.comicIndex])
         assertEquals(old.subList(1, 4), result.configs.subList(1, 4))
         val updated = result.configs.first()
-        assertEquals(18, updated.textSize)
-        assertEquals(17, updated.lineSpacingExtra)
+        assertEquals(19, updated.textSize)
+        assertEquals(15, updated.lineSpacingExtra)
         assertEquals(old[0].headerPaddingTop, updated.headerPaddingTop)
         assertEquals(old[0].footerPaddingBottom, updated.footerPaddingBottom)
         assertEquals(old[0].tipColor, updated.tipColor)

@@ -154,8 +154,11 @@ class ReadStyleDialog : BaseDialogFragment(), FontSelectDialog.CallBack {
 
     private fun changeBgTextConfig(index: Int) {
         val oldIndex = ReadBookConfig.styleSelect
-        if (index != oldIndex) {
+        if (index != oldIndex || ReadBookConfig.shareLayout) {
             val oldPageAnim = ReadBook.pageAnim()
+            // Explicit preset selection applies its own typography, including reselecting it.
+            ReadBookConfig.shareLayout = false
+            shareLayoutState = false
             ReadBookConfig.styleSelect = index
             styleSelectState = index
             if (ReadBook.pageAnim() != oldPageAnim) callBack?.upPageAnim()
@@ -508,7 +511,8 @@ class ReadStyleDialog : BaseDialogFragment(), FontSelectDialog.CallBack {
             }
 
             // Style presets LazyRow
-            val configs = ReadBookConfig.configList
+            val configs = ReadBookConfig.configList.withIndex()
+                .sortedBy { if (it.value.name == "Kindle") 0 else 1 }
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -516,12 +520,15 @@ class ReadStyleDialog : BaseDialogFragment(), FontSelectDialog.CallBack {
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(configs) { index, item ->
+                // Preserve stored indices so existing reader/comic selections and custom styles survive.
+                itemsIndexed(configs, key = { _, entry -> entry.index }) { displayIndex, entry ->
+                    val index = entry.index
+                    val item = entry.value
                     val isSelected = styleSelectState == index
                     val itemTextColor = Color(item.curTextColor())
                     val borderColor = if (isSelected) accent else itemTextColor
                     val styleLabel = item.name.ifBlank { "文字" }
-                    val styleDescription = "$styleLabel ${index + 1}"
+                    val styleDescription = "$styleLabel ${displayIndex + 1}"
                     Box(
                         modifier = Modifier
                             .size(50.dp)
